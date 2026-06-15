@@ -59,11 +59,7 @@ tasks:
       - task: run-scenario
         vars: { NAME: "integrations" }
         ignore_error: true
-  tests:chaos:
-    desc: run chaos
-    cmds:
-      - task: run-scenario
-        vars: {NAME: "chaos"}
+
   tests:test-matching:
     desc: "Run matching/boolean logic tests specifically"
     cmds:
@@ -74,4 +70,15 @@ tasks:
     cmds:
       - task: run-scenario
         vars: { NAME: "rate_limit" }
+  tests:modification-filter:
+    desc: "Run modification filter tests"
+    cmds:
+      - task: run-scenario
+        vars: { NAME: "modification" }
+  tests:integrations:
+    desc: "Run integration tests"
+    cmds:
+      - task: run-scenario
+        vars: { NAME: "integrations" }
+    
 
