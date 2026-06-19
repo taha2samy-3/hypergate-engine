@@ -162,11 +162,11 @@ func NewClientConn(ctx context.Context, serviceName string, cfg config.RedisServ
 	}
 
 	var (
-		attempt         int
-		backoff         = cfg.StartupInitialIntervalDuration
-		maxBackoff      = cfg.StartupMaxIntervalDuration
-		deadline        time.Time
-		hasDeadline     = cfg.StartupMaxElapsedTimeDuration > 0
+		attempt     int
+		backoff     = cfg.StartupInitialIntervalDuration
+		maxBackoff  = cfg.StartupMaxIntervalDuration
+		deadline    time.Time
+		hasDeadline = cfg.StartupMaxElapsedTimeDuration > 0
 	)
 	if hasDeadline {
 		deadline = time.Now().Add(cfg.StartupMaxElapsedTimeDuration)

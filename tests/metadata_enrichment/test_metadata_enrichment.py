@@ -17,6 +17,13 @@ def redis_client():
         client.delete(key)
     client.close()
 
+@pytest.fixture
+def session():
+    """Local self-contained session fixture to bypass conftest.py lookup issues."""
+    s = requests.Session()
+    yield s
+    s.close()
+
 def extract_received_headers(response: requests.Response) -> dict[str, str]:
     """Helper to extract headers received by the backend echo-server."""
     try:

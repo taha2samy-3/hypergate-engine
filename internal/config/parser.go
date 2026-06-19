@@ -28,7 +28,7 @@ func LoadConfig() (*Config, string, error) {
 	var cliConfig, cliConfigShort string
 	fs.StringVar(&cliConfig, "config", "", "Path to config file")
 	fs.StringVar(&cliConfigShort, "c", "", "Path to config file (shorthand)")
-	
+
 	if err := fs.Parse(os.Args[1:]); err == nil {
 		if cliConfigShort != "" {
 			configPath = cliConfigShort

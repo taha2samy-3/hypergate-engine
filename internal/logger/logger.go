@@ -28,7 +28,7 @@ func init() {
 	config.TimeKey = "timestamp"
 	config.EncodeTime = zapcore.ISO8601TimeEncoder
 	config.EncodeLevel = zapcore.CapitalColorLevelEncoder
-	
+
 	encoder := zapcore.NewConsoleEncoder(config)
 	core := zapcore.NewCore(encoder, zapcore.AddSync(os.Stdout), atomicLevel)
 	globalLogger = zap.New(core)
@@ -94,12 +94,12 @@ func InitLogger(cfg *LoggingConfig) error {
 
 	// 5. Build Core and swap global logger safely
 	core := zapcore.NewCore(encoder, sink, atomicLevel)
-	
+
 	var opts []zap.Option
 	if cfg.Development {
 		opts = append(opts, zap.Development())
 	}
-	
+
 	globalLogger = zap.New(core, opts...)
 	return nil
 }

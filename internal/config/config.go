@@ -16,14 +16,14 @@ var GlobalConfig atomic.Pointer[Config]
 
 // Config represents the top-level configuration loaded from YAML.
 type Config struct {
-	Version   string                       `yaml:"version"`
-	Server    ServerConfig                 `yaml:"server"`
-	Telemetry TelemetryConfig              `yaml:"telemetry"`
-	Chains    map[string]Chain             `yaml:"chains"`
-	Router    RouterConfig                 `yaml:"router"`
+	Version   string           `yaml:"version"`
+	Server    ServerConfig     `yaml:"server"`
+	Telemetry TelemetryConfig  `yaml:"telemetry"`
+	Chains    map[string]Chain `yaml:"chains"`
+	Router    RouterConfig     `yaml:"router"`
 	// Redis holds a named map of independent Redis service configurations.
 	// Each key becomes the service name used for O(1) lookup in the redis.Manager.
-	Redis     map[string]RedisServiceConfig `yaml:"redis"`
+	Redis map[string]RedisServiceConfig `yaml:"redis"`
 }
 
 // RouterConfig holds the routing rules and the fallback chain name.
@@ -411,4 +411,27 @@ func ParseOIDCFilterConfig(rawOpts interface{}) (*OIDCFilterConfig, error) {
 
 	applyOIDCDefaults(&cfg)
 	return &cfg, nil
+}
+
+// RedisMetadataEnricherConfig holds the configuration for the Redis Metadata Enricher filter.
+type RedisMetadataEnricherConfig struct {
+	RedisService   string              `yaml:"redis_service"`
+	CacheTimeout   string              `yaml:"cache_timeout,omitempty"`
+	Variables      map[string]Variable `yaml:"variables"`
+	KeyPattern     string              `yaml:"key_pattern"`
+	OutputMappings []OutputMappingSpec `yaml:"output_mappings"`
+}
+
+// Variable defines how to extract and fall back a single input parameter.
+type Variable struct {
+	Source       string `yaml:"source"`
+	Default      string `yaml:"default,omitempty"`
+	RegexPattern string `yaml:"regex_pattern,omitempty"`
+	JSONPath     string `yaml:"json_path,omitempty"`
+}
+
+// OutputMappingSpec defines where to extract from the returned JSON and which header to inject it into.
+type OutputMappingSpec struct {
+	JSONPath     string `yaml:"json_path,omitempty"`
+	TargetHeader string `yaml:"target_header"`
 }

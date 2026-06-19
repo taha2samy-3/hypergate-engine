@@ -10,10 +10,12 @@ import (
 	"github.com/taha/myprog/internal/filters/header_modifier"
 	"github.com/taha/myprog/internal/filters/openid_connect"
 	"github.com/taha/myprog/internal/filters/rate_limiter"
+	"github.com/taha/myprog/internal/filters/redis_metadata_enricher"
 	"github.com/taha/myprog/internal/redis"
 	"gopkg.in/yaml.v3"
 )
 
+// CreateFilter instantiates the correct polymorphic filter instance based on the configuration type.
 func CreateFilter(filterType string, rawOptions interface{}) (engine.Filter, error) {
 	optsBytes, err := yaml.Marshal(rawOptions)
 	if err != nil {
@@ -21,6 +23,26 @@ func CreateFilter(filterType string, rawOptions interface{}) (engine.Filter, err
 	}
 
 	switch filterType {
+	case "redis_metadata_enricher":
+		var cfg config.RedisMetadataEnricherConfig
+		if err := yaml.Unmarshal(optsBytes, &cfg); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal config for redis_metadata_enricher: %w", err)
+		}
+
+		// Verify global Redis connection manager is fully initialized
+		if redis.GlobalManager == nil {
+			return nil, fmt.Errorf("global redis manager is not initialized")
+		}
+
+		// Resolve the specific connection pool client at boot-time
+		client, ok := redis.GlobalManager.GetClient(cfg.RedisService)
+		if !ok {
+			return nil, fmt.Errorf("configured redis service %s not found in manager", cfg.RedisService)
+		}
+
+		// Return the initialized Redis Metadata Enricher filter
+		return redis_metadata_enricher.NewRedisMetadataEnricherFilter("redis_metadata_enricher", cfg, client), nil
+
 	case "embedded_rate_limiter":
 		var cfg rate_limiter.FilterOptions
 		if err := yaml.Unmarshal(optsBytes, &cfg); err != nil {

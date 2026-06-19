@@ -35,7 +35,7 @@ func (r *EngineRouter) Route(ctx *engine.RequestContext) string {
 			matchFailed := false
 
 			// 3. Evaluate a Single Match Block (AND Logic)
-			
+
 			// A. Path Matching
 			if match.PathPrefix != "" {
 				if !strings.HasPrefix(ctx.Path, match.PathPrefix) {
@@ -56,7 +56,7 @@ func (r *EngineRouter) Route(ctx *engine.RequestContext) string {
 			if len(match.Headers) > 0 {
 				for headerKey, ruleHeader := range match.Headers {
 					headerVal, exists := ctx.Headers[headerKey]
-					
+
 					// If header does not exist, match fails
 					if !exists {
 						matchFailed = true

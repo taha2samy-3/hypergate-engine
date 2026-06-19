@@ -12,6 +12,7 @@ require (
 	github.com/mediocregopher/radix/v4 v4.1.5
 	github.com/oklog/ulid/v2 v2.1.1
 	github.com/rs/xid v1.6.0
+	github.com/tidwall/gjson v1.19.0
 	go.uber.org/zap v1.28.0
 	golang.org/x/sync v0.21.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260610212136-7ab31c22f7ad
@@ -32,6 +33,8 @@ require (
 	github.com/lestrrat-go/option v1.0.1 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
+	github.com/tidwall/match v1.1.1 // indirect
+	github.com/tidwall/pretty v1.2.0 // indirect
 	github.com/tilinna/clock v1.0.2 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
 	golang.org/x/crypto v0.48.0 // indirect

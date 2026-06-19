@@ -5,10 +5,10 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	rpcstatus "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/keepalive"
-	rpcstatus "google.golang.org/genproto/googleapis/rpc/status"
 
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	typev3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
@@ -86,8 +86,8 @@ func (s *Server) Check(ctx context.Context, req *authv3.CheckRequest) (*authv3.C
 		reqCtx.Path = httpReq.Path
 		reqCtx.Method = httpReq.Method
 
-		mylogger.Debug("gRPC check request received", 
-			zap.String("path", reqCtx.Path), 
+		mylogger.Debug("gRPC check request received",
+			zap.String("path", reqCtx.Path),
 			zap.String("method", reqCtx.Method),
 		)
 

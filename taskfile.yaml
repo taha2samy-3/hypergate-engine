@@ -59,6 +59,8 @@ tasks:
       - task: run-scenario
         vars: { NAME: "integrations" }
         ignore_error: true
+      - task: tests:metadata-enrichment
+        ignore_error: true
 
   tests:test-matching:
     desc: "Run matching/boolean logic tests specifically"
@@ -80,5 +82,43 @@ tasks:
     cmds:
       - task: run-scenario
         vars: { NAME: "integrations" }
-    
+  tests:metadata-enrichment:
+    desc: "Run metadata enrichment tests"
+    cmds:
+      - task: run-scenario
+        vars: { NAME: "metadata_enrichment" }
 
+  go:tidy:
+    desc: "Tidy and verify Go module dependencies"
+    cmds:
+      - go mod tidy
+      - go mod verify
+    silent: true
+
+  go:fmt:
+    desc: "Format all Go source files according to style guidelines"
+    cmds:
+      - go fmt ./...
+    silent: true
+
+  go:vet:
+    desc: "Run Go static analysis compiler checks (vet)"
+    cmds:
+      - go vet ./...
+
+  go:generate:
+    desc: "Generate Protobuf and gRPC files using Buf tool"
+    cmds:
+      - buf generate buf.build/envoyproxy/envoy --path envoy/service/auth/v3
+
+  go:build:
+    desc: "Build highly-optimized, stripped Go binary for Linux"
+    cmds:
+      - mkdir -p bin
+      - CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o bin/engine ./cmd/engine
+
+  go:clean:
+    desc: "Clean up built binaries and cached test results"
+    cmds:
+      - rm -rf bin/
+      - go clean -testcache
