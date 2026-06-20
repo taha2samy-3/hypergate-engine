@@ -212,8 +212,8 @@ tasks:
   k8s:cilium:l2policy:
     desc: "Enable L2 policy mode in Cilium"
     cmds:
-      - kubectl apply -f k8s/kind/cilium/l2policy.yaml
+      - kubectl apply -f k8s/cilium/l2policy.yaml
   k8s:cilium:pool:
     desc: "Enable L2 policy mode in Cilium"
     cmds:
-      - kubectl apply -f k8s/kind/cilium/pool.yaml
+      - kubectl apply -f k8s/cilium/pool.yaml
