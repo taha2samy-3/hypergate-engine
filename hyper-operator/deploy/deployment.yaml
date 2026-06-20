@@ -18,7 +18,7 @@ spec:
       serviceAccountName: hyper-operator-sa
       containers:
         - name: manager
-          image: taha/hyper-operator:latest # ◄ الـ Image بتاعتك
+          image: ghcr.io/taha2samy-2/hyper-operator:1.0.0
           imagePullPolicy: IfNotPresent
           command:
             - /manager
