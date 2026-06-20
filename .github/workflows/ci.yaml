@@ -34,7 +34,7 @@ jobs:
           file: ./Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/${{ github.repository }}/hyper-engine:latest
+          tags: ghcr.io/${{ github.repository }}/hyper-engine:1.0.0
 
       - name: Build & Push Operator
         uses: docker/build-push-action@v5
@@ -43,7 +43,7 @@ jobs:
           file: ./hyper-operator/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/${{ github.repository }}/hyper-operator:latest
+          tags: ghcr.io/${{ github.repository }}/hyper-operator:1.0.0
 
       - name: Build & Push Mock Engine
         uses: docker/build-push-action@v5
@@ -52,7 +52,7 @@ jobs:
           file: ./mock_engine/Dockerfile.mock
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/${{ github.repository }}/hyper-mock-engine:latest
+          tags: ghcr.io/{{ github.repository }}/hyper-mock-engine:1.0.0
 
   cleanup:
     needs: build-and-push
