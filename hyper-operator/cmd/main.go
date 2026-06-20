@@ -87,9 +87,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = webhook.SetupWebhookWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create webhook", "webhook", "HyperPolicy")
-		os.Exit(1)
+	enableWebhooks := os.Getenv("ENABLE_WEBHOOKS")
+	if enableWebhooks == "false" {
+		setupLog.Info("Webhooks are explicitly disabled via ENABLE_WEBHOOKS env var, skipping webhook registration.")
+	} else {
+		if err = webhook.SetupWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "HyperPolicy")
+			os.Exit(1)
+		}
 	}
 
 	//+kubebuilder:scaffold:builder

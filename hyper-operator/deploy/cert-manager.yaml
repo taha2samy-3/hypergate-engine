@@ -1,0 +1,20 @@
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: hyper-selfsigned-issuer
+  namespace: hyper-system
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: hyper-operator-cert
+  namespace: hyper-system
+spec:
+  dnsNames:
+    - hyper-operator.hyper-system.svc
+  issuerRef:
+    kind: Issuer
+    name: hyper-selfsigned-issuer
+  secretName: webhook-server-cert
