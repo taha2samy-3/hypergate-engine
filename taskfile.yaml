@@ -132,21 +132,35 @@ tasks:
       - docker build -t taha/myprog-operator:latest -f hyper-operator/Dockerfile .
     silent: true
 
-  operator:deploy:
+  # operator:deploy:
+  #   desc: "Deploy the Operator resources, ServiceAccount, Roles, and controllers"
+  #   cmds:
+
+  #     # - kubectl apply -f hyper-operator/deploy/namespace.yaml
+  #     # - kubectl apply -f hyper-operator/deploy/rbac.yaml
+  #     # - kubectl apply -f hyper-operator/deploy/CRDs/hyperconfig_crd.yaml
+  #     # - kubectl apply -f hyper-operator/deploy/CRDs/hyperpolicy_crd.yaml
+  #     # - kubectl apply -f hyper-operator/deploy/CRDs/hyperroute_crd.yaml
+  #     # - kubectl apply -f hyper-operator/deploy/CRDs/hyperredis_crd.yaml
+  #     # - chmod +x hyper-operator/deploy/generate-certs.sh && ./hyper-operator/deploy/generate-certs.sh
+  #     # - kubectl apply -f hyper-operator/deploy/deployment.yaml
+  #     # - echo "Checking operator deployment status..."
+  #     # - kubectl rollout status deployment/hyper-operator -n hyper-system --timeout=60s
+  #   silent: true
+  operator:deploy:CRDs:
     desc: "Deploy the Operator resources, ServiceAccount, Roles, and controllers"
     cmds:
-      # 1. Apply Namespace, RBAC, and Deployment
-      - kubectl apply -f hyper-operator/deploy/namespace.yaml
-      - kubectl apply -f hyper-operator/deploy/rbac.yaml
+      - kubectl apply -f hyper-operator/deploy/CRDs/filter_correlationid_crd.yaml
+      - kubectl apply -f hyper-operator/deploy/CRDs/filter_deny_crd.yaml
+      - kubectl apply -f hyper-operator/deploy/CRDs/filter_headermodifier_crd.yaml
+      - kubectl apply -f hyper-operator/deploy/CRDs/filter_oidc_crd.yaml
+      - kubectl apply -f hyper-operator/deploy/CRDs/filter_rate_limit_crd.yaml
+      - kubectl apply -f hyper-operator/deploy/CRDs/filter_redismetadataenricher_crd.yaml
+      - kubectl apply -f hyper-operator/deploy/CRDs/hyperchain_crd.yaml
       - kubectl apply -f hyper-operator/deploy/CRDs/hyperconfig_crd.yaml
-      - kubectl apply -f hyper-operator/deploy/CRDs/hyperpolicy_crd.yaml
-      - kubectl apply -f hyper-operator/deploy/CRDs/hyperroute_crd.yaml
       - kubectl apply -f hyper-operator/deploy/CRDs/hyperredis_crd.yaml
-      - chmod +x hyper-operator/deploy/generate-certs.sh && ./hyper-operator/deploy/generate-certs.sh
-      - kubectl apply -f hyper-operator/deploy/deployment.yaml
-      - echo "Checking operator deployment status..."
-      - kubectl rollout status deployment/hyper-operator -n hyper-system --timeout=60s
-    silent: true
+      - kubectl apply -f hyper-operator/deploy/CRDs/hyperroute_crd.yaml
+
 
   operator:undeploy:
     desc: "Remove the Operator and all its system resources from the cluster"
