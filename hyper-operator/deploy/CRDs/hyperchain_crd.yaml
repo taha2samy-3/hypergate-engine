@@ -48,6 +48,8 @@ spec:
                       - RateLimitFilter
                       - HeaderModifierFilter
                       - DenyFilter
+                      - CorrelationIdFilter
+                      - RedisMetadataEnricherFilter
                     name:
                       type: string
           status:
