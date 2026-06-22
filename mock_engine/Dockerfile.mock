@@ -1,33 +1,12 @@
-FROM python:3.11-slim
-
+FROM golang:1.22 AS builder
 WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o mock-engine .
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends git curl findutils && \
-    rm -rf /var/lib/apt/lists/*
-
-RUN pip install --no-cache-dir grpcio grpcio-tools kubernetes
-
-RUN git clone --depth 1 https://github.com/envoyproxy/data-plane-api.git /tmp/data-plane-api && \
-    git clone --depth 1 https://github.com/googleapis/googleapis.git /tmp/googleapis && \
-    git clone --depth 1 https://github.com/cncf/xds.git /tmp/xds && \
-    git clone --depth 1 https://github.com/bufbuild/protoc-gen-validate.git /tmp/validate
-
-RUN find /tmp/data-plane-api/envoy/service/auth/v3 \
-         /tmp/data-plane-api/envoy/config/core/v3 \
-         /tmp/data-plane-api/envoy/type/v3 \
-         /tmp/data-plane-api/envoy/type/metadata/v3 \
-         /tmp/data-plane-api/envoy/type/tracing/v3 \
-         -name "*.proto" | xargs python -m grpc_tools.protoc \
-             -I/tmp/data-plane-api \
-             -I/tmp/googleapis \
-             -I/tmp/xds \
-             -I/tmp/validate \
-             --python_out=. \
-             --grpc_python_out=.
-
-COPY mock_server.py .
-
+FROM debian:12-slim
+WORKDIR /
+COPY --from=builder /app/mock-engine .
 EXPOSE 9001
-
-CMD ["python", "mock_server.py"]
+ENTRYPOINT ["/mock-engine"]
