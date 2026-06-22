@@ -25,6 +25,8 @@ RUN python -m grpc_tools.protoc \
     /tmp/data-plane-api/envoy/config/core/v3/base.proto \
     /tmp/data-plane-api/envoy/config/core/v3/address.proto \
     /tmp/data-plane-api/envoy/config/core/v3/backoff.proto \
+    /tmp/data-plane-api/envoy/config/core/v3/extension.proto \
+    /tmp/data-plane-api/envoy/config/core/v3/socket_option.proto \
     /tmp/data-plane-api/envoy/type/v3/http_status.proto \
     /tmp/data-plane-api/envoy/type/v3/percent.proto \
     /tmp/data-plane-api/envoy/type/v3/range.proto \
