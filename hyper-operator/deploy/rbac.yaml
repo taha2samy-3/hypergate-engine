@@ -15,9 +15,6 @@ rules:
   - apiGroups: ["hyper.io"]
     resources: ["hyperconfigs/status", "hyperredis/status", "hyperroutes/status", "hyperchains/status", "oidcfilters/status", "ratelimitfilters/status", "headermodifierfilters/status", "denyfilters/status", "correlationidfilters/status", "redismetadataenricherfilters/status"]
     verbs: ["get", "update", "patch"]
-
-
-  # 2. Permissions for core K8s resources we manipulate (DaemonSets, ConfigMaps, Services, etc.)
   - apiGroups: [""]
     resources: ["configmaps", "services", "serviceaccounts", "namespaces", "events"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
@@ -26,6 +23,9 @@ rules:
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: ["rbac.authorization.k8s.io"]
     resources: ["roles", "rolebindings"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1

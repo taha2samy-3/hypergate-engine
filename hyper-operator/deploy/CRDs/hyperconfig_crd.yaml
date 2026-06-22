@@ -10,7 +10,7 @@ spec:
     plural: hyperconfigs
     singular: hyperconfig
     shortNames:
-      - hc
+      - hcfg # تم التغيير هنا لتجنب الصراع
   scope: Cluster
   versions:
     - name: v1alpha1

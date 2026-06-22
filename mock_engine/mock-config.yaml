@@ -1,4 +1,4 @@
-apiVersion: infra.hyper.io/v1alpha1
+apiVersion: hyper.io/v1alpha1
 kind: HyperConfig
 metadata:
   name: global-engine-config
@@ -8,4 +8,5 @@ spec:
   logLevel: "DEBUG"
   redisServiceRef: "shared-redis"
   targetNamespace: "hyper-system"
-  engineImage: "taha/hyper-mock-engine:latest"
+  engineImage: "ghcr.io/taha2samy-2/hyper-mock-engine:1.0.0"
+  fallbackChain: "chain_fallback_deny" 
