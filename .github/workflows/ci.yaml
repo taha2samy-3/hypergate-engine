@@ -16,11 +16,11 @@ jobs:
           - name: hyper-engine
             context: .
             file: ./Dockerfile
-            tag: "1.0.0"
+            tag: "0.1.0-alpha.1"
           - name: hyper-operator
             context: .
             file: ./hyper-operator/Dockerfile
-            tag: "1.0.0"
+            tag: "0.1.0-alpha.1"
           - name: hyper-mock-engine
             context: ./mock_engine
             file: ./mock_engine/Dockerfile.mock
