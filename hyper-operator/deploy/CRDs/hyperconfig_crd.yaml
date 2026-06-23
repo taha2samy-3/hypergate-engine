@@ -10,7 +10,7 @@ spec:
     plural: hyperconfigs
     singular: hyperconfig
     shortNames:
-      - hcfg # تم التغيير هنا لتجنب الصراع
+      - hcfg 
   scope: Cluster
   versions:
     - name: v1alpha1
@@ -54,7 +54,7 @@ spec:
                   default: "ghcr.io/taha2samy-2/hyper-engine:1.0.0"
                 redisServiceRef:
                   type: string
-                fallbackChain:
+                defaultChain:
                   type: string
             status:
               type: object

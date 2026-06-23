@@ -141,8 +141,8 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 		Redis:  make(map[string]config.RedisServiceConfig),
 		Chains: make(map[string]config.Chain),
 		Router: config.RouterConfig{
-			Routes: []config.RouteConfig{},
-			Other:  activeConfig.Spec.FallbackChain,
+			Routes:       []config.RouteConfig{},
+			DefaultChain: activeConfig.Spec.DefaultChain,
 		},
 	}
 

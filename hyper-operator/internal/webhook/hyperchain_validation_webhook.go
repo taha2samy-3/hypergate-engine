@@ -36,8 +36,20 @@ func (v *HyperChainValidator) ValidateUpdate(ctx context.Context, oldObj, newObj
 	return v.validateFilters(ctx, newObj)
 }
 
-// ValidateDelete is a no-op; deletion of HyperChain is always allowed.
 func (v *HyperChainValidator) ValidateDelete(ctx context.Context, obj *hyperv1alpha1.HyperChain) (admission.Warnings, error) {
+	hyperChainLog.Info("validating HyperChain on DELETE", "name", obj.Name)
+
+	var configList hyperv1alpha1.HyperConfigList
+	if err := v.Client.List(ctx, &configList); err != nil {
+		return nil, fmt.Errorf("failed to list HyperConfigs: %w", err)
+	}
+
+	for _, hc := range configList.Items {
+		if hc.Spec.DefaultChain == obj.Name {
+			return nil, fmt.Errorf("cannot delete HyperChain '%s' because it is referenced as the defaultChain in HyperConfig '%s'", obj.Name, hc.Name)
+		}
+	}
+
 	return nil, nil
 }
 

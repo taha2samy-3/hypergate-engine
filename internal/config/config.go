@@ -28,8 +28,8 @@ type Config struct {
 
 // RouterConfig holds the routing rules and the fallback chain name.
 type RouterConfig struct {
-	Routes []RouteConfig `yaml:"routes"`
-	Other  string        `yaml:"other"`
+	Routes       []RouteConfig `yaml:"routes"`
+	DefaultChain string        `yaml:"default_chain"`
 }
 
 // TelemetryConfig defines observability settings like logging.

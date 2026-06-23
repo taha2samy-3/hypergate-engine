@@ -96,7 +96,7 @@ func (r *EngineRouter) Route(ctx *engine.RequestContext) string {
 		}
 	}
 
-	// 5. The Other Fallback
-	mylogger.Debug("No route rule matched, falling back to 'other'", zap.String("fallback_chain", activeCfg.Router.Other))
-	return activeCfg.Router.Other
+	// 5. The DefaultChain Fallback
+	mylogger.Debug("No route rule matched, falling back to 'default_chain'", zap.String("default_chain", activeCfg.Router.DefaultChain))
+	return activeCfg.Router.DefaultChain
 }

@@ -98,13 +98,15 @@ func (s *Server) Check(ctx context.Context, req *authv3.CheckRequest) (*authv3.C
 
 	targetChainName := s.router.Route(reqCtx)
 
-	chain, exists := s.registry.Get(targetChainName)
-	if !exists {
-		mylogger.Warn("Target chain not found in registry", zap.String("chain", targetChainName))
-	} else {
-		err := s.executor.Execute(reqCtx, chain)
-		if err != nil {
-			mylogger.Error("Error executing chain", zap.String("chain", targetChainName), zap.Error(err))
+	if targetChainName != "" {
+		chain, exists := s.registry.Get(targetChainName)
+		if !exists {
+			mylogger.Warn("Target chain not found in registry, failing open", zap.String("chain", targetChainName))
+		} else {
+			err := s.executor.Execute(reqCtx, chain)
+			if err != nil {
+				mylogger.Error("Error executing chain", zap.String("chain", targetChainName), zap.Error(err))
+			}
 		}
 	}
 
