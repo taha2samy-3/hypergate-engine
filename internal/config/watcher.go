@@ -1,21 +1,151 @@
 package config
 
 import (
+	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	"go.uber.org/zap"
-
-	mylogger "github.com/taha/myprog/internal/logger"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 )
 
-// WatchConfig monitors the directory containing the configuration file for changes.
-// It is designed to handle standard file-writes as well as Kubernetes ConfigMap symlink-swaps.
 func WatchConfig(configPath string, onReload func(*Config)) {
+	provider := os.Getenv(EnvConfigProvider)
+	if provider == "" {
+		provider = "FILE"
+	}
+
+	switch provider {
+	case "K8S":
+		go watchK8sConfigMap(onReload)
+	case "URL":
+		go watchURLConfig(onReload)
+	case "FILE":
+		fallthrough
+	default:
+		go watchFileConfig(configPath, onReload)
+	}
+}
+
+func watchK8sConfigMap(onReload func(*Config)) {
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		return
+	}
+
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return
+	}
+
+	cmName := os.Getenv("CONFIG_K8S_NAME")
+	if cmName == "" {
+		cmName = "hyper-engine-config"
+	}
+
+	namespace := os.Getenv("CONFIG_K8S_NAMESPACE")
+	if namespace == "" {
+		namespace = "hyper-system"
+	}
+
+	for {
+		watcher, err := clientset.CoreV1().ConfigMaps(namespace).Watch(context.Background(), metav1.ListOptions{
+			FieldSelector: fmt.Sprintf("metadata.name=%s", cmName),
+		})
+		if err != nil {
+			time.Sleep(5 * time.Second)
+			continue
+		}
+
+		for event := range watcher.ResultChan() {
+			if event.Type == watch.Modified {
+				cm, ok := event.Object.(*corev1.ConfigMap)
+				if !ok {
+					continue
+				}
+
+				if cm.Data != nil {
+					if yamlContent, ok := cm.Data["config.yaml"]; ok {
+						newConfig, err := ParseBytes([]byte(yamlContent))
+						if err != nil {
+							continue
+						}
+
+						GlobalConfig.Store(newConfig)
+
+						if onReload != nil {
+							onReload(newConfig)
+						}
+					}
+				}
+			}
+		}
+
+		time.Sleep(1 * time.Second)
+	}
+}
+
+func watchURLConfig(onReload func(*Config)) {
+	configURL := os.Getenv(EnvConfigURL)
+	if configURL == "" {
+		return
+	}
+
+	http.HandleFunc("/v1/reload", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		client := &http.Client{Timeout: 5 * time.Second}
+		resp, err := client.Get(configURL)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to fetch config: %v", err), http.StatusInternalServerError)
+			return
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			http.Error(w, fmt.Sprintf("Remote server returned status: %d", resp.StatusCode), http.StatusInternalServerError)
+			return
+		}
+
+		data, err := io.ReadAll(resp.Body)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to read config body: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		newConfig, err := ParseBytes(data)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to parse config: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		GlobalConfig.Store(newConfig)
+
+		if onReload != nil {
+			onReload(newConfig)
+		}
+
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("Config successfully reloaded"))
+	})
+
+	_ = http.ListenAndServe(":9002", nil)
+}
+
+func watchFileConfig(configPath string, onReload func(*Config)) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		mylogger.Error("Failed to initialize config file watcher", zap.Error(err))
 		return
 	}
 	defer watcher.Close()
@@ -23,11 +153,8 @@ func WatchConfig(configPath string, onReload func(*Config)) {
 	dir := filepath.Dir(configPath)
 	err = watcher.Add(dir)
 	if err != nil {
-		mylogger.Error("Failed to watch config directory", zap.String("dir", dir), zap.Error(err))
 		return
 	}
-
-	mylogger.Info("Config watcher started", zap.String("path", configPath))
 
 	for {
 		select {
@@ -36,43 +163,32 @@ func WatchConfig(configPath string, onReload func(*Config)) {
 				return
 			}
 
-			// Under Kubernetes, ConfigMap updates trigger atomic symlink swaps on the parent '..data' directory.
-			// Depending on the host OS kernel and VFS translation layers, this swap might be reported exclusively
-			// as Rename or Remove events instead of standard Write/Create events. We observe all four event flags
-			// to guarantee reliable change-detection across various cloud provider platforms.
 			if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) || event.Has(fsnotify.Rename) || event.Has(fsnotify.Remove) {
 				if filepath.Base(event.Name) == filepath.Base(configPath) || filepath.Base(event.Name) == "..data" {
-					mylogger.Info("Configuration modification detected, initiating reload sequence...", zap.String("file", event.Name))
-
-					// Introduce a 100ms debounce window. Although the symlink exchange on '..data' is theoretically atomic, Go's VFS
-					// operations can run into a transient cache-coherence window where the target file temporarily returns ENOENT (not found)
-					// or an empty read. A 100ms sleep allows the filesystem transaction to settle globally on the host.
 					time.Sleep(100 * time.Millisecond)
 
-					newConfig, err := ParseFile(configPath)
+					data, err := os.ReadFile(configPath)
 					if err != nil {
-						mylogger.Warn("Transient error reading updated config file, skipping current reload event", zap.Error(err))
+						continue
+					}
+
+					newConfig, err := ParseBytes(data)
+					if err != nil {
 						continue
 					}
 
 					GlobalConfig.Store(newConfig)
 
-					mylogger.SetLevel(newConfig.Telemetry.Logging.Level)
-
 					if onReload != nil {
 						onReload(newConfig)
 					}
-
-					mylogger.Info("Configuration successfully hot-reloaded and atomic log level updated",
-						zap.String("new_level", newConfig.Telemetry.Logging.Level))
 				}
 			}
 
-		case err, ok := <-watcher.Errors:
+		case _, ok := <-watcher.Errors:
 			if !ok {
 				return
 			}
-			mylogger.Error("Config watcher encountered an error", zap.Error(err))
 		}
 	}
 }
