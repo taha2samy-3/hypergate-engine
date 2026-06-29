@@ -13,5 +13,6 @@
       ]
     }
   ],
+  "recreateWhen": "always",
   "dependencyDashboard": false
 }
