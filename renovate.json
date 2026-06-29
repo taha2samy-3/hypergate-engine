@@ -6,10 +6,7 @@
   "customManagers": [
     {
       "customType": "regex",
-      "fileMatch": ["(^|/)values\\.yaml$"],
-      "matchStrings": [
-        "datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)( registryUrl=(?<registryUrl>\\S+))?\\s+\\w+:\\s*\"?(?<currentValue>[^\"]+)\"?"
-      ]
+      "fileMatch": ["(^|/)values\\.yaml$"]
     }
   ]
 }
