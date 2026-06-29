@@ -3,9 +3,15 @@
   "extends": [
     "config:recommended"
   ],
-  "enabledManagers": ["helm-values"],
-  "helm-values": {
-    "fileMatch": ["(^|/)values\\.yaml$"] 
-  },
-  "dependencyDashboardApproval": true
+  "customManagers": [
+    {
+      "customType": "regex",
+      "fileMatch": ["(^|/)values\\.yaml$"],
+      "matchStrings": [
+        "#\\s*renovate:\\s*datasource=(?<datasource>[a-zA-Z0-9-]+)\\s+depName=(?<depName>\\S+)\\s+\\w+:\\s*\"?(?<currentValue>[a-zA-Z0-9.-]+)\"?"
+      ]
+    }
+  ],
+  "onboarding": false,
+  "requireConfig": "optional"
 }

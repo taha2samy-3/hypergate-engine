@@ -1,5 +1,4 @@
-
 image:
-  # renovate: image=redis
   repository: redis
+  # renovate: datasource=docker depName=redis
   tag: 6.0.0
