@@ -1,0 +1,5 @@
+
+image:
+  # renovate: image=redis
+  repository: redis
+  tag: 6.0.0
