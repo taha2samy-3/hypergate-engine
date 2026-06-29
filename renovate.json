@@ -3,6 +3,7 @@
   "extends": [
     "config:recommended"
   ],
+  "enabledManagers": ["custom.regex"],
   "customManagers": [
     {
       "customType": "regex",
@@ -12,6 +13,7 @@
       ]
     }
   ],
+  "dependencyDashboard": false,
   "onboarding": false,
   "requireConfig": "optional"
 }
