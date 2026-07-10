@@ -72,7 +72,7 @@ jobs:
       - name: Run Go Linters
         uses: golangci/golangci-lint-action@v6
         with:
-          version: v1.60
+          version: v2.12.2
 
       - name: Run Trivy Security Scan
         uses: aquasecurity/trivy-action@master
