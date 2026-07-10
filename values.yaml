@@ -1,4 +1,4 @@
 image:
   repository: redis
   # renovate: datasource=docker depName=redis
-  tag: 6.0.0
+  tag: 6.0.0@sha256:9c2d321d367c582fc103ad36b7326a0edd5b558e0c987d0bea3b58bac008b20f
