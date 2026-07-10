@@ -1,0 +1,51 @@
+name: Merge Queue Verification
+
+on:
+  merge_group:
+    types: [checks_requested]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.merge_group.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  pre-merge-validation:
+    name: Validate Build & Run Integration (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [engine, operator]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go Environment
+        uses: ./.github/actions/setup-go-env
+
+      - name: Run Go Vet
+        shell: bash
+        run: go vet ./...
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Dry-Run Build with Docker Bake
+        uses: docker/bake-action@v3
+        with:
+          targets: ${{ matrix.target }}
+          push: false
+          set: |
+            *.cache-from=type=gha
+            *.cache-to=type=gha,mode=max
+
+      - name: Run Integration Tests
+        if: matrix.target == 'engine'
+        uses: ./.github/actions/run-unit-tests
