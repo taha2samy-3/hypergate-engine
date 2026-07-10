@@ -1,0 +1,37 @@
+name: 'Run Integration Tests'
+description: 'Runs all pytest integration scenarios using Docker Compose'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Go Environment
+      uses: ./.github/actions/setup-go-env
+
+    - name: Set up Python Environment
+      uses: ./.github/actions/setup-python-env
+
+    - name: Install Pipenv Dependencies
+      shell: bash
+      run: |
+        pipenv install --deploy
+
+
+    - name: Run API Key Integration Tests
+      shell: bash
+      run: |
+        task tests:test-api-key
+
+    - name: Run Rate Limit Integration Tests
+      shell: bash
+      run: |
+        task tests:test-ratelimit
+
+    - name: Run Header Modification Integration Tests
+      shell: bash
+      run: |
+        task tests:modification-filter
+
+    - name: Run Metadata Enrichment Integration Tests
+      shell: bash
+      run: |
+        task tests:metadata-enrichment
