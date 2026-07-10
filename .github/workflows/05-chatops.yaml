@@ -1,0 +1,80 @@
+name: ChatOps Commands
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  pull-requests: write
+  issues: write
+  statuses: write
+  contents: write
+
+jobs:
+  chatops-trigger:
+    name: Execute Command
+    if: ${{ github.event.issue.pull_request && (contains(github.event.comment.body, '/format') || contains(github.event.comment.body, '/retest')) }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: React to Comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: 'rocket'
+            })
+
+      - name: Get PR Info
+        id: pr_info
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            });
+            core.setOutput('head_ref', pr.data.head.ref);
+            core.setOutput('head_repo', pr.data.head.repo.full_name);
+
+      - name: Checkout PR Branch
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.pr_info.outputs.head_repo }}
+          ref: ${{ steps.pr_info.outputs.head_ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Go
+        if: contains(github.event.comment.body, '/format')
+        uses: ./.github/actions/setup-go-env
+
+      - name: Format Go Code
+        if: contains(github.event.comment.body, '/format')
+        shell: bash
+        run: |
+          go fmt ./...
+
+      - name: Commit and Push Changes
+        if: contains(github.event.comment.body, '/format')
+        shell: bash
+        run: |
+          git config user.name "github-actions-bot"
+          git config user.email "github-actions-bot@users.noreply.github.com"
+          git add .
+          git diff-index --quiet HEAD || git commit -m "style: auto-format Go code [skip ci]"
+          git push
+
+      - name: Trigger Retest
+        if: contains(github.event.comment.body, '/retest')
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: '01-pr-validation.yaml',
+              ref: '${{ steps.pr_info.outputs.head_ref }}'
+            })
