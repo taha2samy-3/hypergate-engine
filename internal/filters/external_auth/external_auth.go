@@ -33,7 +33,9 @@ func NewExternalAuthFilter(cfg *config.ExternalAuthConfig) (*ExternalAuthFilter,
 			var d net.Dialer
 			return d.DialContext(ctx, "unix", cfg.SocketPath)
 		},
-		DisableKeepAlives: false,
+		DisableKeepAlives:   false,
+		MaxIdleConns:        1000,
+		MaxIdleConnsPerHost: 1000,
 	}
 
 	client := &http.Client{

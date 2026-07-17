@@ -188,7 +188,12 @@ func (m *Manager) Reload(newCfg *config.Config) error {
 	// Close old pools outside the lock in a dedicated goroutine. Using a
 	// goroutine prevents the caller from blocking on TCP FIN/ACK exchanges
 	// and Kubernetes connection-drain timeouts.
+	//
+	// To prevent interrupting in-flight requests running through the old
+	// compiled filter chains, we sleep for 10 seconds to allow active connections
+	// to drain before closing the retired pools.
 	go func() {
+		time.Sleep(10 * time.Second) // Graceful connection draining delay
 		for name, c := range oldClients {
 			if err := c.Close(); err != nil {
 				// Closing a pool is best-effort. Log the error (if a logger

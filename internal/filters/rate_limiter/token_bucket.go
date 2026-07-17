@@ -71,7 +71,7 @@ end
 
 reset_duration = math.max(0, reset_duration)
 
-return {allowed, tokens, math.ceil(reset_duration)}
+return {allowed, tostring(tokens), math.ceil(reset_duration)}
 `
 }
 

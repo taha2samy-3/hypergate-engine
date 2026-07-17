@@ -245,21 +245,14 @@ func (r *HyperConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		ds.Spec.Template.Spec.Containers = containers
 		ds.Spec.Template.Spec.Volumes = volumes
 
-		// Merge collected pull secrets into the pod-level ImagePullSecrets (deduplicated).
-		if len(pullSecretSet) > 0 {
-			existing := make(map[string]struct{})
-			for _, s := range ds.Spec.Template.Spec.ImagePullSecrets {
-				existing[s.Name] = struct{}{}
-			}
-			for name := range pullSecretSet {
-				if _, ok := existing[name]; !ok {
-					ds.Spec.Template.Spec.ImagePullSecrets = append(
-						ds.Spec.Template.Spec.ImagePullSecrets,
-						corev1.LocalObjectReference{Name: name},
-					)
-				}
-			}
+		// Rebuild the pod-level ImagePullSecrets cleanly from scratch using the active
+		// deduplicated set of secrets to prevent retired or changed pull secrets from
+		// accumulating indefinitely over multiple reconcile loops.
+		var imagePullSecrets []corev1.LocalObjectReference
+		for name := range pullSecretSet {
+			imagePullSecrets = append(imagePullSecrets, corev1.LocalObjectReference{Name: name})
 		}
+		ds.Spec.Template.Spec.ImagePullSecrets = imagePullSecrets
 
 		return ctrl.SetControllerReference(&hyperConfig, ds, r.Scheme)
 	}); err != nil {

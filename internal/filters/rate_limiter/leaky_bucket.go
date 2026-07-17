@@ -69,7 +69,7 @@ if leak_rate > 0 then
     end
 end
 
-return {allowed, water, math.ceil(reset_duration)}
+return {allowed, tostring(water), math.ceil(reset_duration)}
 `
 }
 
