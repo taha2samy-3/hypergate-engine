@@ -41,6 +41,7 @@ type HyperChainMasterCompilerReconciler struct {
 // +kubebuilder:rbac:groups=hyper.io,resources=correlationidfilters,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=hyper.io,resources=redismetadataenricherfilters,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=hyper.io,resources=apikeyfilters,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=hyper.io,resources=externalauthfilters,verbs=get;list;watch
 // +kubebuilder:rbac:groups=hyper.io,resources=apikeyfilters/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 
@@ -121,6 +122,12 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 		return ctrl.Result{}, err
 	}
 
+	var externalAuthList hyperv1alpha1.ExternalAuthFilterList
+	if err := r.List(ctx, &externalAuthList); err != nil {
+		reqLogger.Error(err, "unable to list ExternalAuthFilters")
+		return ctrl.Result{}, err
+	}
+
 	// Sort routes by priority descending
 	routes := routeList.Items
 	sort.Slice(routes, func(i, j int) bool {
@@ -189,6 +196,11 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 		apiKeyMap[apiKeyList.Items[i].Name] = &apiKeyList.Items[i]
 	}
 
+	externalAuthMap := make(map[string]*hyperv1alpha1.ExternalAuthFilter)
+	for i := range externalAuthList.Items {
+		externalAuthMap[externalAuthList.Items[i].Name] = &externalAuthList.Items[i]
+	}
+
 	// Map HyperChain list and handle status bubbling
 	validChains := make(map[string]bool)
 	for _, chainObj := range chainList.Items {
@@ -255,6 +267,30 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 					break
 				}
 				resolvedOptions = f.Spec
+			case "ExternalAuthFilter":
+				filterType = "external_auth"
+				f, exists := externalAuthMap[filterRef.Name]
+				if !exists {
+					failed = true
+					failMsg = fmt.Sprintf("Filter %s of Kind %s not found", filterRef.Name, filterRef.Kind)
+					break
+				}
+				// Build a map that exactly matches the engine's ExternalAuthConfig YAML tags.
+				// The socket path is deterministically derived from the CRD name.
+				socketPath := fmt.Sprintf("/var/run/hypergate/ext-auth-%s.sock", f.Name)
+				resolvedOptions = map[string]interface{}{
+					"protocol":    f.Spec.Protocol,
+					"socket_path": socketPath,
+					"timeout":     f.Spec.EngineRules.Timeout,
+					"forward_headers": f.Spec.EngineRules.ForwardHeaders,
+					"on_success": map[string]interface{}{
+						"upstream_headers_to_add":    f.Spec.EngineRules.OnSuccess.UpstreamHeadersToAdd,
+						"upstream_headers_to_remove": f.Spec.EngineRules.OnSuccess.UpstreamHeadersToRemove,
+					},
+					"on_failure": map[string]interface{}{
+						"downstream_pass_through_headers": f.Spec.EngineRules.OnFailure.DownstreamPassThroughHeaders,
+					},
+				}
 			default:
 				failed = true
 				failMsg = fmt.Sprintf("Unknown filter Kind %s", filterRef.Kind)
@@ -409,5 +445,6 @@ func (r *HyperChainMasterCompilerReconciler) SetupWithManager(mgr ctrl.Manager) 
 		Watches(&hyperv1alpha1.CorrelationIdFilter{}, triggerFunc).
 		Watches(&hyperv1alpha1.RedisMetadataEnricherFilter{}, triggerFunc).
 		Watches(&hyperv1alpha1.ApiKeyFilter{}, triggerFunc).
+		Watches(&hyperv1alpha1.ExternalAuthFilter{}, triggerFunc).
 		Complete(r)
 }
