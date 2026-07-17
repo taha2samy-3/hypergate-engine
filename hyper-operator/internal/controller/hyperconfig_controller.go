@@ -212,22 +212,35 @@ func (r *HyperConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 					pullSecretSet[s.Name] = struct{}{}
 				}
 
-				// Build the sidecar Env, auto-injecting the UDS address for oauth2-proxy.
+				// Build the sidecar Env, auto-injecting the UDS address.
 				sidecarEnv := make([]corev1.EnvVar, len(eaf.Spec.Container.Env))
 				copy(sidecarEnv, eaf.Spec.Container.Env)
 
-				if isOAuth2Proxy(eaf.Spec.Container.Image) {
+				if eaf.Spec.Container.SocketEnvKey != "" {
+					sidecarEnv = append(sidecarEnv, corev1.EnvVar{
+						Name:  eaf.Spec.Container.SocketEnvKey,
+						Value: "unix://" + socketPath,
+					})
+				} else if isOAuth2Proxy(eaf.Spec.Container.Image) {
 					sidecarEnv = append(sidecarEnv, corev1.EnvVar{
 						Name:  "OAUTH2_PROXY_HTTP_ADDRESS",
 						Value: "unix://" + socketPath,
 					})
 				}
 
+				var processedArgs []string
+				for _, arg := range eaf.Spec.Container.Args {
+					if strings.Contains(arg, "{socket_path}") {
+						arg = strings.ReplaceAll(arg, "{socket_path}", socketPath)
+					}
+					processedArgs = append(processedArgs, arg)
+				}
+
 				sidecar := corev1.Container{
 					Name:            "ext-auth-" + eaf.Name,
 					Image:           eaf.Spec.Container.Image,
 					ImagePullPolicy: eaf.Spec.Container.ImagePullPolicy,
-					Args:            eaf.Spec.Container.Args,
+					Args:            processedArgs,
 					Env:             sidecarEnv,
 					EnvFrom:         eaf.Spec.Container.EnvFrom,
 					Resources:       eaf.Spec.Container.Resources,

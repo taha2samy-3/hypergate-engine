@@ -147,6 +147,8 @@ spec:
                         type: object
                         additionalProperties:
                           type: string
+                  socketEnvKey:
+                    type: string
               engineRules:
                 type: object
                 properties:

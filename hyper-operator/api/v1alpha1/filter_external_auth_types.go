@@ -52,6 +52,11 @@ type SidecarContainerSpec struct {
 	// Resources defines the compute resource requirements for the container.
 	// +optional
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// SocketEnvKey is the name of the environment variable that the sidecar expects
+	// to receive the Unix Domain Socket path in.
+	// +optional
+	SocketEnvKey string `json:"socketEnvKey,omitempty"`
 }
 
 // +kubebuilder:object:generate=true
