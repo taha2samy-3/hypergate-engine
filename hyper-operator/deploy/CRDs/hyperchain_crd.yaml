@@ -44,7 +44,6 @@ spec:
                     kind:
                       type: string
                       enum:
-                      - OidcFilter
                       - RateLimitFilter
                       - HeaderModifierFilter
                       - DenyFilter

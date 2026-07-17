@@ -135,7 +135,6 @@ tasks:
       - kubectl apply -f hyper-operator/deploy/CRDs/filter_correlationid_crd.yaml
       - kubectl apply -f hyper-operator/deploy/CRDs/filter_deny_crd.yaml
       - kubectl apply -f hyper-operator/deploy/CRDs/filter_headermodifier_crd.yaml
-      - kubectl apply -f hyper-operator/deploy/CRDs/filter_oidc_crd.yaml
       - kubectl apply -f hyper-operator/deploy/CRDs/filter_ratelimit_crd.yaml
       - kubectl apply -f hyper-operator/deploy/CRDs/filter_redismetadataenricher_crd.yaml
       - kubectl apply -f hyper-operator/deploy/CRDs/filter_apikey_crd.yaml

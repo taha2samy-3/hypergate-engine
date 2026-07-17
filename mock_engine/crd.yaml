@@ -32,24 +32,6 @@ spec:
   propagateToDownstream: true
 ---
 apiVersion: hyper.io/v1alpha1
-kind: OidcFilter
-metadata:
-  name: keycloak-idp
-spec:
-  providerName: "Keycloak-IDP"
-  issuerUrl: "https://auth.example.com/realms/master"
-  clientId: "gateway-client"
-  userIdClaim: "sub"
-  emailClaim: "email"
-  groupsClaim: "roles"
-  allowUnverifiedEmail: false
-  claimToHeaders:
-    - headerName: "x-user-id"
-      claimName: "sub"
-    - headerName: "x-user-email"
-      claimName: "email"
----
-apiVersion: hyper.io/v1alpha1
 kind: RedisMetadataEnricherFilter
 metadata:
   name: user-profile-enricher
@@ -144,8 +126,6 @@ spec:
   filters:
     - kind: "CorrelationIdFilter"
       name: "generate-trace-id"
-    - kind: "OidcFilter"
-      name: "keycloak-idp"
     - kind: "RedisMetadataEnricherFilter"
       name: "user-profile-enricher"
     - kind: "HeaderModifierFilter"

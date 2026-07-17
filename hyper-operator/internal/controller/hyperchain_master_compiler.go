@@ -35,7 +35,6 @@ type HyperChainMasterCompilerReconciler struct {
 // +kubebuilder:rbac:groups=hyper.io,resources=hyperroutes,verbs=get;list;watch
 // +kubebuilder:rbac:groups=hyper.io,resources=hyperchains,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=hyper.io,resources=hyperchains/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=hyper.io,resources=oidcfilters,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=hyper.io,resources=ratelimitfilters,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=hyper.io,resources=headermodifierfilters,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=hyper.io,resources=denyfilters,verbs=get;list;watch;update;patch
@@ -86,12 +85,6 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 	}
 
 	// Fetch Filters
-	var oidcList hyperv1alpha1.OidcFilterList
-	if err := r.List(ctx, &oidcList); err != nil {
-		reqLogger.Error(err, "unable to list OidcFilters")
-		return ctrl.Result{}, err
-	}
-
 	var rateLimitList hyperv1alpha1.RateLimitFilterList
 	if err := r.List(ctx, &rateLimitList); err != nil {
 		reqLogger.Error(err, "unable to list RateLimitFilters")
@@ -166,11 +159,6 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 	}
 
 	// Maps of filters for lookup
-	oidcMap := make(map[string]*hyperv1alpha1.OidcFilter)
-	for i := range oidcList.Items {
-		oidcMap[oidcList.Items[i].Name] = &oidcList.Items[i]
-	}
-
 	rateLimitMap := make(map[string]*hyperv1alpha1.RateLimitFilter)
 	for i := range rateLimitList.Items {
 		rateLimitMap[rateLimitList.Items[i].Name] = &rateLimitList.Items[i]
@@ -213,15 +201,6 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 			var filterType string
 
 			switch filterRef.Kind {
-			case "OidcFilter":
-				filterType = "openid-connect"
-				f, exists := oidcMap[filterRef.Name]
-				if !exists {
-					failed = true
-					failMsg = fmt.Sprintf("Filter %s of Kind %s not found", filterRef.Name, filterRef.Kind)
-					break
-				}
-				resolvedOptions = f.Spec
 			case "RateLimitFilter":
 				filterType = "embedded_rate_limiter"
 				f, exists := rateLimitMap[filterRef.Name]
@@ -424,7 +403,6 @@ func (r *HyperChainMasterCompilerReconciler) SetupWithManager(mgr ctrl.Manager) 
 		Watches(&hyperv1alpha1.HyperChain{}, triggerFunc).
 		Watches(&hyperv1alpha1.HyperConfig{}, triggerFunc).
 		Watches(&hyperv1alpha1.HyperRedis{}, triggerFunc).
-		Watches(&hyperv1alpha1.OidcFilter{}, triggerFunc).
 		Watches(&hyperv1alpha1.RateLimitFilter{}, triggerFunc).
 		Watches(&hyperv1alpha1.HeaderModifierFilter{}, triggerFunc).
 		Watches(&hyperv1alpha1.DenyFilter{}, triggerFunc).

@@ -9,7 +9,6 @@ import (
 	"github.com/taha/myprog/internal/filters/correlation_id"
 	"github.com/taha/myprog/internal/filters/deny"
 	"github.com/taha/myprog/internal/filters/header_modifier"
-	"github.com/taha/myprog/internal/filters/openid_connect"
 	"github.com/taha/myprog/internal/filters/rate_limiter"
 	"github.com/taha/myprog/internal/filters/redis_metadata_enricher"
 	"github.com/taha/myprog/internal/redis"
@@ -125,16 +124,7 @@ func CreateFilter(filterType string, rawOptions interface{}) (engine.Filter, err
 		}
 		return f, nil
 
-	case "openid-connect":
-		cfg, err := config.ParseOIDCFilterConfig(rawOptions)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse config for openid-connect: %w", err)
-		}
-		f, err := openid_connect.NewOpenIDConnectFilter(*cfg)
-		if err != nil {
-			return nil, fmt.Errorf("failed to initialize openid-connect filter: %w", err)
-		}
-		return f, nil
+
 
 	default:
 		return nil, fmt.Errorf("unknown filter type: %s", filterType)

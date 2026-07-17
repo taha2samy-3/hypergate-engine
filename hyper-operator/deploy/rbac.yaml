@@ -10,10 +10,10 @@ metadata:
   name: hyper-operator-role
 rules:
   - apiGroups: ["hyper.io"]
-    resources: ["hyperconfigs", "hyperredis", "hyperroutes", "hyperchains", "oidcfilters", "ratelimitfilters", "headermodifierfilters", "denyfilters", "correlationidfilters", "redismetadataenricherfilters", "apikeyfilters"]
+    resources: ["hyperconfigs", "hyperredis", "hyperroutes", "hyperchains", "ratelimitfilters", "headermodifierfilters", "denyfilters", "correlationidfilters", "redismetadataenricherfilters", "apikeyfilters"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: ["hyper.io"]
-    resources: ["hyperconfigs/status", "hyperredis/status", "hyperroutes/status", "hyperchains/status", "oidcfilters/status", "ratelimitfilters/status", "headermodifierfilters/status", "denyfilters/status", "correlationidfilters/status", "redismetadataenricherfilters/status", "apikeyfilters/status"]
+    resources: ["hyperconfigs/status", "hyperredis/status", "hyperroutes/status", "hyperchains/status", "ratelimitfilters/status", "headermodifierfilters/status", "denyfilters/status", "correlationidfilters/status", "redismetadataenricherfilters/status", "apikeyfilters/status"]
     verbs: ["get", "update", "patch"]
   - apiGroups: [""]
     resources: ["configmaps", "services", "serviceaccounts", "namespaces", "events"]

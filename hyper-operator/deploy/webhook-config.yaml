@@ -65,21 +65,6 @@ webhooks:
     admissionReviewVersions: ["v1"]
     sideEffects: None
 
-  - name: voidcf.kb.io
-    clientConfig:
-      service:
-        name: hyper-operator
-        namespace: hyper-system
-        path: /validate-hyper-io-v1alpha1-oidcfilter
-    failurePolicy: Fail
-    rules:
-      - apiGroups: ["hyper.io"]
-        apiVersions: ["v1alpha1"]
-        operations: ["DELETE"]
-        resources: ["oidcfilters"]
-    admissionReviewVersions: ["v1"]
-    sideEffects: None
-
   - name: vrlf.kb.io
     clientConfig:
       service:

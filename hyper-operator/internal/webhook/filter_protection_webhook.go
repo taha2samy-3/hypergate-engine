@@ -20,8 +20,6 @@ type FilterProtectionValidator[T client.Object] struct {
 	Kind   string
 }
 
-// Confirm type implements admission.Validator[T]
-var _ admission.Validator[*hyperv1alpha1.OidcFilter] = &FilterProtectionValidator[*hyperv1alpha1.OidcFilter]{Kind: "OidcFilter"}
 var _ admission.Validator[*hyperv1alpha1.RateLimitFilter] = &FilterProtectionValidator[*hyperv1alpha1.RateLimitFilter]{Kind: "RateLimitFilter"}
 var _ admission.Validator[*hyperv1alpha1.HeaderModifierFilter] = &FilterProtectionValidator[*hyperv1alpha1.HeaderModifierFilter]{Kind: "HeaderModifierFilter"}
 var _ admission.Validator[*hyperv1alpha1.DenyFilter] = &FilterProtectionValidator[*hyperv1alpha1.DenyFilter]{Kind: "DenyFilter"}
@@ -63,13 +61,6 @@ func (v *FilterProtectionValidator[T]) ValidateDelete(ctx context.Context, obj T
 // SetupFiltersWebhookWithManager registers the webhook for the four filter types
 func SetupFiltersWebhookWithManager(mgr ctrl.Manager) error {
 	c := mgr.GetClient()
-
-	// Register validator for OidcFilter
-	if err := ctrl.NewWebhookManagedBy(mgr, &hyperv1alpha1.OidcFilter{}).
-		WithValidator(&FilterProtectionValidator[*hyperv1alpha1.OidcFilter]{Client: c, Kind: "OidcFilter"}).
-		Complete(); err != nil {
-		return err
-	}
 
 	// Register validator for RateLimitFilter
 	if err := ctrl.NewWebhookManagedBy(mgr, &hyperv1alpha1.RateLimitFilter{}).

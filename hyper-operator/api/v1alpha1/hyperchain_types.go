@@ -8,7 +8,7 @@ import (
 // FilterReference defines a reference to a specific filter CRD.
 type FilterReference struct {
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum=OidcFilter;RateLimitFilter;HeaderModifierFilter;DenyFilter;CorrelationIdFilter;RedisMetadataEnricherFilter
+	// +kubebuilder:validation:Enum=RateLimitFilter;HeaderModifierFilter;DenyFilter;CorrelationIdFilter;RedisMetadataEnricherFilter
 	Kind string `json:"kind"`
 
 	// +kubebuilder:validation:Required

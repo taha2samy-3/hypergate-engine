@@ -61,9 +61,6 @@ func (v *HyperChainValidator) validateFilters(ctx context.Context, chain *hyperv
 
 		var lookupErr error
 		switch ref.Kind {
-		case "OidcFilter":
-			obj := &hyperv1alpha1.OidcFilter{}
-			lookupErr = v.Client.Get(ctx, key, obj)
 		case "RateLimitFilter":
 			obj := &hyperv1alpha1.RateLimitFilter{}
 			lookupErr = v.Client.Get(ctx, key, obj)
