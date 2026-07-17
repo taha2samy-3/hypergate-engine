@@ -20,5 +20,6 @@ func init() {
 	SchemeBuilder.Register(
 		&CorrelationIdFilter{}, &CorrelationIdFilterList{},
 		&RedisMetadataEnricherFilter{}, &RedisMetadataEnricherFilterList{},
+		&ExternalAuthFilter{}, &ExternalAuthFilterList{},
 	)
 }

@@ -180,13 +180,12 @@ func (r *HyperConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 
 		// Inject the UDS volume mount into the engine container when sidecars are present.
+		// Use append (not slice replacement) to preserve any other existing volume mounts.
 		if hasExtAuth {
-			engineContainer.VolumeMounts = []corev1.VolumeMount{
-				{
-					Name:      udsVolumeName,
-					MountPath: udsVolumeMountPath,
-				},
-			}
+			engineContainer.VolumeMounts = append(engineContainer.VolumeMounts, corev1.VolumeMount{
+				Name:      udsVolumeName,
+				MountPath: udsVolumeMountPath,
+			})
 		}
 
 		containers := []corev1.Container{engineContainer}

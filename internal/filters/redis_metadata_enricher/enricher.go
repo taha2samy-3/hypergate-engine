@@ -1,6 +1,7 @@
 package redis_metadata_enricher
 
 import (
+	"context"
 	"regexp"
 	"strings"
 	"time"
@@ -83,6 +84,13 @@ func NewRedisMetadataEnricherFilter(name string, cfg config.RedisMetadataEnriche
 // Execute performs dynamic variable resolution, L1 cache lookup, Redis fetching, and JSON path header injection.
 // It implements the engine.Filter interface cleanly.
 func (f *RedisMetadataEnricherFilter) Execute(ctx *engine.RequestContext) error {
+	// Defensive nil check: if the stream context is uninitialized, fall back to a
+	// safe background context to prevent a nil-pointer panic in PipeDo.
+	reqCtx := ctx.Ctx
+	if reqCtx == nil {
+		reqCtx = context.Background()
+	}
+
 	// Map of resolved variables during this request lifecycle
 	resolvedVars := make(map[string]string, len(f.variables))
 
@@ -143,7 +151,7 @@ func (f *RedisMetadataEnricherFilter) Execute(ctx *engine.RequestContext) error 
 		var p redis.Pipeline
 		p = f.client.PipeAppend(p, &reply, "GET", keyStr)
 
-		err := f.client.PipeDo(ctx.Ctx, p) // Timeout-aware & cancellable!
+		err := f.client.PipeDo(reqCtx, p) // Timeout-aware & cancellable; uses safe reqCtx (never nil).
 		if err != nil {
 			mylogger.Error("Redis metadata fetch failed", zap.Error(err), zap.String("key", keyStr))
 			return nil // Fail-open: Proceed with the request even if metadata resolution fails

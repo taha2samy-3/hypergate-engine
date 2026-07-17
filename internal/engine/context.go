@@ -178,8 +178,10 @@ func (ctx *RequestContext) SetTrailerUpstream(key, value string) {
 			return
 		}
 	}
-	ctx.HeadersToAdd = append(ctx.HeadersToAdd, Header{Key: key, Value: value, Append: false})
-	ctx.RequestHeadersToAddChecked()
+	// BUG FIX: was incorrectly appending to HeadersToAdd (request headers);
+	// trailers must be appended to RequestTrailersToAdd.
+	ctx.RequestTrailersToAdd = append(ctx.RequestTrailersToAdd, Header{Key: key, Value: value, Append: false})
+	ctx.RequestTrailersModified = true
 }
 
 func (ctx *RequestContext) requestHeaderActionChecked(key string) {
@@ -217,13 +219,17 @@ func (ctx *RequestContext) SetTrailerDownstream(key, value string) {
 			break
 		}
 	}
-	for i := 0; i < len(ctx.ResponseHeadersToAdd); i++ {
-		if ctx.ResponseHeadersToAdd[i].Key == key {
-			ctx.ResponseHeadersToAdd[i].Value = value
+	// BUG FIX: was incorrectly scanning/modifying ResponseHeadersToAdd (response headers);
+	// trailers must target ResponseTrailersToAdd.
+	for i := 0; i < len(ctx.ResponseTrailersToAdd); i++ {
+		if ctx.ResponseTrailersToAdd[i].Key == key {
+			ctx.ResponseTrailersToAdd[i].Value = value
+			ctx.ResponseTrailersModified = true
 			return
 		}
 	}
-	ctx.ResponseHeadersToAdd = append(ctx.ResponseHeadersToAdd, Header{Key: key, Value: value, Append: false})
+	ctx.ResponseTrailersToAdd = append(ctx.ResponseTrailersToAdd, Header{Key: key, Value: value, Append: false})
+	ctx.ResponseTrailersModified = true
 }
 
 func (ctx *RequestContext) RemoveHeaderDownstreamTrailer(key string) {

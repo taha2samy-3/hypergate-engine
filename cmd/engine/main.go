@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -27,6 +28,11 @@ type activeChecker struct {
 }
 
 var activeHealthCheckers = make(map[string]activeChecker)
+
+// activeCheckersMu guards all read and write access to activeHealthCheckers.
+// Maps are not safe for concurrent use; the hot-reload goroutine and the boot
+// path both mutate this map, so a mutex is mandatory to prevent data races.
+var activeCheckersMu sync.RWMutex
 
 func compileAndRegister(cfg *config.Config, registry *engine.ChainRegistry) error {
 	mylogger.Debug("Starting compileAndRegister execution")
@@ -53,18 +59,23 @@ func compileAndRegister(cfg *config.Config, registry *engine.ChainRegistry) erro
 
 func startHealthCheckForService(parentCtx context.Context, name string, client redis.Client) {
 	mylogger.Debug("startHealthCheckForService triggered", zap.String("service", name))
+
+	activeCheckersMu.Lock()
 	if existing, ok := activeHealthCheckers[name]; ok {
 		mylogger.Debug("Canceling existing health checker", zap.String("service", name))
 		existing.cancel()
 	}
+	activeCheckersMu.Unlock()
 
 	childCtx, cancel := context.WithCancel(parentCtx)
 	hc := redis.StartHealthCheckForClient(childCtx, client, name, 5*time.Second)
 
+	activeCheckersMu.Lock()
 	activeHealthCheckers[name] = activeChecker{
 		checker: hc,
 		cancel:  cancel,
 	}
+	activeCheckersMu.Unlock()
 	mylogger.Debug("New health checker registered successfully", zap.String("service", name))
 }
 
@@ -152,18 +163,22 @@ func main() {
 						if ok && svcCfg.ActiveConnHealthCheck {
 							startHealthCheckForService(ctx, name, client)
 						} else {
+							activeCheckersMu.Lock()
 							if existing, ok := activeHealthCheckers[name]; ok {
 								existing.cancel()
 								delete(activeHealthCheckers, name)
 							}
+							activeCheckersMu.Unlock()
 						}
 					}
+					activeCheckersMu.Lock()
 					for name, existing := range activeHealthCheckers {
 						if _, ok := newConfig.Redis[name]; !ok {
 							existing.cancel()
 							delete(activeHealthCheckers, name)
 						}
 					}
+					activeCheckersMu.Unlock()
 				}
 			}
 		}

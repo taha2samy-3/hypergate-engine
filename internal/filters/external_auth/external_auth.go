@@ -49,7 +49,14 @@ func NewExternalAuthFilter(cfg *config.ExternalAuthConfig) (*ExternalAuthFilter,
 
 // Execute intercepts the RequestContext and delegates auth to the configured sidecar.
 func (f *ExternalAuthFilter) Execute(ctx *engine.RequestContext) error {
-	req, err := http.NewRequestWithContext(ctx.Ctx, http.MethodGet, "http://localhost/", nil)
+	// Defensive nil check: resolve a safe context that respects Envoy's stream
+	// cancellation while guarding against an uninitialized stream context.
+	reqCtx := ctx.Ctx
+	if reqCtx == nil {
+		reqCtx = context.Background()
+	}
+
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, "http://localhost/", nil)
 	if err != nil {
 		mylogger.Error("external_auth: failed to create GET request", zap.Error(err))
 		ctx.Blocked = true
