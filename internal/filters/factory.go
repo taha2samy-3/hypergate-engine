@@ -8,6 +8,7 @@ import (
 	"github.com/taha/myprog/internal/filters/api_key"
 	"github.com/taha/myprog/internal/filters/correlation_id"
 	"github.com/taha/myprog/internal/filters/deny"
+	"github.com/taha/myprog/internal/filters/external_auth"
 	"github.com/taha/myprog/internal/filters/header_modifier"
 	"github.com/taha/myprog/internal/filters/rate_limiter"
 	"github.com/taha/myprog/internal/filters/redis_metadata_enricher"
@@ -124,7 +125,12 @@ func CreateFilter(filterType string, rawOptions interface{}) (engine.Filter, err
 		}
 		return f, nil
 
-
+	case "external_auth":
+		cfg, err := config.ParseExternalAuthConfig(rawOptions)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse config for external_auth: %w", err)
+		}
+		return external_auth.NewExternalAuthFilter(cfg)
 
 	default:
 		return nil, fmt.Errorf("unknown filter type: %s", filterType)
