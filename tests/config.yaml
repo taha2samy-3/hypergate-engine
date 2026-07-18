@@ -1,0 +1,69 @@
+version: "v1"
+
+server:
+  address: "0.0.0.0:9001"
+  max_concurrent_streams: 1024
+
+telemetry:
+  logging:
+    level: "DEBUG"
+    format: "console"
+    output_path: "stdout"
+    development: false
+
+redis:
+  myredis:
+    url: "redis:6379"
+    type: "SINGLE"
+    timeout: "100ms"
+    wait_timeout: "100ms"
+
+chains:
+  # -------------------------------------------------------------------------
+  # Dedicated Chain for Testing the Redis Metadata Enricher & Fallbacks
+  # -------------------------------------------------------------------------
+  chain_metadata_enrichment:
+    # STEP 1: Query Redis using X-User-ID, parse JSON, and inject headers
+    - type: "redis_metadata_enricher"
+      options:
+        redis_service: "myredis"
+        variables:
+          user_id:
+            source: "{header:X-User-ID}"
+            default: "anonymous" # Fallback if header is missing
+        key_pattern: "user_meta:{user_id}"
+        output_mappings:
+          - json_path: ""                    # Inject full raw JSON
+            target_header: "X-User-Full-Data"
+          - json_path: "profile.tier"        # FIXED: Removed leading dot
+            target_header: "X-User-Tier"
+
+    # STEP 2: Rate Limiter reads the injected "X-User-Tier" header!
+    - type: "embedded_rate_limiter"
+      options:
+        domain: "test_metadata_enrich"
+        algorithm: "fixed_window"
+        redis_service: "myredis"
+        response_headers:
+          enabled: true
+        header_mappings:
+          "role": "X-User-Tier"
+        descriptors:
+          - entries:
+              - key: "role"
+                value: "doctor"
+            limit: 3 # Doctors get 3 req/min
+            unit: "minute"
+
+          - entries:
+              - key: "role" # Fallback (OTHER) for other roles (e.g. nurse, patient, anonymous)
+            limit: 1 # Standard/OTHER get 1 req/min
+            unit: "minute"
+
+router:
+  routes:
+    # Route for the Metadata Enrichment Test Scenario
+    - target_chain: "chain_metadata_enrichment"
+      matches:
+        - path_prefix: "/metadata"
+  other: "chain_metadata_enrichment"
