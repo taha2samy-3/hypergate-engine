@@ -210,19 +210,21 @@ tasks:
       - kubectl apply --server-side -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/experimental-install.yaml
 
   k8s:cilium:install:
-    desc: "Install Cilium as the CNI plugin"
+    desc: "Install Cilium as the CNI plugin (Stable v1.19.6)"
     cmds:
       - cilium install \
-          --version v1.20.0-pre.3 \
+          --version v1.19.6 \
           --set k8sServiceHost=kind-control-plane \
           --set k8sServicePort=6443 \
           --set kubeProxyReplacement=true \
           --set gatewayAPI.enabled=true \
+          --set gatewayAPI.enableExtensionRefFilters=true \
           --set hostServices.enabled=true \
           --set externalIPs.enabled=true \
           --set l2announcements.enabled=true \
           --set devices=eth0 
       - cilium status --wait
+
 
   k8s:cilium:l2policy:
     desc: "Enable L2 policy mode in Cilium"
@@ -233,3 +235,9 @@ tasks:
     desc: "Apply L2 LoadBalancer IP Pool in Cilium"
     cmds:
       - kubectl apply -f k8s/cilium/pool.yaml
+  k8s:demo:install:
+    desc: "Install the demo application"
+    cmds:
+      - kubectl apply -f k8s/demo/01-backend.yaml
+      - kubectl apply -f k8s/demo/02-gateway.yaml
+      - kubectl apply -f k8s/demo/03-httproute.yaml
