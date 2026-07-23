@@ -210,7 +210,7 @@ tasks:
       - kubectl apply --server-side -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/experimental-install.yaml
 
   k8s:cilium:install:
-    desc: "Install Cilium as the CNI plugin (Stable v1.19.6)"
+    desc: "Install Cilium as the CNI plugin with Gateway API, ext_proc, and RBAC support"
     cmds:
       - cilium install \
           --version v1.19.6 \
@@ -223,6 +223,8 @@ tasks:
           --set externalIPs.enabled=true \
           --set l2announcements.enabled=true \
           --set devices=eth0 
+      - kubectl apply -f k8s/cilium/rbac-operator.yaml
+      - kubectl rollout restart deployment/cilium-operator -n kube-system
       - cilium status --wait
 
 

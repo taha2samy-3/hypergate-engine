@@ -1,0 +1,32 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cilium-operator-gateway-api
+rules:
+  - apiGroups:
+      - gateway.networking.k8s.io
+    resources:
+      - "*"
+    verbs:
+      - "*"
+  - apiGroups:
+      - cilium.io
+    resources:
+      - "*"
+    verbs:
+      - "*"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cilium-operator-gateway-api
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cilium-operator-gateway-api
+subjects:
+  - kind: ServiceAccount
+    name: cilium-operator
+    namespace: kube-system
+
+    
