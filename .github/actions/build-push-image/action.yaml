@@ -10,7 +10,7 @@ inputs:
   registry:
     description: 'Container registry'
     required: false
-    default: 'ghcr.io/taha2samy-2'
+    default: 'ghcr.io/taha2samy-3'
 
 runs:
   using: 'composite'

@@ -34,7 +34,7 @@ jobs:
         with:
           target: ${{ matrix.target }}
           image_tag: sha-${{ github.sha }}
-          registry: ghcr.io/taha2samy-2
+          registry: ghcr.io/taha2samy-3
 
       - name: Update GitOps Manifests
         if: matrix.target == 'operator'
@@ -42,7 +42,7 @@ jobs:
         run: |
           git config user.name "GitHub Actions Bot"
           git config user.email "github-actions-bot@users.noreply.github.com"
-          sed -i 's|image: ghcr.io/taha2samy-2/hyper-operator:.*|image: ghcr.io/taha2samy-2/hyper-operator:sha-'${{ github.sha }}'|g' hyper-operator/deploy/deployment.yaml
+          sed -i 's|image: ghcr.io/taha2samy-3/hyper-operator:.*|image: ghcr.io/taha2samy-3/hyper-operator:sha-'${{ github.sha }}'|g' hyper-operator/deploy/deployment.yaml
           git add hyper-operator/deploy/deployment.yaml
           git diff-index --quiet HEAD || git commit -m "chore(deploy): update operator image to sha-${{ github.sha }} [skip ci]"
           git push origin main

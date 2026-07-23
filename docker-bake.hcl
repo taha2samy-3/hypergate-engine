@@ -1,5 +1,5 @@
 variable "REGISTRY" {
-  default = "ghcr.io/taha2samy-2"
+  default = "ghcr.io/taha2samy-3"
 }
 
 variable "TAG" {

@@ -8,4 +8,4 @@ spec:
   logLevel: "DEBUG"
   redisServiceRef: "shared-redis"
   targetNamespace: "hyper-system"
-  engineImage: "ghcr.io/taha2samy-2/hyper-engine:0.1.0-alpha.1"
+  engineImage: "ghcr.io/taha2samy-3/hyper-engine:0.1.0-alpha.1"
