@@ -276,12 +276,14 @@ func (r *HyperConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	svc := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: svcName, Namespace: namespace}}
 	if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, svc, func() error {
 		svc.Spec.Selector = map[string]string{"app": "hyper-engine"}
+		appProto := "kubernetes.io/h2c"
 		svc.Spec.Ports = []corev1.ServicePort{
 			{
 				Name:       "grpc",
 				Port:       9001,
 				TargetPort: intstr.FromInt(9001),
 				Protocol:   corev1.ProtocolTCP,
+				AppProtocol: &appProto,
 			},
 		}
 		td := "PreferSameNode"

@@ -120,6 +120,7 @@ tasks:
     cmds:
       - kubectl apply -f hyper-operator/deploy/namespace.yaml
       - kubectl apply -f hyper-operator/deploy/rbac.yaml
+      - kubectl apply -f hyper-operator/deploy/CRDs/
       - task: operator:deploy:CRDs
       - kubectl apply -f hyper-operator/deploy/cert-manager.yaml
       - kubectl apply -f hyper-operator/deploy/service.yaml
