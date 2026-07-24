@@ -244,8 +244,16 @@ tasks:
     cmds:
       - kubectl apply -f k8s/cilium/pool.yaml
   k8s:demo:install:
-    desc: "Install the demo application"
+    desc: "Install the full demo application with hyper-engine, ext_proc, and NodePort 30080 mapping"
     cmds:
       - kubectl apply -f k8s/demo/01-backend.yaml
       - kubectl apply -f k8s/demo/02-gateway.yaml
-      - kubectl apply -f k8s/demo/03-httproute.yaml
+      - kubectl apply -f k8s/demo/03-hyperconfig.yaml
+      - kubectl apply -f k8s/demo/04-demo-policy.yaml
+      - kubectl apply -f k8s/demo/05-referencegrant.yaml
+      - kubectl apply -f k8s/demo/06-extproc-config.yaml
+      - kubectl apply -f k8s/demo/07-httproute.yaml
+      - echo "Waiting for Cilium Gateway service to be initialized..."
+      - sleep 3
+      - kubectl patch svc cilium-gateway-demo-gateway -p '{"spec":{"ports":[{"port":80,"nodePort":30080}]}}'
+      - echo "Demo app and hyper-engine are live on http://localhost:8080 !"
