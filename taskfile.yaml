@@ -223,7 +223,7 @@ tasks:
           --set hostServices.enabled=true \
           --set externalIPs.enabled=true \
           --set l2announcements.enabled=true \
-          --set devices=eth0 
+          --set devices=eth0 || ture
       - kubectl apply -f k8s/cilium/rbac-operator.yaml
       - kubectl rollout restart deployment/cilium-operator -n kube-system
       - cilium status --wait || true

@@ -13,37 +13,19 @@ spec:
       number:
         - "9001"
   resources:
-    - "@type": type.googleapis.com/envoy.config.listener.v3.Listener
-      name: cilium-gateway-demo-gateway
-      filterChains:
-        - filters:
-            - name: envoy.filters.network.http_connection_manager
-              typed_config:
-                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
-                stat_prefix: demo_gateway
-                # 💥 الـ rds السليم بـ configSource المربوط بـ Cilium ADS
-                rds:
-                  routeConfigName: listener-insecure
-                  configSource:
-                    ads: {}
-                    resourceApiVersion: V3
-                http_filters:
-                  - name: envoy.filters.http.ext_proc
-                    typed_config:
-                      "@type": type.googleapis.com/envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor
-                      grpc_service:
-                        envoy_grpc:
-                          # 💥 اسم الـ Cluster الدقيق والمطابق لتسمية Cilium الداخلية
-                          cluster_name: "default/hyper-engine-ext-proc/hyper-system:hyper-engine-svc:9001"
-                        timeout: 5s
-                      failure_mode_allow: false
-                      processing_mode:
-                        request_header_mode: SEND
-                        response_header_mode: SEND
-                        request_body_mode: NONE
-                        response_body_mode: NONE
-                        request_trailer_mode: SKIP
-                        response_trailer_mode: SKIP
-                  - name: envoy.filters.http.router
-                    typed_config:
-                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+    - "@type": type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2.HttpFilter
+      name: envoy.filters.http.ext_proc
+      typed_config:
+        "@type": type.googleapis.com/envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor
+        grpc_service:
+          envoy_grpc:
+            cluster_name: "default/hyper-engine-ext-proc/hyper-system:hyper-engine-svc:9001"
+          timeout: 5s
+        failure_mode_allow: false
+        processing_mode:
+          request_header_mode: SEND
+          response_header_mode: SEND
+          request_body_mode: NONE
+          response_body_mode: NONE
+          request_trailer_mode: SKIP
+          response_trailer_mode: SKIP
