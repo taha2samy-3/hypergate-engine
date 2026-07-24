@@ -1,0 +1,12 @@
+apiVersion: hyper.io/v1alpha1
+kind: HyperConfig
+metadata:
+  name: global-engine-config
+  namespace: default
+spec:
+  serverAddress: "0.0.0.0:9001"
+  maxConcurrentStreams: 1024
+  logLevel: "DEBUG"
+  targetNamespace: "hyper-system"
+  engineImage: "ghcr.io/taha2samy-3/hyper-engine:0.1.0-alpha.1"
+  redisServiceRef: "shared-redis"

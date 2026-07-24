@@ -225,8 +225,14 @@ tasks:
           --set devices=eth0 
       - kubectl apply -f k8s/cilium/rbac-operator.yaml
       - kubectl rollout restart deployment/cilium-operator -n kube-system
-      - cilium status --wait
-
+      - cilium status --wait || true
+      - cilium upgrade \
+          --version v1.19.6 \
+          --set gatewayAPI.enabled=true \
+          --set gatewayAPI.enableExtensionRefFilters=true \
+          --set kubeProxyReplacement=true
+      - kubectl rollout restart deployment/cilium-operator -n kube-system
+      - cilium status --wait || true
 
   k8s:cilium:l2policy:
     desc: "Enable L2 policy mode in Cilium"

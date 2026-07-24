@@ -11,6 +11,12 @@ spec:
         - path:
             type: PathPrefix
             value: /
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: cilium.io
+            kind: CiliumEnvoyConfig
+            name: hyper-engine-ext-proc
       backendRefs:
         - name: nginx-service
           port: 80

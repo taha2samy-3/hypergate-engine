@@ -1,0 +1,14 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: ReferenceGrant
+metadata:
+  name: allow-extproc-filter-to-hyper-engine
+  namespace: hyper-system
+spec:
+  from:
+    - group: cilium.io
+      kind: CiliumEnvoyConfig
+      namespace: default
+  to:
+    - group: ""
+      kind: Service
+      name: hyper-engine-svc

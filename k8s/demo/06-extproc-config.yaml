@@ -1,0 +1,28 @@
+apiVersion: cilium.io/v2
+kind: CiliumEnvoyConfig
+metadata:
+  name: hyper-engine-ext-proc
+  namespace: default
+spec:
+  backendServices:
+    - name: hyper-engine-svc
+      namespace: hyper-system
+      number:
+        - "9001"
+  resources:
+    - "@type": type.googleapis.com/envoy.config.listener.v3.Filter
+      name: envoy.filters.http.ext_proc
+      typed_config:
+        "@type": type.googleapis.com/envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor
+        grpc_service:
+          envoy_grpc:
+            cluster_name: "hyper-system/hyper-engine-svc:9001"
+          timeout: 5s
+        failure_mode_allow: false
+        processing_mode:
+          request_header_mode: SEND
+          response_header_mode: SEND
+          request_body_mode: NONE
+          response_body_mode: NONE
+          request_trailer_mode: SKIP
+          response_trailer_mode: SKIP

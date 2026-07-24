@@ -1,0 +1,29 @@
+apiVersion: hyper.io/v1alpha1
+kind: DenyFilter
+metadata:
+  name: block-header-policy
+spec:
+  statusCode: 403
+  body: "Forbidden by HyperEngine Policy: You are blocked!"
+  match:
+    headers:
+      "x-block-me": "true"
+---
+apiVersion: hyper.io/v1alpha1
+kind: HyperChain
+metadata:
+  name: chain-demo-policy
+spec:
+  filters:
+    - kind: "DenyFilter"
+      name: "block-header-policy"
+---
+apiVersion: hyper.io/v1alpha1
+kind: HyperRoute
+metadata:
+  name: demo-route-policy
+spec:
+  priority: 100
+  targetPolicy: "chain-demo-policy"
+  matches:
+    - pathPrefix: "/"
