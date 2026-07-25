@@ -313,6 +313,7 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 				}
 				socketPath := fmt.Sprintf("/var/run/hypergate/fw-%s.sock", f.Name)
 				resolvedOptions = map[string]interface{}{
+					"protocol":         f.Spec.Protocol,
 					"socket_path":      socketPath,
 					"timeout":          f.Spec.EngineRules.Timeout,
 					"inspect_body":     f.Spec.EngineRules.InspectBody,

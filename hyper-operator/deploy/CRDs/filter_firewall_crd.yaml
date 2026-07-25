@@ -20,6 +20,9 @@ spec:
     subresources:
       status: {}
     additionalPrinterColumns:
+    - name: Protocol
+      type: string
+      jsonPath: .spec.protocol
     - name: Image
       type: string
       jsonPath: .spec.container.image
@@ -44,6 +47,10 @@ spec:
             required:
             - container
             properties:
+              protocol:
+                type: string
+                default: "grpc"
+                enum: [http, grpc]
               container:
                 type: object
                 required:

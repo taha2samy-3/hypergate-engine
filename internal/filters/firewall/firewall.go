@@ -3,12 +3,18 @@ package firewall
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"strings"
 
+	configv3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
+	extprocv3 "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
+	_ "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/taha/myprog/internal/config"
 	"github.com/taha/myprog/internal/engine"
@@ -16,14 +22,37 @@ import (
 )
 
 // FirewallFilter implements the engine.Filter interface to perform request inspection
-// (Headers, URI, Request Body) over a local Unix Domain Socket (UDS) against a firewall sidecar.
+// (Headers, URI, Request Body) over HTTP or gRPC using Unix Domain Sockets (UDS).
 type FirewallFilter struct {
-	config *config.FirewallFilterConfig
-	client *http.Client
+	config     *config.FirewallFilterConfig
+	httpClient *http.Client
+	grpcClient extprocv3.ExternalProcessorClient
+	grpcConn   *grpc.ClientConn
 }
 
-// NewFirewallFilter initializes a reusable http.Client configured to communicate with the firewall sidecar over UDS.
+// NewFirewallFilter initializes a reusable HTTP or gRPC client configured to communicate with the firewall sidecar over UDS.
 func NewFirewallFilter(cfg *config.FirewallFilterConfig) (*FirewallFilter, error) {
+	if strings.EqualFold(cfg.Protocol, "grpc") {
+		target := "unix://" + cfg.SocketPath
+		conn, err := grpc.NewClient(
+			target,
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
+				var d net.Dialer
+				return d.DialContext(ctx, "unix", cfg.SocketPath)
+			}),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("firewall: failed to dial gRPC UDS socket: %w", err)
+		}
+
+		return &FirewallFilter{
+			config:     cfg,
+			grpcConn:   conn,
+			grpcClient: extprocv3.NewExternalProcessorClient(conn),
+		}, nil
+	}
+
 	transport := &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			var d net.Dialer
@@ -34,37 +63,228 @@ func NewFirewallFilter(cfg *config.FirewallFilterConfig) (*FirewallFilter, error
 		MaxIdleConnsPerHost: 1000,
 	}
 
-	client := &http.Client{
+	httpClient := &http.Client{
 		Transport: transport,
 		Timeout:   cfg.TimeoutDuration,
 	}
 
 	return &FirewallFilter{
-		config: cfg,
-		client: client,
+		config:     cfg,
+		httpClient: httpClient,
 	}, nil
 }
 
-// Execute inspects the request context and delegates WAF evaluation to the firewall sidecar over UDS.
+// Close closes the underlying gRPC connection if active.
+func (f *FirewallFilter) Close() error {
+	if f.grpcConn != nil {
+		return f.grpcConn.Close()
+	}
+	return nil
+}
+
+// Execute inspects the request context and delegates WAF evaluation to the firewall sidecar over HTTP or gRPC.
 func (f *FirewallFilter) Execute(ctx *engine.RequestContext) error {
-	// Signal to engine if full request body inspection is required
 	if f.config.InspectBody {
 		ctx.RequestBodyRequired = true
 	}
 
-	// Defensive nil check for stream context
+	if strings.EqualFold(f.config.Protocol, "grpc") {
+		return f.executeGRPC(ctx)
+	}
+	return f.executeHTTP(ctx)
+}
+
+// executeGRPC handles firewall inspection via Envoy ext_proc gRPC streaming interface.
+func (f *FirewallFilter) executeGRPC(ctx *engine.RequestContext) error {
 	reqCtx := ctx.Ctx
 	if reqCtx == nil {
 		reqCtx = context.Background()
 	}
 
-	// Select method based on payload presence
+	stream, err := f.grpcClient.Process(reqCtx)
+	if err != nil {
+		mylogger.Error("firewall: failed to open gRPC ext_proc stream to sidecar", zap.Error(err))
+		ctx.Blocked = true
+		ctx.ResponseStatus = http.StatusInternalServerError
+		ctx.ResponseBody = "Internal Server Error"
+		return nil
+	}
+
+	// Phase 1: Send Request Headers
+	var headerValues []*configv3.HeaderValue
+	headerValues = append(headerValues, &configv3.HeaderValue{
+		Key:   ":path",
+		Value: ctx.Path,
+	})
+	headerValues = append(headerValues, &configv3.HeaderValue{
+		Key:   ":method",
+		Value: ctx.Method,
+	})
+
+	forwardAll := len(f.config.ForwardHeaders) == 0
+	if !forwardAll {
+		for _, h := range f.config.ForwardHeaders {
+			lower := strings.ToLower(h)
+			if lower == "*" || lower == "all" {
+				forwardAll = true
+				break
+			}
+		}
+	}
+
+	if forwardAll {
+		for k := range ctx.Headers {
+			if val := ctx.GetHeader(k); val != "" {
+				headerValues = append(headerValues, &configv3.HeaderValue{Key: k, Value: val})
+			}
+		}
+	} else {
+		for _, k := range f.config.ForwardHeaders {
+			if val := ctx.GetHeader(k); val != "" {
+				headerValues = append(headerValues, &configv3.HeaderValue{Key: k, Value: val})
+			}
+		}
+	}
+
+	headerMsg := &extprocv3.ProcessingRequest_RequestHeaders{
+		RequestHeaders: &extprocv3.HttpHeaders{
+			Headers: &configv3.HeaderMap{
+				Headers: headerValues,
+			},
+		},
+	}
+
+	if err := stream.Send(&extprocv3.ProcessingRequest{Request: headerMsg}); err != nil {
+		mylogger.Error("firewall: failed to send request headers over gRPC ext_proc", zap.Error(err))
+		ctx.Blocked = true
+		ctx.ResponseStatus = http.StatusInternalServerError
+		ctx.ResponseBody = "Internal Server Error"
+		return nil
+	}
+
+	resp, err := stream.Recv()
+	if err != nil {
+		mylogger.Error("firewall: failed to receive response for request headers over gRPC ext_proc", zap.Error(err))
+		ctx.Blocked = true
+		ctx.ResponseStatus = http.StatusInternalServerError
+		ctx.ResponseBody = "Internal Server Error"
+		return nil
+	}
+
+	if imm := resp.GetImmediateResponse(); imm != nil {
+		ctx.Blocked = true
+		statusCode := int32(http.StatusForbidden)
+		if st := imm.GetStatus(); st != nil && st.GetCode() != 0 {
+			statusCode = int32(st.GetCode())
+		}
+		ctx.ResponseStatus = statusCode
+		ctx.ResponseBody = string(imm.GetBody())
+
+		if mutations := imm.GetHeaders(); mutations != nil {
+			for _, hOption := range mutations.GetSetHeaders() {
+				if hOption != nil && hOption.GetHeader() != nil {
+					ctx.SetHeaderDownstream(hOption.GetHeader().GetKey(), hOption.GetHeader().GetValue())
+				}
+			}
+		}
+		return nil
+	}
+
+	// Phase 2: Send Request Body (If InspectBody enabled & Body present)
+	if f.config.InspectBody && len(ctx.RequestBody) > 0 {
+		maxBytes := int(f.config.MaxBodySizeKB) * 1024
+		bodyBytes := ctx.RequestBody
+		if len(bodyBytes) > maxBytes {
+			bodyBytes = bodyBytes[:maxBytes]
+		}
+
+		bodyMsg := &extprocv3.ProcessingRequest_RequestBody{
+			RequestBody: &extprocv3.HttpBody{
+				Body: bodyBytes,
+			},
+		}
+
+		if err := stream.Send(&extprocv3.ProcessingRequest{Request: bodyMsg}); err != nil {
+			mylogger.Error("firewall: failed to send request body over gRPC ext_proc", zap.Error(err))
+			ctx.Blocked = true
+			ctx.ResponseStatus = http.StatusInternalServerError
+			ctx.ResponseBody = "Internal Server Error"
+			return nil
+		}
+
+		resp, err = stream.Recv()
+		if err != nil {
+			mylogger.Error("firewall: failed to receive response for request body over gRPC ext_proc", zap.Error(err))
+			ctx.Blocked = true
+			ctx.ResponseStatus = http.StatusInternalServerError
+			ctx.ResponseBody = "Internal Server Error"
+			return nil
+		}
+
+		if imm := resp.GetImmediateResponse(); imm != nil {
+			ctx.Blocked = true
+			statusCode := int32(http.StatusForbidden)
+			if st := imm.GetStatus(); st != nil && st.GetCode() != 0 {
+				statusCode = int32(st.GetCode())
+			}
+			ctx.ResponseStatus = statusCode
+			ctx.ResponseBody = string(imm.GetBody())
+
+			if mutations := imm.GetHeaders(); mutations != nil {
+				for _, hOption := range mutations.GetSetHeaders() {
+					if hOption != nil && hOption.GetHeader() != nil {
+						ctx.SetHeaderDownstream(hOption.GetHeader().GetKey(), hOption.GetHeader().GetValue())
+					}
+				}
+			}
+			return nil
+		}
+	}
+
+	// On WAF Allowed: Process header mutations if provided in response
+	if hResp := resp.GetRequestHeaders(); hResp != nil && hResp.GetResponse() != nil {
+		if mutations := hResp.GetResponse().GetHeaderMutation(); mutations != nil {
+			for _, hOption := range mutations.GetSetHeaders() {
+				if hOption != nil && hOption.GetHeader() != nil {
+					ctx.SetHeaderUpstream(hOption.GetHeader().GetKey(), hOption.GetHeader().GetValue())
+				}
+			}
+			for _, k := range mutations.GetRemoveHeaders() {
+				ctx.RemoveHeaderUpstream(k)
+			}
+		}
+	} else if bResp := resp.GetRequestBody(); bResp != nil && bResp.GetResponse() != nil {
+		if mutations := bResp.GetResponse().GetHeaderMutation(); mutations != nil {
+			for _, hOption := range mutations.GetSetHeaders() {
+				if hOption != nil && hOption.GetHeader() != nil {
+					ctx.SetHeaderUpstream(hOption.GetHeader().GetKey(), hOption.GetHeader().GetValue())
+				}
+			}
+			for _, k := range mutations.GetRemoveHeaders() {
+				ctx.RemoveHeaderUpstream(k)
+			}
+		}
+	}
+
+	for _, k := range f.config.OnSuccess.UpstreamHeadersToRemove {
+		ctx.RemoveHeaderUpstream(k)
+	}
+
+	return nil
+}
+
+// executeHTTP handles firewall inspection via HTTP UDS protocol.
+func (f *FirewallFilter) executeHTTP(ctx *engine.RequestContext) error {
+	reqCtx := ctx.Ctx
+	if reqCtx == nil {
+		reqCtx = context.Background()
+	}
+
 	method := http.MethodGet
 	if len(ctx.RequestBody) > 0 {
 		method = http.MethodPost
 	}
 
-	// Attach request body payload if body inspection is enabled and payload exists
 	var bodyReader io.Reader
 	if f.config.InspectBody && len(ctx.RequestBody) > 0 {
 		maxBytes := int(f.config.MaxBodySizeKB) * 1024
@@ -84,7 +304,6 @@ func (f *FirewallFilter) Execute(ctx *engine.RequestContext) error {
 		return nil
 	}
 
-	// Determine header forwarding strategy (Allow-list or Forward All)
 	forwardAll := len(f.config.ForwardHeaders) == 0
 	if !forwardAll {
 		for _, h := range f.config.ForwardHeaders {
@@ -110,8 +329,7 @@ func (f *FirewallFilter) Execute(ctx *engine.RequestContext) error {
 		}
 	}
 
-	// Execute communication over Unix Domain Socket
-	resp, err := f.client.Do(req)
+	resp, err := f.httpClient.Do(req)
 	if err != nil {
 		mylogger.Error("firewall: UDS sidecar communication failed", zap.Error(err))
 		ctx.Blocked = true
@@ -121,7 +339,6 @@ func (f *FirewallFilter) Execute(ctx *engine.RequestContext) error {
 	}
 	defer resp.Body.Close()
 
-	// 2xx WAF Pass
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		for _, k := range f.config.OnSuccess.UpstreamHeadersToAdd {
 			if vals, ok := resp.Header[http.CanonicalHeaderKey(k)]; ok && len(vals) > 0 {
@@ -134,7 +351,6 @@ func (f *FirewallFilter) Execute(ctx *engine.RequestContext) error {
 		return nil
 	}
 
-	// Non-2xx WAF Threat Blocked
 	ctx.Blocked = true
 	ctx.ResponseStatus = int32(resp.StatusCode)
 

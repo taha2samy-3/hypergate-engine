@@ -57,6 +57,12 @@ type FirewallEngineRulesSpec struct {
 
 // FirewallFilterSpec defines the desired state of FirewallFilter.
 type FirewallFilterSpec struct {
+	// Protocol is the communication protocol with the sidecar ("http" or "grpc").
+	// +kubebuilder:validation:Enum=http;grpc
+	// +kubebuilder:default="grpc"
+	// +optional
+	Protocol string `json:"protocol,omitempty" yaml:"protocol,omitempty"`
+
 	// Container holds the sidecar container specification.
 	// +kubebuilder:validation:Required
 	Container SidecarContainerSpec `json:"container" yaml:"container"`

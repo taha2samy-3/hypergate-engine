@@ -6,8 +6,14 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 
+	authv3 "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
+	_ "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/taha/myprog/internal/config"
 	"github.com/taha/myprog/internal/engine"
@@ -15,19 +21,39 @@ import (
 )
 
 // ExternalAuthFilter implements the engine.Filter interface to delegate
-// authorization to an external sidecar over a Unix Domain Socket (UDS).
+// authorization to an external sidecar over HTTP or gRPC using Unix Domain Sockets (UDS).
 type ExternalAuthFilter struct {
-	config *config.ExternalAuthConfig
-	client *http.Client
+	config     *config.ExternalAuthConfig
+	client     *http.Client
+	grpcClient authv3.AuthorizationClient
+	grpcConn   *grpc.ClientConn
 }
 
-// NewExternalAuthFilter initializes a single reusable http.Client configured
-// to communicate over a UDS. It returns an error if gRPC protocol is requested.
+// NewExternalAuthFilter initializes a single reusable http.Client or gRPC client
+// configured to communicate over a UDS socket.
 func NewExternalAuthFilter(cfg *config.ExternalAuthConfig) (*ExternalAuthFilter, error) {
-	if cfg.Protocol == "grpc" {
-		return nil, fmt.Errorf("gRPC protocol for external_auth is planned but not yet implemented")
+	if strings.EqualFold(cfg.Protocol, "grpc") {
+		target := "unix://" + cfg.SocketPath
+		conn, err := grpc.NewClient(
+			target,
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
+				var d net.Dialer
+				return d.DialContext(ctx, "unix", cfg.SocketPath)
+			}),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("external_auth: failed to dial gRPC UDS socket: %w", err)
+		}
+
+		return &ExternalAuthFilter{
+			config:     cfg,
+			grpcConn:   conn,
+			grpcClient: authv3.NewAuthorizationClient(conn),
+		}, nil
 	}
 
+	// Default to HTTP protocol
 	transport := &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			var d net.Dialer
@@ -49,10 +75,132 @@ func NewExternalAuthFilter(cfg *config.ExternalAuthConfig) (*ExternalAuthFilter,
 	}, nil
 }
 
-// Execute intercepts the RequestContext and delegates auth to the configured sidecar.
+// Close closes the underlying gRPC client connection if active.
+func (f *ExternalAuthFilter) Close() error {
+	if f.grpcConn != nil {
+		return f.grpcConn.Close()
+	}
+	return nil
+}
+
+// Execute intercepts the RequestContext and delegates auth to the configured sidecar via HTTP or gRPC.
 func (f *ExternalAuthFilter) Execute(ctx *engine.RequestContext) error {
-	// Defensive nil check: resolve a safe context that respects Envoy's stream
-	// cancellation while guarding against an uninitialized stream context.
+	if strings.EqualFold(f.config.Protocol, "grpc") {
+		return f.executeGRPC(ctx)
+	}
+	return f.executeHTTP(ctx)
+}
+
+// executeGRPC handles authorization check over Envoy gRPC ext_authz protocol.
+func (f *ExternalAuthFilter) executeGRPC(ctx *engine.RequestContext) error {
+	reqCtx := ctx.Ctx
+	if reqCtx == nil {
+		reqCtx = context.Background()
+	}
+
+	headers := make(map[string]string, len(ctx.Headers))
+	forwardAll := len(f.config.ForwardHeaders) == 0
+	if !forwardAll {
+		for _, h := range f.config.ForwardHeaders {
+			lower := strings.ToLower(h)
+			if lower == "*" || lower == "all" {
+				forwardAll = true
+				break
+			}
+		}
+	}
+
+	if forwardAll {
+		for k := range ctx.Headers {
+			if val := ctx.GetHeader(k); val != "" {
+				headers[k] = val
+			}
+		}
+	} else {
+		for _, k := range f.config.ForwardHeaders {
+			if val := ctx.GetHeader(k); val != "" {
+				headers[k] = val
+			}
+		}
+	}
+
+	checkReq := &authv3.CheckRequest{
+		Attributes: &authv3.AttributeContext{
+			Request: &authv3.AttributeContext_Request{
+				Http: &authv3.AttributeContext_HttpRequest{
+					Path:    ctx.Path,
+					Method:  ctx.Method,
+					Headers: headers,
+				},
+			},
+		},
+	}
+
+	resp, err := f.grpcClient.Check(reqCtx, checkReq)
+	if err != nil {
+		mylogger.Error("external_auth: gRPC UDS sidecar communication failed", zap.Error(err))
+		ctx.Blocked = true
+		ctx.ResponseStatus = http.StatusInternalServerError
+		ctx.ResponseBody = "Internal Server Error"
+		return nil
+	}
+
+	statusCode := resp.GetStatus().GetCode()
+
+	// Success: 0 / OK
+	if statusCode == int32(codes.OK) {
+		okHeaders := make(map[string]string)
+		if okResp := resp.GetOkResponse(); okResp != nil {
+			for _, hOption := range okResp.GetHeaders() {
+				if hOption != nil && hOption.GetHeader() != nil {
+					okHeaders[strings.ToLower(hOption.GetHeader().GetKey())] = hOption.GetHeader().GetValue()
+				}
+			}
+		}
+
+		for _, k := range f.config.OnSuccess.UpstreamHeadersToAdd {
+			if val, ok := okHeaders[strings.ToLower(k)]; ok {
+				ctx.SetHeaderUpstream(k, val)
+			}
+		}
+		for _, k := range f.config.OnSuccess.UpstreamHeadersToRemove {
+			ctx.RemoveHeaderUpstream(k)
+		}
+		return nil
+	}
+
+	// Auth Blocked / Denied (Non-zero status)
+	ctx.Blocked = true
+	deniedStatus := int32(http.StatusForbidden)
+	deniedResp := resp.GetDeniedResponse()
+	if deniedResp != nil {
+		if st := deniedResp.GetStatus(); st != nil && st.GetCode() != 0 {
+			deniedStatus = int32(st.GetCode())
+		}
+		ctx.ResponseBody = deniedResp.GetBody()
+	}
+	ctx.ResponseStatus = deniedStatus
+
+	deniedHeaders := make(map[string]string)
+	if deniedResp != nil {
+		for _, hOption := range deniedResp.GetHeaders() {
+			if hOption != nil && hOption.GetHeader() != nil {
+				deniedHeaders[strings.ToLower(hOption.GetHeader().GetKey())] = hOption.GetHeader().GetValue()
+			}
+		}
+	}
+
+	for _, k := range f.config.OnFailure.DownstreamPassThroughHeaders {
+		if val, ok := deniedHeaders[strings.ToLower(k)]; ok {
+			ctx.SetHeaderDownstream(k, val)
+		}
+	}
+
+	return nil
+}
+
+// executeHTTP handles authorization check over HTTP protocol.
+func (f *ExternalAuthFilter) executeHTTP(ctx *engine.RequestContext) error {
 	reqCtx := ctx.Ctx
 	if reqCtx == nil {
 		reqCtx = context.Background()

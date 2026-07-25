@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -13,6 +14,7 @@ import (
 
 // FirewallFilterConfig defines the configuration parameters for the firewall filter.
 type FirewallFilterConfig struct {
+	Protocol        string           `yaml:"protocol"`
 	SocketPath      string           `yaml:"socket_path"`
 	Timeout         string           `yaml:"timeout"`
 	TimeoutDuration time.Duration    `yaml:"-"`
@@ -33,6 +35,14 @@ func ParseFirewallFilterConfig(raw interface{}) (*FirewallFilterConfig, error) {
 	var cfg FirewallFilterConfig
 	if err := yaml.Unmarshal(optsBytes, &cfg); err != nil {
 		return nil, fmt.Errorf("firewall: failed to unmarshal options: %w", err)
+	}
+
+	// Normalize and validate protocol
+	cfg.Protocol = strings.ToLower(cfg.Protocol)
+	if cfg.Protocol == "" {
+		cfg.Protocol = "grpc"
+	} else if cfg.Protocol != "http" && cfg.Protocol != "grpc" {
+		return nil, fmt.Errorf("firewall: unsupported protocol %q (must be 'http' or 'grpc')", cfg.Protocol)
 	}
 
 	// Apply default values

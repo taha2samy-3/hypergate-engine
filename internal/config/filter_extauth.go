@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -45,9 +46,12 @@ func ParseExternalAuthConfig(raw interface{}) (*ExternalAuthConfig, error) {
 		return nil, fmt.Errorf("external_auth: failed to unmarshal options: %w", err)
 	}
 
-	// Apply default values
+	// Normalize and validate protocol
+	cfg.Protocol = strings.ToLower(cfg.Protocol)
 	if cfg.Protocol == "" {
 		cfg.Protocol = "http"
+	} else if cfg.Protocol != "http" && cfg.Protocol != "grpc" {
+		return nil, fmt.Errorf("external_auth: unsupported protocol %q (must be 'http' or 'grpc')", cfg.Protocol)
 	}
 
 	if cfg.Timeout == "" {
