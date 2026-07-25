@@ -21,5 +21,6 @@ func init() {
 		&CorrelationIdFilter{}, &CorrelationIdFilterList{},
 		&RedisMetadataEnricherFilter{}, &RedisMetadataEnricherFilterList{},
 		&ExternalAuthFilter{}, &ExternalAuthFilterList{},
+		&FirewallFilter{}, &FirewallFilterList{},
 	)
 }

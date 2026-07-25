@@ -16,7 +16,7 @@ tasks:
       - pipenv run pytest --version || (echo "pytest is not installed inside pipenv" && exit 1)
     silent: true
 
-run-scenario:
+  run-scenario:
     desc: "Run a single integration test scenario. Usage: task run-scenario NAME=<scenario_name>"
     requires:
       vars: [NAME]
@@ -68,7 +68,11 @@ run-scenario:
     cmds:
       - task: run-scenario
         vars: { NAME: "metadata_enrichment" }
-
+  tests:correlation:
+    desc: "Run correlation tests"
+    cmds:
+      - task: run-scenario
+        vars: { NAME: "correlation" }
   hyper-engine-makefile:tidy:
     desc: "Tidy and verify Go module dependencies"
     cmds:

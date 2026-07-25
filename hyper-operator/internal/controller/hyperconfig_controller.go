@@ -39,6 +39,7 @@ type HyperConfigReconciler struct {
 // +kubebuilder:rbac:groups=apps,resources=daemonsets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=hyper.io,resources=externalauthfilters,verbs=get;list;watch
+// +kubebuilder:rbac:groups=hyper.io,resources=firewallfilters,verbs=get;list;watch
 
 func (r *HyperConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -138,11 +139,18 @@ func (r *HyperConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
+	// List all FirewallFilters to determine what sidecars to inject.
+	var firewallList hyperv1alpha1.FirewallFilterList
+	if err := r.List(ctx, &firewallList); err != nil {
+		logger.Error(err, "failed to list FirewallFilters")
+		return ctrl.Result{}, err
+	}
+
 	// udsVolumeName is the shared emptyDir volume that all sidecars and the engine
 	// use to communicate over Unix Domain Sockets.
 	const udsVolumeName = "uds-sockets"
 	const udsVolumeMountPath = "/var/run/hypergate/"
-	hasExtAuth := len(externalAuthList.Items) > 0
+	hasSidecars := len(externalAuthList.Items) > 0 || len(firewallList.Items) > 0
 
 	ds := &appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: dsName, Namespace: namespace}}
 	if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, ds, func() error {
@@ -181,7 +189,7 @@ func (r *HyperConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 		// Inject the UDS volume mount into the engine container when sidecars are present.
 		// Use append (not slice replacement) to preserve any other existing volume mounts.
-		if hasExtAuth {
+		if hasSidecars {
 			engineContainer.VolumeMounts = append(engineContainer.VolumeMounts, corev1.VolumeMount{
 				Name:      udsVolumeName,
 				MountPath: udsVolumeMountPath,
@@ -194,7 +202,7 @@ func (r *HyperConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		// Collect all pull secrets across sidecars for the pod-level imagePullSecrets.
 		pullSecretSet := make(map[string]struct{})
 
-		if hasExtAuth {
+		if hasSidecars {
 			// UDS emptyDir volume shared between engine and all sidecars.
 			volumes = append(volumes, corev1.Volume{
 				Name: udsVolumeName,
@@ -250,6 +258,93 @@ func (r *HyperConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 							MountPath: udsVolumeMountPath,
 						},
 					},
+				}
+				containers = append(containers, sidecar)
+			}
+
+			for i := range firewallList.Items {
+				fw := &firewallList.Items[i]
+				socketPath := "/var/run/hypergate/fw-" + fw.Name + ".sock"
+
+				// Collect ImagePullSecrets from this sidecar into the pod-level set.
+				for _, s := range fw.Spec.Container.ImagePullSecrets {
+					pullSecretSet[s.Name] = struct{}{}
+				}
+
+				// Build the sidecar Env, auto-injecting the UDS address.
+				sidecarEnv := make([]corev1.EnvVar, len(fw.Spec.Container.Env))
+				copy(sidecarEnv, fw.Spec.Container.Env)
+
+				if fw.Spec.Container.SocketEnvKey != "" {
+					sidecarEnv = append(sidecarEnv, corev1.EnvVar{
+						Name:  fw.Spec.Container.SocketEnvKey,
+						Value: "unix://" + socketPath,
+					})
+				} else {
+					sidecarEnv = append(sidecarEnv, corev1.EnvVar{
+						Name:  "FIREWALL_SOCKET_PATH",
+						Value: "unix://" + socketPath,
+					})
+				}
+
+				var processedArgs []string
+				for _, arg := range fw.Spec.Container.Args {
+					if strings.Contains(arg, "{socket_path}") {
+						arg = strings.ReplaceAll(arg, "{socket_path}", socketPath)
+					}
+					processedArgs = append(processedArgs, arg)
+				}
+
+				volumeMounts := []corev1.VolumeMount{
+					{
+						Name:      udsVolumeName,
+						MountPath: udsVolumeMountPath,
+					},
+				}
+
+				if fw.Spec.RulesConfigMap != "" {
+					volName := "fw-rules-cm-" + fw.Name
+					volumeMounts = append(volumeMounts, corev1.VolumeMount{
+						Name:      volName,
+						MountPath: "/etc/firewall/rules/",
+					})
+					volumes = append(volumes, corev1.Volume{
+						Name: volName,
+						VolumeSource: corev1.VolumeSource{
+							ConfigMap: &corev1.ConfigMapVolumeSource{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: fw.Spec.RulesConfigMap,
+								},
+							},
+						},
+					})
+				}
+
+				if fw.Spec.RulesSecretRef != "" {
+					volName := "fw-rules-sec-" + fw.Name
+					volumeMounts = append(volumeMounts, corev1.VolumeMount{
+						Name:      volName,
+						MountPath: "/etc/firewall/secrets/",
+					})
+					volumes = append(volumes, corev1.Volume{
+						Name: volName,
+						VolumeSource: corev1.VolumeSource{
+							Secret: &corev1.SecretVolumeSource{
+								SecretName: fw.Spec.RulesSecretRef,
+							},
+						},
+					})
+				}
+
+				sidecar := corev1.Container{
+					Name:            "fw-" + fw.Name,
+					Image:           fw.Spec.Container.Image,
+					ImagePullPolicy: fw.Spec.Container.ImagePullPolicy,
+					Args:            processedArgs,
+					Env:             sidecarEnv,
+					EnvFrom:         fw.Spec.Container.EnvFrom,
+					Resources:       fw.Spec.Container.Resources,
+					VolumeMounts:    volumeMounts,
 				}
 				containers = append(containers, sidecar)
 			}
@@ -335,5 +430,6 @@ func (r *HyperConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&rbacv1.Role{}).
 		Owns(&rbacv1.RoleBinding{}).
 		Watches(&hyperv1alpha1.ExternalAuthFilter{}, triggerFunc).
+		Watches(&hyperv1alpha1.FirewallFilter{}, triggerFunc).
 		Complete(r)
 }

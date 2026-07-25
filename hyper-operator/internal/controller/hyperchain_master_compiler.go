@@ -42,6 +42,7 @@ type HyperChainMasterCompilerReconciler struct {
 // +kubebuilder:rbac:groups=hyper.io,resources=redismetadataenricherfilters,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=hyper.io,resources=apikeyfilters,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=hyper.io,resources=externalauthfilters,verbs=get;list;watch
+// +kubebuilder:rbac:groups=hyper.io,resources=firewallfilters,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=hyper.io,resources=apikeyfilters/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 
@@ -128,6 +129,12 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 		return ctrl.Result{}, err
 	}
 
+	var firewallList hyperv1alpha1.FirewallFilterList
+	if err := r.List(ctx, &firewallList); err != nil {
+		reqLogger.Error(err, "unable to list FirewallFilters")
+		return ctrl.Result{}, err
+	}
+
 	// Sort routes by priority descending
 	routes := routeList.Items
 	sort.Slice(routes, func(i, j int) bool {
@@ -199,6 +206,11 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 	externalAuthMap := make(map[string]*hyperv1alpha1.ExternalAuthFilter)
 	for i := range externalAuthList.Items {
 		externalAuthMap[externalAuthList.Items[i].Name] = &externalAuthList.Items[i]
+	}
+
+	firewallMap := make(map[string]*hyperv1alpha1.FirewallFilter)
+	for i := range firewallList.Items {
+		firewallMap[firewallList.Items[i].Name] = &firewallList.Items[i]
 	}
 
 	// Map HyperChain list and handle status bubbling
@@ -283,6 +295,29 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 					"socket_path": socketPath,
 					"timeout":     f.Spec.EngineRules.Timeout,
 					"forward_headers": f.Spec.EngineRules.ForwardHeaders,
+					"on_success": map[string]interface{}{
+						"upstream_headers_to_add":    f.Spec.EngineRules.OnSuccess.UpstreamHeadersToAdd,
+						"upstream_headers_to_remove": f.Spec.EngineRules.OnSuccess.UpstreamHeadersToRemove,
+					},
+					"on_failure": map[string]interface{}{
+						"downstream_pass_through_headers": f.Spec.EngineRules.OnFailure.DownstreamPassThroughHeaders,
+					},
+				}
+			case "FirewallFilter":
+				filterType = "firewall"
+				f, exists := firewallMap[filterRef.Name]
+				if !exists {
+					failed = true
+					failMsg = fmt.Sprintf("Filter %s of Kind FirewallFilter not found", filterRef.Name)
+					break
+				}
+				socketPath := fmt.Sprintf("/var/run/hypergate/fw-%s.sock", f.Name)
+				resolvedOptions = map[string]interface{}{
+					"socket_path":      socketPath,
+					"timeout":          f.Spec.EngineRules.Timeout,
+					"inspect_body":     f.Spec.EngineRules.InspectBody,
+					"max_body_size_kb": f.Spec.EngineRules.MaxBodySizeKB,
+					"forward_headers":  f.Spec.EngineRules.ForwardHeaders,
 					"on_success": map[string]interface{}{
 						"upstream_headers_to_add":    f.Spec.EngineRules.OnSuccess.UpstreamHeadersToAdd,
 						"upstream_headers_to_remove": f.Spec.EngineRules.OnSuccess.UpstreamHeadersToRemove,
@@ -446,5 +481,6 @@ func (r *HyperChainMasterCompilerReconciler) SetupWithManager(mgr ctrl.Manager) 
 		Watches(&hyperv1alpha1.RedisMetadataEnricherFilter{}, triggerFunc).
 		Watches(&hyperv1alpha1.ApiKeyFilter{}, triggerFunc).
 		Watches(&hyperv1alpha1.ExternalAuthFilter{}, triggerFunc).
+		Watches(&hyperv1alpha1.FirewallFilter{}, triggerFunc).
 		Complete(r)
 }

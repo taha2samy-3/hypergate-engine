@@ -27,6 +27,7 @@ var _ admission.Validator[*hyperv1alpha1.CorrelationIdFilter] = &FilterProtectio
 var _ admission.Validator[*hyperv1alpha1.RedisMetadataEnricherFilter] = &FilterProtectionValidator[*hyperv1alpha1.RedisMetadataEnricherFilter]{Kind: "RedisMetadataEnricherFilter"}
 var _ admission.Validator[*hyperv1alpha1.ApiKeyFilter] = &FilterProtectionValidator[*hyperv1alpha1.ApiKeyFilter]{Kind: "ApiKeyFilter"}
 var _ admission.Validator[*hyperv1alpha1.ExternalAuthFilter] = &FilterProtectionValidator[*hyperv1alpha1.ExternalAuthFilter]{Kind: "ExternalAuthFilter"}
+var _ admission.Validator[*hyperv1alpha1.FirewallFilter] = &FilterProtectionValidator[*hyperv1alpha1.FirewallFilter]{Kind: "FirewallFilter"}
 
 // ValidateCreate implements admission.Validator.
 func (v *FilterProtectionValidator[T]) ValidateCreate(ctx context.Context, obj T) (admission.Warnings, error) {
@@ -108,6 +109,13 @@ func SetupFiltersWebhookWithManager(mgr ctrl.Manager) error {
 	// Register validator for ExternalAuthFilter
 	if err := ctrl.NewWebhookManagedBy(mgr, &hyperv1alpha1.ExternalAuthFilter{}).
 		WithValidator(&FilterProtectionValidator[*hyperv1alpha1.ExternalAuthFilter]{Client: c, Kind: "ExternalAuthFilter"}).
+		Complete(); err != nil {
+		return err
+	}
+
+	// Register validator for FirewallFilter
+	if err := ctrl.NewWebhookManagedBy(mgr, &hyperv1alpha1.FirewallFilter{}).
+		WithValidator(&FilterProtectionValidator[*hyperv1alpha1.FirewallFilter]{Client: c, Kind: "FirewallFilter"}).
 		Complete(); err != nil {
 		return err
 	}
