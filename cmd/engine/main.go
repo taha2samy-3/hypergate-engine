@@ -133,13 +133,17 @@ func main() {
 	mylogger.Debug("Initializing core components")
 	registry := engine.NewChainRegistry()
 	executor := engine.NewChainExecutor()
-	pool := memory.NewContextPool(initialConfig.Server.InitialHeaderCapacity)
+	pool := memory.NewContextPool(
+		initialConfig.Server.InitialHeaderCapacity,
+		initialConfig.Server.PreallocBodyBufferBytes,
+	)
 	pool.Prewarm(initialConfig.Server.PoolPrewarmSize)
 	routerInst := router.NewEngineRouter()
 
 	mylogger.Info("Core components successfully initialized",
 		zap.Int("pool_prewarm_size", initialConfig.Server.PoolPrewarmSize),
 		zap.Int("initial_header_capacity", initialConfig.Server.InitialHeaderCapacity),
+		zap.Int("prealloc_body_buffer_bytes", initialConfig.Server.PreallocBodyBufferBytes),
 	)
 
 	if err := compileAndRegister(initialConfig, registry); err != nil {

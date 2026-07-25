@@ -12,11 +12,14 @@ type ContextPool struct {
 	pool *sync.Pool
 }
 
-func NewContextPool(initialCap int) *ContextPool {
-	if initialCap <= 0 {
-		initialCap = 64
+func NewContextPool(initialHeaderCap int, preallocBodyBytes int) *ContextPool {
+	if initialHeaderCap <= 0 {
+		initialHeaderCap = 64
 	}
-	sliceCap := initialCap / 2
+	if preallocBodyBytes <= 0 {
+		preallocBodyBytes = 65536
+	}
+	sliceCap := initialHeaderCap / 2
 	if sliceCap <= 0 {
 		sliceCap = 10
 	}
@@ -25,13 +28,14 @@ func NewContextPool(initialCap int) *ContextPool {
 		pool: &sync.Pool{
 			New: func() interface{} {
 				return &engine.RequestContext{
-					Headers:              make(map[string]string, initialCap),
+					Headers:              make(map[string]string, initialHeaderCap),
 					HeadersToAdd:         make([]engine.Header, 0, sliceCap),
 					ResponseHeadersToAdd: make([]engine.Header, 0, sliceCap),
 					HeadersToRemove:      make([]string, 0, sliceCap),
-					UpstreamShadow:       make(map[string]string, initialCap),
-					DownstreamShadow:     make(map[string]string, initialCap),
+					UpstreamShadow:       make(map[string]string, initialHeaderCap),
+					DownstreamShadow:     make(map[string]string, initialHeaderCap),
 					SetHeaderOptions:     make([]*corev3.HeaderValueOption, 0, sliceCap),
+					RawBodyBuffer:        make([]byte, 0, preallocBodyBytes),
 				}
 			},
 		},

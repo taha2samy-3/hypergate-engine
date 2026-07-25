@@ -53,6 +53,11 @@ type HyperConfigSpec struct {
 	// +optional
 	// +kubebuilder:default=64
 	InitialHeaderCapacity int32 `json:"initialHeaderCapacity,omitempty" yaml:"initial_header_capacity,omitempty"`
+
+	// PreallocBodyBufferBytes defines the pre-allocated byte buffer size for HTTP request/response bodies per request.
+	// +optional
+	// +kubebuilder:default=65536
+	PreallocBodyBufferBytes int32 `json:"preallocBodyBufferBytes,omitempty" yaml:"prealloc_body_buffer_bytes,omitempty"`
 }
 
 // +kubebuilder:object:generate=true

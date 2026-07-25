@@ -41,6 +41,7 @@ type RequestContext struct {
 	RequestTrailersModified  bool
 	ResponseTrailersModified bool
 	SetHeaderOptions         []*corev3.HeaderValueOption
+	RawBodyBuffer            []byte
 }
 
 func (ctx *RequestContext) Reset() {
@@ -57,6 +58,10 @@ func (ctx *RequestContext) Reset() {
 	ctx.ResponseStatus = 0
 	ctx.ResponseBody = ""
 	ctx.SetHeaderOptions = ctx.SetHeaderOptions[:0]
+
+	if ctx.RawBodyBuffer != nil {
+		ctx.RawBodyBuffer = ctx.RawBodyBuffer[:0]
+	}
 
 	if ctx.RequestBody != nil {
 		ctx.RequestBody = ctx.RequestBody[:0]

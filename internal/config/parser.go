@@ -133,6 +133,9 @@ func ParseBytes(data []byte) (*Config, error) {
 	if cfg.Server.InitialHeaderCapacity <= 0 {
 		cfg.Server.InitialHeaderCapacity = 64
 	}
+	if cfg.Server.PreallocBodyBufferBytes <= 0 {
+		cfg.Server.PreallocBodyBufferBytes = 65536 // 64KB default
+	}
 
 	if cfg.Telemetry.Logging.Level == "" {
 		cfg.Telemetry.Logging.Level = "INFO"

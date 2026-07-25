@@ -97,7 +97,14 @@ func (s *Server) handleRequestBody(
 	targetChainName string,
 ) error {
 	mylogger.Debug("Received RequestBody phase")
-	reqCtx.RequestBody = msg.Body
+	bodyLen := len(msg.Body)
+	if bodyLen > 0 && bodyLen <= cap(reqCtx.RawBodyBuffer) {
+		reqCtx.RawBodyBuffer = append(reqCtx.RawBodyBuffer[:0], msg.Body...)
+		reqCtx.RequestBody = reqCtx.RawBodyBuffer
+	} else {
+		// Fallback for oversized bodies (> 64KB)
+		reqCtx.RequestBody = msg.Body
+	}
 
 	if targetChainName != "" {
 		chain, exists := s.registry.Get(targetChainName)
@@ -203,7 +210,14 @@ func (s *Server) handleResponseBody(
 	targetChainName string,
 ) error {
 	mylogger.Debug("Received ResponseBody phase")
-	reqCtx.ResponseBodyBytes = msg.Body
+	bodyLen := len(msg.Body)
+	if bodyLen > 0 && bodyLen <= cap(reqCtx.RawBodyBuffer) {
+		reqCtx.RawBodyBuffer = append(reqCtx.RawBodyBuffer[:0], msg.Body...)
+		reqCtx.ResponseBodyBytes = reqCtx.RawBodyBuffer
+	} else {
+		// Fallback for oversized response bodies (> 64KB)
+		reqCtx.ResponseBodyBytes = msg.Body
+	}
 
 	if targetChainName != "" {
 		chain, exists := s.registry.Get(targetChainName)

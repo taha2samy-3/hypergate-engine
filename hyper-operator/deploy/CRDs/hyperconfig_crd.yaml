@@ -62,5 +62,8 @@ spec:
                 initialHeaderCapacity:
                   type: integer
                   default: 64
+                preallocBodyBufferBytes:
+                  type: integer
+                  default: 65536
             status:
               type: object

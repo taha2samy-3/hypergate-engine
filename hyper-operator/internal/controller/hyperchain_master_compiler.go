@@ -149,6 +149,7 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 			MaxConcurrentStreams: activeConfig.Spec.MaxConcurrentStreams,
 			PoolPrewarmSize:       int(activeConfig.Spec.PoolPrewarmSize),
 			InitialHeaderCapacity: int(activeConfig.Spec.InitialHeaderCapacity),
+			PreallocBodyBufferBytes: int(activeConfig.Spec.PreallocBodyBufferBytes),
 		},
 		Telemetry: config.TelemetryConfig{
 			Logging: mylogger.LoggingConfig{
