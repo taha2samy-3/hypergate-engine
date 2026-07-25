@@ -1,0 +1,40 @@
+version: '3'
+
+tasks:
+  tidy:
+    desc: "Tidy and verify Go module dependencies"
+    cmds:
+      - go mod tidy
+      - go mod verify
+
+  fmt:
+    desc: "Format all Go source files according to standard guidelines"
+    cmds:
+      - go fmt ./...
+
+  vet:
+    desc: "Run Go static analysis compiler checks"
+    cmds:
+      - go vet ./...
+
+  generate:
+    desc: "Generate Protobuf and gRPC files using Buf tool"
+    cmds:
+      - buf generate buf.build/envoyproxy/envoy --path envoy/service/auth/v3
+
+  build:
+    desc: "Build highly-optimized stripped Go binary for Linux"
+    cmds:
+      - mkdir -p bin
+      - CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o bin/engine ./cmd/engine
+
+  clean:
+    desc: "Clean up built binaries and cached test results"
+    cmds:
+      - rm -rf bin/
+      - go clean -testcache
+
+  build-mock:
+    desc: "Build the Go gRPC Mock Server Docker container"
+    cmds:
+      - docker build -t taha/hyper-mock-engine:latest -f mock_engine/Dockerfile.mock mock_engine/

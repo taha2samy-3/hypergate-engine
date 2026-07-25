@@ -1,0 +1,69 @@
+version: '3'
+
+tasks:
+  kind-create:
+    desc: "Create a Kind Kubernetes cluster with 4 nodes"
+    cmds:
+      - kind create cluster --config k8s/kind/kind-config.yaml
+
+  kind-delete:
+    desc: "Delete the Kind Kubernetes cluster"
+    cmds:
+      - kind delete cluster
+
+  kind-reload:
+    desc: "Delete and recreate the Kind Kubernetes cluster"
+    cmds:
+      - task: kind-delete
+      - task: kind-create
+
+  install-cert-manager:
+    desc: "Install Cert-Manager for Operator Webhooks"
+    cmds:
+      - kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.14.4/cert-manager.yaml
+      - echo "Waiting for Cert-Manager to be ready..."
+      - kubectl wait --for=condition=Available deployment --all -n cert-manager --timeout=90s
+
+  install-gateway-api:
+    desc: "Install the official Kubernetes Gateway API CRDs"
+    cmds:
+      - kubectl apply --server-side -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/experimental-install.yaml
+
+  install-cilium:
+    desc: "Install Cilium as the CNI plugin with Gateway API and ext_proc support"
+    cmds:
+      - cilium install \
+          --version v1.19.6 \
+          --set k8sServiceHost=kind-control-plane \
+          --set k8sServicePort=6443 \
+          --set kubeProxyReplacement=true \
+          --set gatewayAPI.enabled=true \
+          --set gatewayAPI.enableExtensionRefFilters=true \
+          --set hostServices.enabled=true \
+          --set externalIPs.enabled=true \
+          --set l2announcements.enabled=true \
+          --set devices=eth0 || true
+      - kubectl apply -f k8s/cilium/rbac-operator.yaml
+      - kubectl rollout restart deployment/cilium-operator -n kube-system
+      - cilium status --wait || true
+      - cilium upgrade \
+          --version v1.19.6 \
+          --set gatewayAPI.enabled=true \
+          --set gatewayAPI.enableExtensionRefFilters=true \
+          --set kubeProxyReplacement=true
+      - kubectl rollout restart deployment/cilium-operator -n kube-system
+      - cilium status --wait || true
+
+  apply-cilium-l2:
+    desc: "Enable L2 policy and LoadBalancer IP Pool in Cilium"
+    cmds:
+      - kubectl apply -f k8s/cilium/l2policy.yaml -f k8s/cilium/pool.yaml
+
+  install-demo:
+    desc: "Install the full demo application with hyper-engine, ext_proc, and NodePort"
+    cmds:
+      - kubectl apply -f k8s/demo/
+      - echo "Waiting for Cilium Gateway service to be initialized..."
+      - sleep 3
+      - kubectl patch svc cilium-gateway-demo-gateway -n default -p '{"spec":{"ports":[{"port":80,"nodePort":30080}]}}'
+      - echo "Demo app and hyper-engine are live on http://localhost:8080"

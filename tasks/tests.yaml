@@ -1,0 +1,65 @@
+version: '3'
+
+tasks:
+  run-scenario:
+    desc: "Run a single integration test scenario (Usage: task test:run-scenario NAME=<scenario_name>)"
+    requires:
+      vars: [NAME]
+    cmds:
+      - defer: { task: teardown }
+      - task: teardown
+      - cp tests/{{.NAME}}/config.yaml tests/config.yaml
+      - docker compose -f tests/docker-compose.yaml --project-directory tests up -d --build --force-recreate
+      - |
+        echo "Waiting for hyper-engine on port 9001..."
+        until nc -z 127.0.0.1 9001; do sleep 1; done
+      - |
+        echo "Waiting for envoy-proxy on port 8080..."
+        until nc -z 127.0.0.1 8080; do sleep 1; done
+      - sleep 5
+      - pipenv run pytest tests/{{.NAME}}/test_{{.NAME}}.py -v
+
+  teardown:
+    internal: true
+    cmds:
+      - docker compose -f tests/docker-compose.yaml --project-directory tests down -v --remove-orphans >/dev/null 2>&1 || true
+      - rm -f tests/config.yaml
+
+  all:
+    desc: "Run all integration test scenarios sequentially"
+    cmds:
+      - task: api-key
+      - task: ratelimit
+      - task: modification
+      - task: metadata
+      - task: correlation
+
+  api-key:
+    desc: "Run API Key authentication integration tests"
+    cmds:
+      - task: run-scenario
+        vars: { NAME: "api_key" }
+
+  ratelimit:
+    desc: "Run Rate Limiting integration tests"
+    cmds:
+      - task: run-scenario
+        vars: { NAME: "rate_limit" }
+
+  modification:
+    desc: "Run Header Modification filter integration tests"
+    cmds:
+      - task: run-scenario
+        vars: { NAME: "modification" }
+
+  metadata:
+    desc: "Run Redis Metadata Enrichment filter integration tests"
+    cmds:
+      - task: run-scenario
+        vars: { NAME: "metadata_enrichment" }
+
+  correlation:
+    desc: "Run Correlation ID filter integration tests"
+    cmds:
+      - task: run-scenario
+        vars: { NAME: "correlation" }

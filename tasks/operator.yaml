@@ -1,0 +1,46 @@
+version: '3'
+
+tasks:
+  build:
+    desc: "Build the Docker image for hyper-operator"
+    cmds:
+      - docker build -t taha/myprog-operator:latest -f hyper-operator/Dockerfile .
+
+  deploy:
+    desc: "Deploy the Operator, RBAC, CRDs, Certs, and Webhooks sequentially"
+    cmds:
+      - kubectl apply -f hyper-operator/deploy/namespace.yaml
+      - task: deploy-crds
+      - kubectl apply -f hyper-operator/deploy/rbac.yaml -f hyper-operator/deploy/cert-manager.yaml -f hyper-operator/deploy/service.yaml -f hyper-operator/deploy/webhook-config.yaml -f hyper-operator/deploy/deployment.yaml
+      - echo "Waiting for operator deployment to be ready..."
+      - kubectl rollout status deployment/hyper-operator -n hyper-system --timeout=90s
+
+  deploy-crds:
+    desc: "Deploy ONLY the Custom Resource Definitions (CRDs)"
+    cmds:
+      - kubectl apply -f hyper-operator/deploy/CRDs/
+
+  undeploy:
+    desc: "Remove the Operator, Webhooks, CRDs, and all system resources from the cluster"
+    cmds:
+      - kubectl delete -f hyper-operator/deploy/ --ignore-not-found
+      - kubectl delete -f hyper-operator/deploy/CRDs/ --ignore-not-found
+      - kubectl delete validatingwebhookconfiguration hyper-validating-webhook-configuration --ignore-not-found
+      - kubectl delete daemonset/hyper-engine service/hyper-engine-svc configmap/hyper-engine-config -n hyper-system --ignore-not-found
+      - echo "Operator and associated resources successfully uninstalled"
+    ignore_error: true
+
+  logs:
+    desc: "Stream live logs from the running hyper-operator pod"
+    cmds:
+      - kubectl logs -f -n hyper-system -l control-plane=controller-manager --tail=100
+
+  restart:
+    desc: "Rollout restart the hyper-operator deployment"
+    cmds:
+      - kubectl rollout restart deployment/hyper-operator -n hyper-system
+
+  status:
+    desc: "Check the status of all resources in the hyper-system namespace"
+    cmds:
+      - kubectl get all -n hyper-system
