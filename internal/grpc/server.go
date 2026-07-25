@@ -1,6 +1,8 @@
 package grpc
 
 import (
+	"context"
+	"errors"
 	"io"
 	"time"
 
@@ -85,7 +87,8 @@ func (s *Server) Process(stream extprocv3.ExternalProcessor_ProcessServer) error
 
 	for {
 		req, err := stream.Recv()
-		if err == io.EOF {
+		// Gracefully handle stream closure and context cancellation to prevent transport resets
+		if err == io.EOF || errors.Is(err, context.Canceled) {
 			return nil
 		}
 		if err != nil {
@@ -93,7 +96,7 @@ func (s *Server) Process(stream extprocv3.ExternalProcessor_ProcessServer) error
 				return nil
 			}
 			mylogger.Error("ext_proc stream receive error", zap.Error(err))
-			return err
+			return nil
 		}
 
 		// Dispatch to specific handlers based on the request type.
@@ -114,7 +117,7 @@ func (s *Server) Process(stream extprocv3.ExternalProcessor_ProcessServer) error
 		}
 
 		if err != nil {
-			return err
+			return nil
 		}
 	}
 }

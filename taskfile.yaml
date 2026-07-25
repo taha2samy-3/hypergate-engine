@@ -16,28 +16,23 @@ tasks:
       - pipenv run pytest --version || (echo "pytest is not installed inside pipenv" && exit 1)
     silent: true
 
-  run-scenario:
+run-scenario:
     desc: "Run a single integration test scenario. Usage: task run-scenario NAME=<scenario_name>"
     requires:
       vars: [NAME]
     cmds:
-      # Copy scenario config to root tests/config.yaml
+      - docker compose -f tests/docker-compose.yaml --project-directory tests down -v --remove-orphans >/dev/null 2>&1 || true
       - cp tests/{{.NAME}}/config.yaml tests/config.yaml
-      # Start docker-compose stack
-      - docker compose -f tests/docker-compose.yaml --project-directory tests up -d --build
-      # Wait for hyper-engine to be healthy
+      - docker compose -f tests/docker-compose.yaml --project-directory tests up -d --build --force-recreate
       - |
         echo "Waiting for hyper-engine on port 9001..."
         until nc -z 127.0.0.1 9001; do sleep 1; done
-      # Wait for envoy-proxy to be healthy
       - |
         echo "Waiting for envoy-proxy on port 8080..."
         until nc -z 127.0.0.1 8080; do sleep 1; done
-      # Execute pytest
-      - pipenv run pytest tests/{{.NAME}}/test_{{.NAME}}.py -v || echo "error============="
-      # Teardown after tests complete (runs even if tests fail)
+      - sleep 5
+      - pipenv run pytest tests/{{.NAME}}/test_{{.NAME}}.py -v
       - task: teardown
-
   teardown:
     internal: true
     cmds:

@@ -1,0 +1,120 @@
+version: "v1"
+
+server:
+  address: "0.0.0.0:9001"
+  max_concurrent_streams: 1024
+
+telemetry:
+  logging:
+    level: "DEBUG"
+    format: "console"
+    output_path: "stdout"
+    development: false
+
+redis:
+  myredis:
+    url: "redis:6379"
+    type: "SINGLE"
+    timeout: "100ms"
+    wait_timeout: "100ms"
+
+chains:
+  # -----------------------------------------------------------------------
+  # Chain 1: Plain format with semicolon delimiter
+  # Maps: parts[0] -> X-Consumer-ID, parts[1] -> X-User-Tier, parts[2] -> X-Username
+  # -----------------------------------------------------------------------
+  chain_apikey_plain:
+    - type: "api_key"
+      options:
+        redis_service: "myredis"
+        key_names: ["x-api-key"]
+        key_in_header: true
+        key_in_query: false
+        hide_credentials: true
+        redis_key_prefix: "apikey:"
+        hash_algorithm: "sha256"
+        value_format: "plain"
+        delimiter: ";"
+        output_mappings:
+          - target_header: "X-Consumer-ID"
+          - target_header: "X-User-Tier"
+          - target_header: "X-Username"
+
+  # -----------------------------------------------------------------------
+  # Chain 2: Hash format — HMGET specific fields
+  # Maps: client_id -> X-Consumer-ID, tier -> X-User-Tier
+  # -----------------------------------------------------------------------
+  chain_apikey_hash:
+    - type: "api_key"
+      options:
+        redis_service: "myredis"
+        key_names: ["x-api-key"]
+        key_in_header: true
+        key_in_query: false
+        hide_credentials: true
+        redis_key_prefix: "apikey:"
+        hash_algorithm: "sha256"
+        value_format: "hash"
+        output_mappings:
+          - target_header: "X-Consumer-ID"
+            redis_field: "client_id"
+          - target_header: "X-User-Tier"
+            redis_field: "tier"
+
+  # -----------------------------------------------------------------------
+  # Chain 3: JSON format — gjson path extraction
+  # Maps: profile.email -> X-Consumer-Email
+  # -----------------------------------------------------------------------
+  chain_apikey_json:
+    - type: "api_key"
+      options:
+        redis_service: "myredis"
+        key_names: ["x-api-key"]
+        key_in_header: true
+        key_in_query: false
+        hide_credentials: true
+        redis_key_prefix: "apikey:"
+        hash_algorithm: "sha256"
+        value_format: "json"
+        output_mappings:
+          - target_header: "X-Consumer-Email"
+            json_path: "profile.email"
+
+  # -----------------------------------------------------------------------
+  # Chain 4: Hash format with status check
+  # Requires status field == "active"; maps client_id -> X-Consumer-ID
+  # -----------------------------------------------------------------------
+  chain_apikey_status:
+    - type: "api_key"
+      options:
+        redis_service: "myredis"
+        key_names: ["x-api-key"]
+        key_in_header: true
+        key_in_query: false
+        hide_credentials: false
+        redis_key_prefix: "apikey:"
+        hash_algorithm: "sha256"
+        value_format: "hash"
+        status_check:
+          enabled: true
+          field_name: "status"
+          expected_value: "active"
+        output_mappings:
+          - target_header: "X-Consumer-ID"
+            redis_field: "client_id"
+
+router:
+  routes:
+    - target_chain: "chain_apikey_plain"
+      matches:
+        - path_prefix: "/api/apikey/plain"
+    - target_chain: "chain_apikey_hash"
+      matches:
+        - path_prefix: "/api/apikey/hash"
+    - target_chain: "chain_apikey_json"
+      matches:
+        - path_prefix: "/api/apikey/json"
+    - target_chain: "chain_apikey_status"
+      matches:
+        - path_prefix: "/api/apikey/status"
+  default_chain: "chain_apikey_hash"
