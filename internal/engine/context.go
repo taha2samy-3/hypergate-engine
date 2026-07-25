@@ -3,6 +3,8 @@ package engine
 import (
 	"context"
 	"strings"
+
+	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 )
 
 type Header struct {
@@ -38,6 +40,7 @@ type RequestContext struct {
 	ResponseBodyModified     bool
 	RequestTrailersModified  bool
 	ResponseTrailersModified bool
+	SetHeaderOptions         []*corev3.HeaderValueOption
 }
 
 func (ctx *RequestContext) Reset() {
@@ -53,6 +56,7 @@ func (ctx *RequestContext) Reset() {
 	ctx.Blocked = false
 	ctx.ResponseStatus = 0
 	ctx.ResponseBody = ""
+	ctx.SetHeaderOptions = ctx.SetHeaderOptions[:0]
 
 	if ctx.RequestBody != nil {
 		ctx.RequestBody = ctx.RequestBody[:0]
@@ -78,7 +82,6 @@ func (ctx *RequestContext) Reset() {
 }
 
 func (ctx *RequestContext) GetHeader(key string) string {
-	key = strings.ToLower(key)
 	if val, ok := ctx.UpstreamShadow[key]; ok {
 		return val
 	}

@@ -145,8 +145,10 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 	engineConfig := config.Config{
 		Version: "v1",
 		Server: config.ServerConfig{
-			Address:              activeConfig.Spec.ServerAddress,
+			Address:               activeConfig.Spec.ServerAddress,
 			MaxConcurrentStreams: activeConfig.Spec.MaxConcurrentStreams,
+			PoolPrewarmSize:       int(activeConfig.Spec.PoolPrewarmSize),
+			InitialHeaderCapacity: int(activeConfig.Spec.InitialHeaderCapacity),
 		},
 		Telemetry: config.TelemetryConfig{
 			Logging: mylogger.LoggingConfig{

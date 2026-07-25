@@ -133,10 +133,14 @@ func main() {
 	mylogger.Debug("Initializing core components")
 	registry := engine.NewChainRegistry()
 	executor := engine.NewChainExecutor()
-	pool := memory.NewContextPool()
+	pool := memory.NewContextPool(initialConfig.Server.InitialHeaderCapacity)
+	pool.Prewarm(initialConfig.Server.PoolPrewarmSize)
 	routerInst := router.NewEngineRouter()
 
-	mylogger.Debug("Core components successfully initialized")
+	mylogger.Info("Core components successfully initialized",
+		zap.Int("pool_prewarm_size", initialConfig.Server.PoolPrewarmSize),
+		zap.Int("initial_header_capacity", initialConfig.Server.InitialHeaderCapacity),
+	)
 
 	if err := compileAndRegister(initialConfig, registry); err != nil {
 		mylogger.Fatal("Failed to compile chains on boot", zap.Error(err))

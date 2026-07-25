@@ -43,6 +43,16 @@ type HyperConfigSpec struct {
 
 	// +optional
 	DefaultChain string `json:"defaultChain,omitempty"`
+
+	// PoolPrewarmSize specifies the number of RequestContext objects to pre-allocate at boot.
+	// +optional
+	// +kubebuilder:default=5000
+	PoolPrewarmSize int32 `json:"poolPrewarmSize,omitempty" yaml:"pool_prewarm_size,omitempty"`
+
+	// InitialHeaderCapacity defines the initial map/slice capacity for headers per request.
+	// +optional
+	// +kubebuilder:default=64
+	InitialHeaderCapacity int32 `json:"initialHeaderCapacity,omitempty" yaml:"initial_header_capacity,omitempty"`
 }
 
 // +kubebuilder:object:generate=true

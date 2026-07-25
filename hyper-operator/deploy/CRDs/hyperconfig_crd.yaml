@@ -56,5 +56,11 @@ spec:
                   type: string
                 defaultChain:
                   type: string
+                poolPrewarmSize:
+                  type: integer
+                  default: 5000
+                initialHeaderCapacity:
+                  type: integer
+                  default: 64
             status:
               type: object

@@ -1,6 +1,8 @@
 package grpc
 
 import (
+	"strings"
+
 	"go.uber.org/zap"
 
 	extprocv3 "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
@@ -20,7 +22,7 @@ func (s *Server) handleRequestHeaders(
 	headers := msg.Headers
 	if headers != nil {
 		for _, h := range headers.Headers {
-			key := h.Key
+			key := strings.ToLower(h.Key)
 			var val string
 			if len(h.RawValue) > 0 {
 				val = string(h.RawValue)
@@ -65,7 +67,7 @@ func (s *Server) handleRequestHeaders(
 					Status: &typev3.HttpStatus{
 						Code: typev3.StatusCode(reqCtx.ResponseStatus),
 					},
-					Headers: s.buildHeaderMutation(reqCtx.ResponseHeadersToAdd, nil),
+					Headers: s.buildHeaderMutation(reqCtx, reqCtx.ResponseHeadersToAdd, nil),
 					Body:    []byte(reqCtx.ResponseBody),
 				},
 			},
@@ -78,7 +80,7 @@ func (s *Server) handleRequestHeaders(
 		Response: &extprocv3.ProcessingResponse_RequestHeaders{
 			RequestHeaders: &extprocv3.HeadersResponse{
 				Response: &extprocv3.CommonResponse{
-					HeaderMutation: s.buildHeaderMutation(reqCtx.HeadersToAdd, reqCtx.HeadersToRemove),
+					HeaderMutation: s.buildHeaderMutation(reqCtx, reqCtx.HeadersToAdd, reqCtx.HeadersToRemove),
 				},
 			},
 		},
@@ -129,7 +131,7 @@ func (s *Server) handleRequestTrailers(
 	trailers := msg.Trailers
 	if trailers != nil {
 		for _, h := range trailers.Headers {
-			key := h.Key
+			key := strings.ToLower(h.Key)
 			var val string
 			if len(h.RawValue) > 0 {
 				val = string(h.RawValue)
@@ -152,7 +154,7 @@ func (s *Server) handleRequestTrailers(
 	resp := &extprocv3.ProcessingResponse{
 		Response: &extprocv3.ProcessingResponse_RequestTrailers{
 			RequestTrailers: &extprocv3.TrailersResponse{
-				HeaderMutation: s.buildHeaderMutation(reqCtx.RequestTrailersToAdd, reqCtx.RequestTrailersToRemove),
+				HeaderMutation: s.buildHeaderMutation(reqCtx, reqCtx.RequestTrailersToAdd, reqCtx.RequestTrailersToRemove),
 			},
 		},
 	}
@@ -169,7 +171,7 @@ func (s *Server) handleResponseHeaders(
 	headers := msg.Headers
 	if headers != nil {
 		for _, h := range headers.Headers {
-			key := h.Key
+			key := strings.ToLower(h.Key)
 			var val string
 			if len(h.RawValue) > 0 {
 				val = string(h.RawValue)
@@ -184,7 +186,7 @@ func (s *Server) handleResponseHeaders(
 		Response: &extprocv3.ProcessingResponse_ResponseHeaders{
 			ResponseHeaders: &extprocv3.HeadersResponse{
 				Response: &extprocv3.CommonResponse{
-					HeaderMutation: s.buildHeaderMutation(reqCtx.ResponseHeadersToAdd, nil),
+					HeaderMutation: s.buildHeaderMutation(reqCtx, reqCtx.ResponseHeadersToAdd, nil),
 				},
 			},
 		},
@@ -235,7 +237,7 @@ func (s *Server) handleResponseTrailers(
 	trailers := msg.Trailers
 	if trailers != nil {
 		for _, h := range trailers.Headers {
-			key := h.Key
+			key := strings.ToLower(h.Key)
 			var val string
 			if len(h.RawValue) > 0 {
 				val = string(h.RawValue)
@@ -258,7 +260,7 @@ func (s *Server) handleResponseTrailers(
 	resp := &extprocv3.ProcessingResponse{
 		Response: &extprocv3.ProcessingResponse_ResponseTrailers{
 			ResponseTrailers: &extprocv3.TrailersResponse{
-				HeaderMutation: s.buildHeaderMutation(reqCtx.ResponseTrailersToAdd, reqCtx.ResponseTrailersToRemove),
+				HeaderMutation: s.buildHeaderMutation(reqCtx, reqCtx.ResponseTrailersToAdd, reqCtx.ResponseTrailersToRemove),
 			},
 		},
 	}

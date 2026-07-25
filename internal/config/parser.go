@@ -127,6 +127,13 @@ func ParseBytes(data []byte) (*Config, error) {
 		return nil, fmt.Errorf(`invalid config version %q, expected "v1"`, cfg.Version)
 	}
 
+	if cfg.Server.PoolPrewarmSize <= 0 {
+		cfg.Server.PoolPrewarmSize = 5000
+	}
+	if cfg.Server.InitialHeaderCapacity <= 0 {
+		cfg.Server.InitialHeaderCapacity = 64
+	}
+
 	if cfg.Telemetry.Logging.Level == "" {
 		cfg.Telemetry.Logging.Level = "INFO"
 	}

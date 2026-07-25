@@ -1,6 +1,8 @@
 package grpc
 
 import (
+	"unsafe"
+
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extprocfilterv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/ext_proc/v3"
 	extprocv3 "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
@@ -9,18 +11,28 @@ import (
 )
 
 // buildHeaderMutation transforms internal Header additions and removals into Envoy's Protobuf format.
-func (s *Server) buildHeaderMutation(headers []engine.Header, removes []string) *extprocv3.HeaderMutation {
-	var setHeaders []*corev3.HeaderValueOption
+func (s *Server) buildHeaderMutation(reqCtx *engine.RequestContext, headers []engine.Header, removes []string) *extprocv3.HeaderMutation {
+	if len(headers) == 0 && len(removes) == 0 {
+		return nil
+	}
+
+	setHeaders := reqCtx.SetHeaderOptions[:0]
 	for _, h := range headers {
+		var rawVal []byte
+		if len(h.Value) > 0 {
+			rawVal = unsafe.Slice(unsafe.StringData(h.Value), len(h.Value))
+		}
 		setHeaders = append(setHeaders, &corev3.HeaderValueOption{
 			Header: &corev3.HeaderValue{
 				Key:      h.Key,
-				RawValue: []byte(h.Value),
+				RawValue: rawVal,
 			},
 			// Default action is to overwrite if the header already exists, or add it if not.
 			AppendAction: corev3.HeaderValueOption_OVERWRITE_IF_EXISTS_OR_ADD,
 		})
 	}
+	reqCtx.SetHeaderOptions = setHeaders
+
 	return &extprocv3.HeaderMutation{
 		SetHeaders:    setHeaders,
 		RemoveHeaders: removes,
@@ -52,8 +64,8 @@ func (s *Server) buildBodyMutation(body []byte, modified bool) *extprocv3.BodyMu
 // of the current request (e.g., asking Envoy to send the body if a filter needs it).
 func (s *Server) buildModeOverride(reqCtx *engine.RequestContext) *extprocfilterv3.ProcessingMode {
 	// If no filters requested body or trailer access, we don't need an override.
-	if !reqCtx.RequestBodyRequired && !reqCtx.ResponseBodyRequired && 
-	   !reqCtx.RequestTrailersRequired && !reqCtx.ResponseTrailersRequired {
+	if !reqCtx.RequestBodyRequired && !reqCtx.ResponseBodyRequired &&
+		!reqCtx.RequestTrailersRequired && !reqCtx.ResponseTrailersRequired {
 		return nil
 	}
 
