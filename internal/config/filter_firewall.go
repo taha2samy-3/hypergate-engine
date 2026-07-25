@@ -61,5 +61,19 @@ func ParseFirewallFilterConfig(raw interface{}) (*FirewallFilterConfig, error) {
 		cfg.MaxBodySizeKB = 1024
 	}
 
+	// Pre-lowercase all header slices for zero-allocation hot-path lookup.
+	for i := range cfg.ForwardHeaders {
+		cfg.ForwardHeaders[i] = strings.ToLower(cfg.ForwardHeaders[i])
+	}
+	for i := range cfg.OnSuccess.UpstreamHeadersToAdd {
+		cfg.OnSuccess.UpstreamHeadersToAdd[i] = strings.ToLower(cfg.OnSuccess.UpstreamHeadersToAdd[i])
+	}
+	for i := range cfg.OnSuccess.UpstreamHeadersToRemove {
+		cfg.OnSuccess.UpstreamHeadersToRemove[i] = strings.ToLower(cfg.OnSuccess.UpstreamHeadersToRemove[i])
+	}
+	for i := range cfg.OnFailure.DownstreamPassThroughHeaders {
+		cfg.OnFailure.DownstreamPassThroughHeaders[i] = strings.ToLower(cfg.OnFailure.DownstreamPassThroughHeaders[i])
+	}
+
 	return &cfg, nil
 }

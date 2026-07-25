@@ -61,11 +61,26 @@ func NewRedisMetadataEnricherFilter(name string, cfg config.RedisMetadataEnriche
 		if v.RegexPattern != "" {
 			re = regexp.MustCompile(v.RegexPattern)
 		}
+		// Pre-lowercase header names extracted from {header:X-Foo} source patterns at boot-time.
+		source := v.Source
+		if strings.HasPrefix(source, "{header:") && strings.HasSuffix(source, "}") {
+			headerName := strings.ToLower(source[8 : len(source)-1])
+			source = "{header:" + headerName + "}"
+		}
 		compiledVars[varName] = VariableRule{
-			Source:        v.Source,
+			Source:        source,
 			DefaultValue:  v.Default,
 			CompiledRegex: re,
 			JSONPath:      v.JSONPath,
+		}
+	}
+
+	// Pre-lowercase all TargetHeader values in output mappings.
+	lowerMappings := make([]config.OutputMappingSpec, len(cfg.OutputMappings))
+	for i, m := range cfg.OutputMappings {
+		lowerMappings[i] = config.OutputMappingSpec{
+			JSONPath:     m.JSONPath,
+			TargetHeader: strings.ToLower(m.TargetHeader),
 		}
 	}
 
@@ -75,9 +90,9 @@ func NewRedisMetadataEnricherFilter(name string, cfg config.RedisMetadataEnriche
 		keyPattern:    cfg.KeyPattern,
 		client:        client,
 		localCache:    localCache,
-		cacheTTL:      cacheTTL, // Pass the parsed dynamic TTL
+		cacheTTL:      cacheTTL,
 		variables:     compiledVars,
-		outputMapping: cfg.OutputMappings,
+		outputMapping: lowerMappings,
 	}
 }
 
@@ -204,7 +219,7 @@ func (f *RedisMetadataEnricherFilter) resolveSourceValue(ctx *engine.RequestCont
 		}
 		return val
 	default:
-		// Check for custom header pattern: "{header:X-Tenant-ID}"
+		// Header name has already been lowercased at boot-time in NewRedisMetadataEnricherFilter.
 		if strings.HasPrefix(source, "{header:") && strings.HasSuffix(source, "}") {
 			headerName := source[8 : len(source)-1]
 			return ctx.GetHeader(headerName)

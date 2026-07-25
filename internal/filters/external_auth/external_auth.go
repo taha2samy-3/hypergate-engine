@@ -153,13 +153,15 @@ func (f *ExternalAuthFilter) executeGRPC(ctx *engine.RequestContext) error {
 		if okResp := resp.GetOkResponse(); okResp != nil {
 			for _, hOption := range okResp.GetHeaders() {
 				if hOption != nil && hOption.GetHeader() != nil {
+					// Lowercase the sidecar response header keys to match our pre-lowercased config keys.
 					okHeaders[strings.ToLower(hOption.GetHeader().GetKey())] = hOption.GetHeader().GetValue()
 				}
 			}
 		}
 
 		for _, k := range f.config.OnSuccess.UpstreamHeadersToAdd {
-			if val, ok := okHeaders[strings.ToLower(k)]; ok {
+			// k is already pre-lowercased at parse-time; map key is also lowercased.
+			if val, ok := okHeaders[k]; ok {
 				ctx.SetHeaderUpstream(k, val)
 			}
 		}
@@ -191,7 +193,8 @@ func (f *ExternalAuthFilter) executeGRPC(ctx *engine.RequestContext) error {
 	}
 
 	for _, k := range f.config.OnFailure.DownstreamPassThroughHeaders {
-		if val, ok := deniedHeaders[strings.ToLower(k)]; ok {
+		// k is already pre-lowercased at parse-time; map key is also lowercased.
+		if val, ok := deniedHeaders[k]; ok {
 			ctx.SetHeaderDownstream(k, val)
 		}
 	}

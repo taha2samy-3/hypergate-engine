@@ -1,6 +1,8 @@
 package header_modifier
 
 import (
+	"strings"
+
 	"github.com/taha/myprog/internal/engine"
 )
 
@@ -23,6 +25,37 @@ type HeaderModifierFilter struct {
 }
 
 func NewHeaderModifierFilter(config HeaderModifierConfig) *HeaderModifierFilter {
+	lowercaseMap := func(m map[string]string) map[string]string {
+		if m == nil {
+			return nil
+		}
+		res := make(map[string]string, len(m))
+		for k, v := range m {
+			res[strings.ToLower(k)] = v
+		}
+		return res
+	}
+	lowercaseSlice := func(s []string) []string {
+		if s == nil {
+			return nil
+		}
+		res := make([]string, len(s))
+		for i, v := range s {
+			res[i] = strings.ToLower(v)
+		}
+		return res
+	}
+
+	config.Add = lowercaseMap(config.Add)
+	config.Override = lowercaseMap(config.Override)
+	config.Remove = lowercaseSlice(config.Remove)
+	config.Upstream.Add = lowercaseMap(config.Upstream.Add)
+	config.Upstream.Override = lowercaseMap(config.Upstream.Override)
+	config.Upstream.Remove = lowercaseSlice(config.Upstream.Remove)
+	config.Downstream.Add = lowercaseMap(config.Downstream.Add)
+	config.Downstream.Override = lowercaseMap(config.Downstream.Override)
+	config.Downstream.Remove = lowercaseSlice(config.Downstream.Remove)
+
 	return &HeaderModifierFilter{config: config}
 }
 

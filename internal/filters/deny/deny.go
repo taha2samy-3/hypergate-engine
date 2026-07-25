@@ -48,6 +48,12 @@ func NewDenyFilter(cfg DenyFilterConfig) (*DenyFilter, error) {
 		cfg.Body = "Forbidden"
 	}
 
+	// Pre-lowercase all header map keys so no strings.ToLower occurs on the hot path.
+	cfg.Match.Headers = lowercaseHeaderMapKeys(cfg.Match.Headers)
+	cfg.Match.ResponseHeaders = lowercaseHeaderMapKeys(cfg.Match.ResponseHeaders)
+	cfg.Match.NotHeaders = lowercaseHeaderMapKeys(cfg.Match.NotHeaders)
+	cfg.Match.NotResponseHeaders = lowercaseHeaderMapKeys(cfg.Match.NotResponseHeaders)
+
 	hasConditions := cfg.Match.PathPrefix != "" ||
 		cfg.Match.PathRegex != "" ||
 		len(cfg.Match.Headers) > 0 ||
@@ -59,6 +65,18 @@ func NewDenyFilter(cfg DenyFilterConfig) (*DenyFilter, error) {
 		config:        cfg,
 		hasConditions: hasConditions,
 	}, nil
+}
+
+// lowercaseHeaderMapKeys returns a new map with all keys lowercased.
+func lowercaseHeaderMapKeys(m map[string]string) map[string]string {
+	if len(m) == 0 {
+		return m
+	}
+	out := make(map[string]string, len(m))
+	for k, v := range m {
+		out[strings.ToLower(k)] = v
+	}
+	return out
 }
 
 func (f *DenyFilter) Execute(ctx *engine.RequestContext) error {

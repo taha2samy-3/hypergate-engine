@@ -68,14 +68,23 @@ type FilterOptions struct {
 
 // ApplyDefaults enforces strict struct-level defaults and optimizes maps for zero-allocation runtime lookup.
 func (opts *FilterOptions) ApplyDefaults() {
+	if opts.DynamicCost.SourceHeader != "" {
+		opts.DynamicCost.SourceHeader = strings.ToLower(opts.DynamicCost.SourceHeader)
+	}
 	if opts.ResponseHeaders.LimitHeader == "" {
-		opts.ResponseHeaders.LimitHeader = "RateLimit-Limit"
+		opts.ResponseHeaders.LimitHeader = "ratelimit-limit"
+	} else {
+		opts.ResponseHeaders.LimitHeader = strings.ToLower(opts.ResponseHeaders.LimitHeader)
 	}
 	if opts.ResponseHeaders.RemainingHeader == "" {
-		opts.ResponseHeaders.RemainingHeader = "RateLimit-Remaining"
+		opts.ResponseHeaders.RemainingHeader = "ratelimit-remaining"
+	} else {
+		opts.ResponseHeaders.RemainingHeader = strings.ToLower(opts.ResponseHeaders.RemainingHeader)
 	}
 	if opts.ResponseHeaders.ResetHeader == "" {
-		opts.ResponseHeaders.ResetHeader = "RateLimit-Reset"
+		opts.ResponseHeaders.ResetHeader = "ratelimit-reset"
+	} else {
+		opts.ResponseHeaders.ResetHeader = strings.ToLower(opts.ResponseHeaders.ResetHeader)
 	}
 
 	// Pre-lowercase all keys in HeaderMappings to ensure zero dynamic heap allocations
