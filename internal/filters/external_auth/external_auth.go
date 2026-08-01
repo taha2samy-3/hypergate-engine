@@ -20,8 +20,6 @@ import (
 	mylogger "github.com/taha/myprog/internal/logger"
 )
 
-// ExternalAuthFilter implements the engine.Filter interface to delegate
-// authorization to an external sidecar over HTTP or gRPC using Unix Domain Sockets (UDS).
 type ExternalAuthFilter struct {
 	config     *config.ExternalAuthConfig
 	client     *http.Client
@@ -29,8 +27,6 @@ type ExternalAuthFilter struct {
 	grpcConn   *grpc.ClientConn
 }
 
-// NewExternalAuthFilter initializes a single reusable http.Client or gRPC client
-// configured to communicate over a UDS socket.
 func NewExternalAuthFilter(cfg *config.ExternalAuthConfig) (*ExternalAuthFilter, error) {
 	if strings.EqualFold(cfg.Protocol, "grpc") {
 		target := "unix://" + cfg.SocketPath
@@ -53,7 +49,6 @@ func NewExternalAuthFilter(cfg *config.ExternalAuthConfig) (*ExternalAuthFilter,
 		}, nil
 	}
 
-	// Default to HTTP protocol
 	transport := &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			var d net.Dialer
@@ -75,7 +70,6 @@ func NewExternalAuthFilter(cfg *config.ExternalAuthConfig) (*ExternalAuthFilter,
 	}, nil
 }
 
-// Close closes the underlying gRPC client connection if active.
 func (f *ExternalAuthFilter) Close() error {
 	if f.grpcConn != nil {
 		return f.grpcConn.Close()
@@ -83,7 +77,6 @@ func (f *ExternalAuthFilter) Close() error {
 	return nil
 }
 
-// Execute intercepts the RequestContext and delegates auth to the configured sidecar via HTTP or gRPC.
 func (f *ExternalAuthFilter) Execute(ctx *engine.RequestContext) error {
 	if strings.EqualFold(f.config.Protocol, "grpc") {
 		return f.executeGRPC(ctx)
@@ -91,7 +84,6 @@ func (f *ExternalAuthFilter) Execute(ctx *engine.RequestContext) error {
 	return f.executeHTTP(ctx)
 }
 
-// executeGRPC handles authorization check over Envoy gRPC ext_authz protocol.
 func (f *ExternalAuthFilter) executeGRPC(ctx *engine.RequestContext) error {
 	reqCtx := ctx.Ctx
 	if reqCtx == nil {
@@ -147,20 +139,17 @@ func (f *ExternalAuthFilter) executeGRPC(ctx *engine.RequestContext) error {
 
 	statusCode := resp.GetStatus().GetCode()
 
-	// Success: 0 / OK
 	if statusCode == int32(codes.OK) {
 		okHeaders := make(map[string]string)
 		if okResp := resp.GetOkResponse(); okResp != nil {
 			for _, hOption := range okResp.GetHeaders() {
 				if hOption != nil && hOption.GetHeader() != nil {
-					// Lowercase the sidecar response header keys to match our pre-lowercased config keys.
 					okHeaders[strings.ToLower(hOption.GetHeader().GetKey())] = hOption.GetHeader().GetValue()
 				}
 			}
 		}
 
 		for _, k := range f.config.OnSuccess.UpstreamHeadersToAdd {
-			// k is already pre-lowercased at parse-time; map key is also lowercased.
 			if val, ok := okHeaders[k]; ok {
 				ctx.SetHeaderUpstream(k, val)
 			}
@@ -171,7 +160,6 @@ func (f *ExternalAuthFilter) executeGRPC(ctx *engine.RequestContext) error {
 		return nil
 	}
 
-	// Auth Blocked / Denied (Non-zero status)
 	ctx.Blocked = true
 	deniedStatus := int32(http.StatusForbidden)
 	deniedResp := resp.GetDeniedResponse()
@@ -193,7 +181,6 @@ func (f *ExternalAuthFilter) executeGRPC(ctx *engine.RequestContext) error {
 	}
 
 	for _, k := range f.config.OnFailure.DownstreamPassThroughHeaders {
-		// k is already pre-lowercased at parse-time; map key is also lowercased.
 		if val, ok := deniedHeaders[k]; ok {
 			ctx.SetHeaderDownstream(k, val)
 		}
@@ -202,7 +189,6 @@ func (f *ExternalAuthFilter) executeGRPC(ctx *engine.RequestContext) error {
 	return nil
 }
 
-// executeHTTP handles authorization check over HTTP protocol.
 func (f *ExternalAuthFilter) executeHTTP(ctx *engine.RequestContext) error {
 	reqCtx := ctx.Ctx
 	if reqCtx == nil {
@@ -218,14 +204,12 @@ func (f *ExternalAuthFilter) executeHTTP(ctx *engine.RequestContext) error {
 		return nil
 	}
 
-	// Forward specified headers
 	for _, k := range f.config.ForwardHeaders {
 		if val := ctx.GetHeader(k); val != "" {
 			req.Header.Set(k, val)
 		}
 	}
 
-	// Execute communication over Unix Domain Socket
 	resp, err := f.client.Do(req)
 	if err != nil {
 		mylogger.Error("external_auth: UDS sidecar communication failed", zap.Error(err))
@@ -234,9 +218,10 @@ func (f *ExternalAuthFilter) executeHTTP(ctx *engine.RequestContext) error {
 		ctx.ResponseBody = "Internal Server Error"
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
-	// If Success (2xx)
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		for _, k := range f.config.OnSuccess.UpstreamHeadersToAdd {
 			if vals, ok := resp.Header[http.CanonicalHeaderKey(k)]; ok && len(vals) > 0 {
@@ -249,11 +234,10 @@ func (f *ExternalAuthFilter) executeHTTP(ctx *engine.RequestContext) error {
 		return nil
 	}
 
-	// If Failure (Non-2xx)
 	ctx.Blocked = true
 	ctx.ResponseStatus = int32(resp.StatusCode)
 
-	limitReader := io.LimitReader(resp.Body, 16*1024) // Limit to 16KB
+	limitReader := io.LimitReader(resp.Body, 16*1024)
 	bodyBytes, err := io.ReadAll(limitReader)
 	if err == nil {
 		ctx.ResponseBody = string(bodyBytes)
