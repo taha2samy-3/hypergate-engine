@@ -159,7 +159,7 @@ jobs:
         uses: tiagovrtr/actions-pipenv@v1
 
       - name: Install Python Dependencies
-        run: pipenv install --dev
+        run: pipenv install
 
       - name: Run Scenario Test (${{ matrix.scenario }})
         run: task test:${{ matrix.scenario }}
