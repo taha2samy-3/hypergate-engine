@@ -26,66 +26,72 @@ permissions:
   attestations: write
 
 jobs:
-  build-and-deploy:
-    name: Build & Deploy (${{ matrix.target }})
+  just-echo-message:
+    name: echo
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        target: [engine, operator]
-
     steps:
-      - uses: actions/checkout@v4
+      - run: echo "Hello"
 
-      - name: Resolve Image Tag
-        id: tag
-        shell: bash
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "value=${{ inputs.image_tag }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "value=sha-${{ github.sha }}" >> "$GITHUB_OUTPUT"
-          fi
+  # build-and-deploy:
+  #   name: Build & Deploy (${{ matrix.target }})
+  #   runs-on: ubuntu-latest
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       target: [engine, operator]
 
-      # On manual dispatch, skip components not selected by the user.
-      # 'all' means both engine and operator should run.
-      - name: Check Component Selection
-        id: check
-        shell: bash
-        run: |
-          COMPONENT="${{ inputs.component }}"
-          TARGET="${{ matrix.target }}"
-          if [ "${{ github.event_name }}" != "workflow_dispatch" ] || \
-             [ "$COMPONENT" = "all" ] || \
-             [ "$COMPONENT" = "$TARGET" ]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          fi
+  #   steps:
+  #     - uses: actions/checkout@v4
 
-      - name: Log in to GitHub Container Registry
-        if: steps.check.outputs.run == 'true'
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+  #     - name: Resolve Image Tag
+  #       id: tag
+  #       shell: bash
+  #       run: |
+  #         if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+  #           echo "value=${{ inputs.image_tag }}" >> "$GITHUB_OUTPUT"
+  #         else
+  #           echo "value=sha-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+  #         fi
 
-      - name: Build, Push and Attest Image
-        if: steps.check.outputs.run == 'true'
-        uses: ./.github/actions/build-push-image
-        with:
-          target: ${{ matrix.target }}
-          image_tag: ${{ steps.tag.outputs.value }}
-          registry: ghcr.io/taha2samy-3
+  #     # On manual dispatch, skip components not selected by the user.
+  #     # 'all' means both engine and operator should run.
+  #     - name: Check Component Selection
+  #       id: check
+  #       shell: bash
+  #       run: |
+  #         COMPONENT="${{ inputs.component }}"
+  #         TARGET="${{ matrix.target }}"
+  #         if [ "${{ github.event_name }}" != "workflow_dispatch" ] || \
+  #            [ "$COMPONENT" = "all" ] || \
+  #            [ "$COMPONENT" = "$TARGET" ]; then
+  #           echo "run=true" >> "$GITHUB_OUTPUT"
+  #         else
+  #           echo "run=false" >> "$GITHUB_OUTPUT"
+  #         fi
 
-      - name: Update GitOps Manifests
-        if: steps.check.outputs.run == 'true' && matrix.target == 'operator'
-        shell: bash
-        run: |
-          git config user.name "GitHub Actions Bot"
-          git config user.email "github-actions-bot@users.noreply.github.com"
-          sed -i 's|image: ghcr.io/taha2samy-3/hyper-operator:.*|image: ghcr.io/taha2samy-3/hyper-operator:${{ steps.tag.outputs.value }}|g' hyper-operator/deploy/deployment.yaml
-          git add hyper-operator/deploy/deployment.yaml
-          git diff-index --quiet HEAD || git commit -m "chore(deploy): update operator image to ${{ steps.tag.outputs.value }} [skip ci]"
-          git push origin main
+  #     - name: Log in to GitHub Container Registry
+  #       if: steps.check.outputs.run == 'true'
+  #       uses: docker/login-action@v3
+  #       with:
+  #         registry: ghcr.io
+  #         username: ${{ github.actor }}
+  #         password: ${{ secrets.GITHUB_TOKEN }}
+
+  #     - name: Build, Push and Attest Image
+  #       if: steps.check.outputs.run == 'true'
+  #       uses: ./.github/actions/build-push-image
+  #       with:
+  #         target: ${{ matrix.target }}
+  #         image_tag: ${{ steps.tag.outputs.value }}
+  #         registry: ghcr.io/taha2samy-3
+
+  #     - name: Update GitOps Manifests
+  #       if: steps.check.outputs.run == 'true' && matrix.target == 'operator'
+  #       shell: bash
+  #       run: |
+  #         git config user.name "GitHub Actions Bot"
+  #         git config user.email "github-actions-bot@users.noreply.github.com"
+  #         sed -i 's|image: ghcr.io/taha2samy-3/hyper-operator:.*|image: ghcr.io/taha2samy-3/hyper-operator:${{ steps.tag.outputs.value }}|g' hyper-operator/deploy/deployment.yaml
+  #         git add hyper-operator/deploy/deployment.yaml
+  #         git diff-index --quiet HEAD || git commit -m "chore(deploy): update operator image to ${{ steps.tag.outputs.value }} [skip ci]"
+  #         git push origin main
