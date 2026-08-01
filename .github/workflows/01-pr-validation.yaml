@@ -8,9 +8,12 @@ on:
       - opened
       - synchronize
       - reopened
+  # Required for the /retest ChatOps command in 05-chatops.yaml to work —
+  # createWorkflowDispatch() only works on workflows that have this trigger.
+  workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 permissions:
@@ -49,48 +52,10 @@ jobs:
               - 'Dockerfile'
               - 'hyper-operator/Dockerfile'
 
-  lint-and-security:
-    name: Lint & Security Scan
-    needs: detect-changes
-    if: ${{ needs.detect-changes.outputs.code_changed == 'true' }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Scan for Leaked Secrets
-        uses: trufflesecurity/trufflehog@main
-        with:
-          base: ${{ github.event.pull_request.base.sha }}
-          head: ${{ github.event.pull_request.head.sha }}
-          extra_args: --debug --only-verified
-
-      - name: Set up Go Environment
-        uses: ./.github/actions/setup-go-env
-
-      - name: Run Go Linters
-        uses: golangci/golangci-lint-action@v7
-        with:
-          version: v2.12.2
-
-      - name: Run Trivy Security Scan
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: 'fs'
-          ignore-unfixed: true
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-
-      - name: Upload Security Results to Security Tab
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
-        with:
-          sarif_file: 'trivy-results.sarif'
-
   build-dry-run:
     name: Verify Multi-Platform Build (${{ matrix.target }})
-    needs: lint-and-security
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.code_changed == 'true' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

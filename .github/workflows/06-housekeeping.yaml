@@ -2,6 +2,7 @@ name: Housekeeping & Maintenance
 
 on:
   schedule:
+    # Every Sunday at 00:00 UTC
     - cron: '0 0 * * 0'
   workflow_dispatch:
 
@@ -31,15 +32,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Self-Hosted Renovate
-        uses: renovatebot/github-action@v43.0.0
+        uses: renovatebot/github-action@v46
         env:
           LOG_LEVEL: debug
           RENOVATE_REPOSITORIES: ${{ github.repository }}
         with:
           configurationFile: .github/renovate.json5
           token: ${{ secrets.GITHUB_TOKEN }}
-          renovate-repositories: ${{ github.repository }}
-
-
-              
-
