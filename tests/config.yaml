@@ -1,0 +1,78 @@
+version: "v1"
+
+server:
+  address: "0.0.0.0:9001"
+  max_concurrent_streams: 1024
+
+telemetry:
+  logging:
+    level: "DEBUG"
+    format: "console"
+    output_path: "stdout"
+    development: false
+
+chains:
+  chain_modify:
+    - type: "header_modifier"
+      options:
+        add:
+          "x-auth-status": "verified"
+        override:
+          "x-user-id": "123"
+        remove:
+          - "authorization"
+
+  chain_split_modifier:
+    - type: "header_modifier"
+      options:
+        upstream:
+          override:
+            "x-flow-id": "internal-123"
+          remove:
+            - "x-debug-key"
+        downstream:
+          add:
+            "x-flow-id": "external-abc"
+            "x-processed-by": "hyper-engine"
+
+  chain_conflict_test:
+    - type: "header_modifier"
+      options:
+        upstream:
+          remove:
+            - "x-test-conflict"
+    - type: "header_modifier"
+      options:
+        upstream:
+          add:
+            "x-test-conflict": "revived"
+
+  chain_split_test:
+    - type: "header_modifier"
+      options:
+        upstream:
+          override:
+            "x-version": "v1-internal"
+        downstream:
+          add:
+            "x-version": "v1-public"
+
+router:
+  routes:
+    - target_chain: "chain_modify"
+      matches:
+        - path_prefix: "/api/modify"
+
+    - target_chain: "chain_split_test"
+      matches:
+        - path_prefix: "/api/test/splitv2"
+
+    - target_chain: "chain_split_modifier"
+      matches:
+        - path_prefix: "/api/test/split"
+
+    - target_chain: "chain_conflict_test"
+      matches:
+        - path_prefix: "/api/test/conflict"
+
+  other: "chain_modify"

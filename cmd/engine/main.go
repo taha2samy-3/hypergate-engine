@@ -137,7 +137,7 @@ func main() {
 	mylogger.Debug("Initializing core components")
 	registry := engine.NewChainRegistry()
 	executor := engine.NewChainExecutor()
-	pool := memory.NewContextPool(initialConfig.Server.InitialHeaderCapacity)
+	pool := memory.NewContextPool(initialConfig.Server.InitialHeaderCapacity, initialConfig.Server.InitialHeaderCapacity/2)
 	pool.Prewarm(initialConfig.Server.PoolPrewarmSize)
 	routerInst := router.NewEngineRouter()
 
