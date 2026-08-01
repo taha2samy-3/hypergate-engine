@@ -1,4 +1,4 @@
-name: Code Analysis & Security Scanning
+name: Code Analysis, Security Scanning & Integration Tests
 
 on:
   push:
@@ -8,7 +8,6 @@ on:
     branches:
       - main
   schedule:
-    # Every Monday at 02:00 UTC
     - cron: '0 2 * * 1'
   workflow_dispatch:
 
@@ -23,11 +22,9 @@ permissions:
   packages: read
 
 jobs:
-  # ── 1. Secret Detection ───────────────────────────────────────────────────
   secret-detection:
     name: Secret Detection (TruffleHog)
     runs-on: ubuntu-latest
-    # Skip automated dependency-update bots
     if: |
       github.actor != 'dependabot[bot]' &&
       github.actor != 'github-actions[bot]' &&
@@ -42,12 +39,10 @@ jobs:
       - name: Scan for Leaked Secrets
         uses: trufflesecurity/trufflehog@main
         with:
-          # On PRs scan only the delta; on push/schedule scan the full repo
           base: ${{ github.event.pull_request.base.sha || '' }}
           head: ${{ github.event.pull_request.head.sha || github.sha }}
           extra_args: --only-verified
 
-  # ── 2. Go Linting ────────────────────────────────────────────────────────
   lint:
     name: Go Linting (GolangCI-Lint)
     runs-on: ubuntu-latest
@@ -63,14 +58,15 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Go Environment
-        uses: ./.github/actions/setup-go-env
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
 
       - name: Run Go Linters
         uses: golangci/golangci-lint-action@v7
         with:
           version: v2.12.2
 
-  # ── 3. Vulnerability Scanning ─────────────────────────────────────────────
   vulnerability-scan:
     name: Vulnerability Scan (Trivy)
     runs-on: ubuntu-latest
@@ -93,7 +89,6 @@ jobs:
           sarif_file: 'trivy-results.sarif'
           category: 'trivy-filesystem'
 
-  # ── 4. CodeQL Static Analysis ─────────────────────────────────────────────
   codeql:
     name: CodeQL Analysis (${{ matrix.language }})
     runs-on: ubuntu-latest
@@ -127,3 +122,44 @@ jobs:
         uses: github/codeql-action/analyze@v3
         with:
           category: '/language:${{ matrix.language }}'
+
+  integration-tests:
+    name: Integration Test (${{ matrix.scenario }})
+    runs-on: ubuntu-latest
+    if: |
+      github.actor != 'dependabot[bot]' &&
+      github.actor != 'github-actions[bot]' &&
+      !startsWith(github.head_ref, 'renovate/') &&
+      !startsWith(github.head_ref, 'dependabot/')
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [api-key, ratelimit, modification, metadata, correlation]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Task Runner
+        uses: go-task/setup-task@v2
+        with:
+          version: 3.x
+
+      - name: Set up Go Environment
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Set up Python Environment
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Pipenv
+        uses: tiagovrtr/actions-pipenv@v1
+
+      - name: Install Python Dependencies
+        run: pipenv install --dev
+
+      - name: Run Scenario Test (${{ matrix.scenario }})
+        run: task test:${{ matrix.scenario }}
