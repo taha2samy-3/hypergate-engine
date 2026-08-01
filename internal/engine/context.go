@@ -192,13 +192,7 @@ func (ctx *RequestContext) SetTrailerUpstream(key, value string) {
 	ctx.RequestTrailersModified = true
 }
 
-func (ctx *RequestContext) requestHeaderActionChecked(key string) {
-	for i := 0; i < len(ctx.HeadersToAdd); i++ {
-		if ctx.HeadersToAdd[i].Key == key {
-			return
-		}
-	}
-}
+
 
 func (ctx *RequestContext) RemoveHeaderUpstreamTrailer(key string) {
 	key = strings.ToLower(key)

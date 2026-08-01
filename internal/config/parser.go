@@ -33,7 +33,8 @@ func LoadConfig() (*Config, string, error) {
 	var err error
 	configPath := ""
 
-	if provider == "K8S" {
+	switch provider {
+	case "K8S":
 		config, err := rest.InClusterConfig()
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to load in-cluster config: %w", err)
@@ -63,7 +64,7 @@ func LoadConfig() (*Config, string, error) {
 		}
 		data = []byte(yamlContent)
 		configPath = cmName
-	} else if provider == "URL" {
+	case "URL":
 		configURL := os.Getenv(EnvConfigURL)
 		if configURL == "" {
 			return nil, "", fmt.Errorf("config provider set to URL but CONFIG_URL is empty")
@@ -75,7 +76,9 @@ func LoadConfig() (*Config, string, error) {
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to fetch remote config: %w", err)
 		}
-		defer resp.Body.Close()
+		defer func() {
+			_ = resp.Body.Close()
+		}()
 
 		if resp.StatusCode != http.StatusOK {
 			return nil, "", fmt.Errorf("remote config server returned non-200 status: %d", resp.StatusCode)
@@ -85,7 +88,7 @@ func LoadConfig() (*Config, string, error) {
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to read remote config body: %w", err)
 		}
-	} else {
+	default:
 		configPath = DefaultConfigPath
 		if envPath := os.Getenv(EnvConfigPath); envPath != "" {
 			configPath = envPath
@@ -132,9 +135,6 @@ func ParseBytes(data []byte) (*Config, error) {
 	}
 	if cfg.Server.InitialHeaderCapacity <= 0 {
 		cfg.Server.InitialHeaderCapacity = 64
-	}
-	if cfg.Server.PreallocBodyBufferBytes <= 0 {
-		cfg.Server.PreallocBodyBufferBytes = 65536 // 64KB default
 	}
 
 	if cfg.Telemetry.Logging.Level == "" {

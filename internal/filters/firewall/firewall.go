@@ -21,8 +21,6 @@ import (
 	mylogger "github.com/taha/myprog/internal/logger"
 )
 
-// FirewallFilter implements the engine.Filter interface to perform request inspection
-// (Headers, URI, Request Body) over HTTP or gRPC using Unix Domain Sockets (UDS).
 type FirewallFilter struct {
 	config     *config.FirewallFilterConfig
 	httpClient *http.Client
@@ -30,7 +28,6 @@ type FirewallFilter struct {
 	grpcConn   *grpc.ClientConn
 }
 
-// NewFirewallFilter initializes a reusable HTTP or gRPC client configured to communicate with the firewall sidecar over UDS.
 func NewFirewallFilter(cfg *config.FirewallFilterConfig) (*FirewallFilter, error) {
 	if strings.EqualFold(cfg.Protocol, "grpc") {
 		target := "unix://" + cfg.SocketPath
@@ -74,7 +71,6 @@ func NewFirewallFilter(cfg *config.FirewallFilterConfig) (*FirewallFilter, error
 	}, nil
 }
 
-// Close closes the underlying gRPC connection if active.
 func (f *FirewallFilter) Close() error {
 	if f.grpcConn != nil {
 		return f.grpcConn.Close()
@@ -82,7 +78,6 @@ func (f *FirewallFilter) Close() error {
 	return nil
 }
 
-// Execute inspects the request context and delegates WAF evaluation to the firewall sidecar over HTTP or gRPC.
 func (f *FirewallFilter) Execute(ctx *engine.RequestContext) error {
 	if f.config.InspectBody {
 		ctx.RequestBodyRequired = true
@@ -94,7 +89,6 @@ func (f *FirewallFilter) Execute(ctx *engine.RequestContext) error {
 	return f.executeHTTP(ctx)
 }
 
-// executeGRPC handles firewall inspection via Envoy ext_proc gRPC streaming interface.
 func (f *FirewallFilter) executeGRPC(ctx *engine.RequestContext) error {
 	reqCtx := ctx.Ctx
 	if reqCtx == nil {
@@ -110,7 +104,6 @@ func (f *FirewallFilter) executeGRPC(ctx *engine.RequestContext) error {
 		return nil
 	}
 
-	// Phase 1: Send Request Headers
 	var headerValues []*configv3.HeaderValue
 	headerValues = append(headerValues, &configv3.HeaderValue{
 		Key:   ":path",
@@ -190,7 +183,6 @@ func (f *FirewallFilter) executeGRPC(ctx *engine.RequestContext) error {
 		return nil
 	}
 
-	// Phase 2: Send Request Body (If InspectBody enabled & Body present)
 	if f.config.InspectBody && len(ctx.RequestBody) > 0 {
 		maxBytes := int(f.config.MaxBodySizeKB) * 1024
 		bodyBytes := ctx.RequestBody
@@ -241,7 +233,6 @@ func (f *FirewallFilter) executeGRPC(ctx *engine.RequestContext) error {
 		}
 	}
 
-	// On WAF Allowed: Process header mutations if provided in response
 	if hResp := resp.GetRequestHeaders(); hResp != nil && hResp.GetResponse() != nil {
 		if mutations := hResp.GetResponse().GetHeaderMutation(); mutations != nil {
 			for _, hOption := range mutations.GetSetHeaders() {
@@ -273,7 +264,6 @@ func (f *FirewallFilter) executeGRPC(ctx *engine.RequestContext) error {
 	return nil
 }
 
-// executeHTTP handles firewall inspection via HTTP UDS protocol.
 func (f *FirewallFilter) executeHTTP(ctx *engine.RequestContext) error {
 	reqCtx := ctx.Ctx
 	if reqCtx == nil {
@@ -337,7 +327,9 @@ func (f *FirewallFilter) executeHTTP(ctx *engine.RequestContext) error {
 		ctx.ResponseBody = "Internal Server Error"
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		for _, k := range f.config.OnSuccess.UpstreamHeadersToAdd {

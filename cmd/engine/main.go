@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"sync"
@@ -28,10 +30,6 @@ type activeChecker struct {
 }
 
 var activeHealthCheckers = make(map[string]activeChecker)
-
-// activeCheckersMu guards all read and write access to activeHealthCheckers.
-// Maps are not safe for concurrent use; the hot-reload goroutine and the boot
-// path both mutate this map, so a mutex is mandatory to prevent data races.
 var activeCheckersMu sync.RWMutex
 
 func compileAndRegister(cfg *config.Config, registry *engine.ChainRegistry) error {
@@ -106,6 +104,10 @@ func startRedisServices(ctx context.Context, cfg *config.Config) error {
 }
 
 func main() {
+	go func() {
+		_ = http.ListenAndServe("0.0.0.0:6060", nil)
+	}()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -121,7 +123,9 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
 		os.Exit(1)
 	}
-	defer mylogger.Sync()
+	defer func() {
+		_ = mylogger.Sync()
+	}()
 
 	mylogger.Info("Configuration loaded successfully", zap.String("version", initialConfig.Version))
 	mylogger.Debug("Application configuration fully stored in atomic pointer")
@@ -133,17 +137,13 @@ func main() {
 	mylogger.Debug("Initializing core components")
 	registry := engine.NewChainRegistry()
 	executor := engine.NewChainExecutor()
-	pool := memory.NewContextPool(
-		initialConfig.Server.InitialHeaderCapacity,
-		initialConfig.Server.PreallocBodyBufferBytes,
-	)
+	pool := memory.NewContextPool(initialConfig.Server.InitialHeaderCapacity)
 	pool.Prewarm(initialConfig.Server.PoolPrewarmSize)
 	routerInst := router.NewEngineRouter()
 
 	mylogger.Info("Core components successfully initialized",
 		zap.Int("pool_prewarm_size", initialConfig.Server.PoolPrewarmSize),
 		zap.Int("initial_header_capacity", initialConfig.Server.InitialHeaderCapacity),
-		zap.Int("prealloc_body_buffer_bytes", initialConfig.Server.PreallocBodyBufferBytes),
 	)
 
 	if err := compileAndRegister(initialConfig, registry); err != nil {

@@ -65,7 +65,7 @@ func main() {
 	if err = (&controller.HyperRedisReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("hyperredis-controller"),
+		Recorder: mgr.GetEventRecorder("hyperredis-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "HyperRedis")
 		os.Exit(1)

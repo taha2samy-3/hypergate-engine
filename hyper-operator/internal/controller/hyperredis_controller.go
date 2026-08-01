@@ -17,17 +17,11 @@ import (
 	"github.com/taha/myprog/internal/redis"
 )
 
-// HyperRedisReconciler reconciles a HyperRedis object
 type HyperRedisReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
 }
-
-// +kubebuilder:rbac:groups=infra.hyper.io,resources=hyperredis,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=infra.hyper.io,resources=hyperredis/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=infra.hyper.io,resources=hyperredis/finalizers,verbs=update
-// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 func (r *HyperRedisReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -47,7 +41,7 @@ func (r *HyperRedisReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	timeoutDur, err := time.ParseDuration(hyperRedis.Spec.Timeout)
 	if err != nil || timeoutDur == 0 {
-		timeoutDur = 5 * time.Second // Safe fallback
+		timeoutDur = 5 * time.Second
 	}
 	startupElapsed, _ := time.ParseDuration("2s")
 
@@ -80,7 +74,9 @@ func (r *HyperRedisReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
-	defer redisClient.Close()
+	defer func() {
+		_ = redisClient.Close()
+	}()
 
 	hyperRedis.Status.State = hyperv1alpha1.RedisStateConnected
 	hyperRedis.Status.LastCheck = metav1.Now()
@@ -94,7 +90,6 @@ func (r *HyperRedisReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	return ctrl.Result{RequeueAfter: 60 * time.Second}, nil
 }
 
-// SetupWithManager sets up the controller with the Manager.
 func (r *HyperRedisReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&hyperv1alpha1.HyperRedis{}).

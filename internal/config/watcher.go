@@ -111,7 +111,9 @@ func watchURLConfig(onReload func(*Config)) {
 			http.Error(w, fmt.Sprintf("Failed to fetch config: %v", err), http.StatusInternalServerError)
 			return
 		}
-		defer resp.Body.Close()
+		defer func() {
+			_ = resp.Body.Close()
+		}()
 
 		if resp.StatusCode != http.StatusOK {
 			http.Error(w, fmt.Sprintf("Remote server returned status: %d", resp.StatusCode), http.StatusInternalServerError)
@@ -148,7 +150,9 @@ func watchFileConfig(configPath string, onReload func(*Config)) {
 	if err != nil {
 		return
 	}
-	defer watcher.Close()
+	defer func() {
+		_ = watcher.Close()
+	}()
 
 	dir := filepath.Dir(configPath)
 	err = watcher.Add(dir)

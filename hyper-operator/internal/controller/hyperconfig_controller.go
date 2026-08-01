@@ -158,7 +158,7 @@ func (r *HyperConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if ds.Spec.Selector == nil {
 			ds.Spec.Selector = &metav1.LabelSelector{MatchLabels: labels}
 		}
-		ds.Spec.Template.ObjectMeta.Labels = labels
+		ds.Spec.Template.Labels = labels
 		ds.Spec.Template.Spec.ServiceAccountName = saName
 
 		// --- Engine container ---
