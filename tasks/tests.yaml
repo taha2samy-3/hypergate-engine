@@ -11,13 +11,11 @@ tasks:
       - cp tests/{{.NAME}}/config.yaml tests/config.yaml
       - docker compose -f tests/docker-compose.yaml --project-directory tests up -d --build --force-recreate
       - |
-        echo "Waiting for hyper-engine on port 9001..."
         until nc -z 127.0.0.1 9001; do sleep 1; done
       - |
-        echo "Waiting for envoy-proxy on port 8080..."
         until nc -z 127.0.0.1 8080; do sleep 1; done
       - sleep 5
-      - pipenv run pytest tests/{{.NAME}}/test_{{.NAME}}.py -v
+      - bash scripts/measure_cs.sh pipenv run pytest tests/{{.NAME}}/test_{{.NAME}}.py -v -s
 
   teardown:
     internal: true

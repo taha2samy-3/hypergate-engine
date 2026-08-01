@@ -26,7 +26,7 @@ def test_fixed_window(session, get_response_headers):
     resp = session.get(f"{BASE_URL}/baseline", timeout=REQUEST_TIMEOUT)
     assert resp.status_code == 429
 
-    time.sleep(10)
+    
 
     resp = session.get(f"{BASE_URL}/baseline", timeout=REQUEST_TIMEOUT)
     assert resp.status_code == 200
@@ -34,7 +34,7 @@ def test_fixed_window(session, get_response_headers):
     assert int(headers.get("ratelimit-remaining")) == 4
 
 def test_token_bucket_burst_and_refill(session, get_response_headers):
-    time.sleep(10)
+    
 
     for i in range(10):
         resp = session.get(f"{BASE_URL}/token", timeout=REQUEST_TIMEOUT)
@@ -58,7 +58,7 @@ def test_token_bucket_burst_and_refill(session, get_response_headers):
     assert resp3.status_code == 429
 
 def test_dynamic_costing(session, get_response_headers):
-    time.sleep(10)
+    
 
     resp = session.get(f"{BASE_URL}/token", timeout=REQUEST_TIMEOUT)
     assert resp.status_code == 200
@@ -88,7 +88,7 @@ def test_redis_failure_fail_closed(session):
         start_redis()
 
 def test_empty_client_ip_fallback(session, get_response_headers):
-    time.sleep(10)
+    
 
     for i in range(5):
         resp = session.get(f"{BASE_URL}/baseline", timeout=REQUEST_TIMEOUT)
@@ -101,7 +101,7 @@ def test_empty_client_ip_fallback(session, get_response_headers):
     assert resp.status_code == 200
 
 def test_burst_traffic_token_vs_leaky(session):
-    time.sleep(10)
+    
 
     for i in range(20):
         resp = session.get(f"{BASE_URL}/token", timeout=REQUEST_TIMEOUT)
@@ -118,7 +118,7 @@ def test_burst_traffic_token_vs_leaky(session):
             assert resp.status_code == 429
 
 def test_l1_cache_fairness_dynamic_costing(session):
-    time.sleep(10)
+    
 
     resp_expensive = session.get(f"{BASE_URL}/token", headers={"X-Cost": "25"}, timeout=REQUEST_TIMEOUT)
     assert resp_expensive.status_code == 429
@@ -165,7 +165,7 @@ def test_window_boundary_fixed_vs_sliding(session):
     assert blocked
 
 def test_chained_filter_integration(session, get_response_headers, extract_received_headers):
-    time.sleep(10)
+    
 
     resp = session.get(f"{BASE_URL}/token", timeout=REQUEST_TIMEOUT)
     assert resp.status_code == 200
@@ -191,7 +191,7 @@ def test_chained_filter_integration(session, get_response_headers, extract_recei
 
 
 def test_sliding_window_log_threshold_enforcement(session, get_response_headers):
-    time.sleep(10)
+    
 
     for i in range(5):
         resp = session.get(f"{BASE_URL}/sliding_log",headers={"X-Forwarded-For": "7.7.7.7"}, timeout=REQUEST_TIMEOUT)
@@ -200,14 +200,14 @@ def test_sliding_window_log_threshold_enforcement(session, get_response_headers)
     resp = session.get(f"{BASE_URL}/sliding_log",headers={"X-Forwarded-For": "7.7.7.7"}, timeout=REQUEST_TIMEOUT)
     assert resp.status_code == 429
 
-    time.sleep(10)
+    
 
     resp = session.get(f"{BASE_URL}/sliding_log",headers={"X-Forwarded-For": "7.7.7.7"}, timeout=REQUEST_TIMEOUT)
     assert resp.status_code == 200
 
 
 def test_leaky_bucket_steady_state_leaking(session):
-    time.sleep(10)
+    
 
     for i in range(10):
         resp = session.get(f"{BASE_URL}/leaky",headers={"X-Forwarded-For": "8.8.8.8"}, timeout=REQUEST_TIMEOUT)
@@ -227,7 +227,7 @@ def test_leaky_bucket_steady_state_leaking(session):
 
 
 def test_sliding_window_counter_degradation(session, get_response_headers):
-    time.sleep(10)
+    
 
     for i in range(5):
         resp = session.get(f"{BASE_URL}/sliding",headers={"X-Forwarded-For": "9.9.9.9"}, timeout=REQUEST_TIMEOUT)
