@@ -215,7 +215,7 @@ func probeOnce(ctx context.Context, client Client, checker *HealthChecker) {
 	// DoCmd is defined on the Client interface — call it directly.
 	// key is "" because PING takes no key argument.
 	var reply string
-	err := client.DoCmd(&reply, "PING", "")
+	err := client.DoCmd(probeCtx, &reply, "PING", "")
 
 	// Ensure the probe context cancellation is observed even if DoCmd
 	// returned before the deadline fired (e.g. the pool is fast but the
@@ -243,103 +243,6 @@ func probeOnce(ctx context.Context, client Client, checker *HealthChecker) {
 	}
 
 	checker.ok()
-}
-
-// ---------------------------------------------------------------------------
-// StartHealthChecks — convenience wrapper for Manager
-// ---------------------------------------------------------------------------
-
-// StartHealthChecks iterates over every named Client in the Manager and starts
-// an independent health-check goroutine for each service whose configuration
-// has active_conn_health_check == true.
-//
-// healthCheckers is a map from service name to its HealthChecker. If a service
-// name is not present in healthCheckers a new HealthChecker is created, stored
-// back in the map, and monitoring is started.
-//
-// This function is intended to be called once after NewManager returns.
-//
-//	checkers := make(map[string]*redis.HealthChecker)
-//	redis.StartHealthChecks(ctx, mgr, checkers, cfg)
-func StartHealthChecks(
-	ctx context.Context,
-	mgr *Manager,
-	healthCheckers map[string]*HealthChecker,
-	cfg map[string]interface{ GetActiveConnHealthCheck() bool },
-) {
-	mgr.mu.RLock()
-	defer mgr.mu.RUnlock()
-
-	for name, client := range mgr.clients {
-		svcCfg, ok := cfg[name]
-		if !ok || !svcCfg.GetActiveConnHealthCheck() {
-			continue
-		}
-
-		hc, exists := healthCheckers[name]
-		if !exists {
-			hc = NewHealthChecker(name)
-			healthCheckers[name] = hc
-		}
-
-		StartHealthCheck(ctx, client, hc, 5*time.Second)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// StartServiceHealthCheck — typed convenience helper
-// ---------------------------------------------------------------------------
-
-// StartServiceHealthChecksFromConfig starts health monitors for all services
-// whose RedisServiceConfig has ActiveConnHealthCheck == true.
-//
-// It returns a map[serviceName]*HealthChecker that callers can use to expose
-// /healthz endpoints.
-func StartServiceHealthChecksFromConfig(
-	ctx context.Context,
-	mgr *Manager,
-	redisCfg map[string]interface {
-		IsActiveConnHealthCheck() bool
-		GetPingInterval() time.Duration
-	},
-) map[string]*HealthChecker {
-	checkers := make(map[string]*HealthChecker, len(redisCfg))
-
-	mgr.mu.RLock()
-	clients := make(map[string]Client, len(mgr.clients))
-	for k, v := range mgr.clients {
-		clients[k] = v
-	}
-	mgr.mu.RUnlock()
-
-	for name, svcCfg := range redisCfg {
-		if !svcCfg.IsActiveConnHealthCheck() {
-			continue
-		}
-		client, ok := clients[name]
-		if !ok {
-			mylogger.Warn("StartServiceHealthChecksFromConfig: service not found in manager",
-				zap.String("service", name),
-			)
-			continue
-		}
-
-		interval := svcCfg.GetPingInterval()
-		if interval <= 0 {
-			interval = 5 * time.Second
-		}
-
-		hc := NewHealthChecker(name)
-		checkers[name] = hc
-		StartHealthCheck(ctx, client, hc, interval)
-
-		mylogger.Info("Redis health monitor registered",
-			zap.String("service", name),
-			zap.Duration("interval", interval),
-		)
-	}
-
-	return checkers
 }
 
 // ---------------------------------------------------------------------------

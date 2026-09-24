@@ -78,11 +78,33 @@ func (f *FirewallFilter) Close() error {
 	return nil
 }
 
-func (f *FirewallFilter) Execute(ctx *engine.RequestContext) error {
+// SupportedPhases runs the firewall on request headers and, when body inspection is
+// enabled, on the buffered request body.
+func (f *FirewallFilter) SupportedPhases() []engine.Phase {
 	if f.config.InspectBody {
-		ctx.RequestBodyRequired = true
+		return []engine.Phase{engine.PhaseRequestHeaders, engine.PhaseRequestBody}
 	}
+	return []engine.Phase{engine.PhaseRequestHeaders}
+}
 
+// Execute inspects the request exactly once. Without body inspection, or when the
+// request has no body, the sidecar is called during the headers phase. Otherwise the
+// headers phase only asks Envoy to buffer the body and the sidecar is called with
+// headers and body together in the body phase.
+func (f *FirewallFilter) Execute(ctx *engine.RequestContext) error {
+	if f.config.InspectBody && !ctx.RequestEndOfStream && ctx.Phase == engine.PhaseRequestHeaders {
+		// Requires Envoy's ext_proc `allow_mode_override: true` (or a static BUFFERED
+		// request_body_mode). If the body never arrives the gRPC layer fails closed.
+		ctx.RequestBodyRequired = true
+		return nil
+	}
+	if ctx.Phase == engine.PhaseRequestBody && (!f.config.InspectBody || ctx.RequestEndOfStream) {
+		return nil // already inspected during the headers phase
+	}
+	return f.inspect(ctx)
+}
+
+func (f *FirewallFilter) inspect(ctx *engine.RequestContext) error {
 	if strings.EqualFold(f.config.Protocol, "grpc") {
 		return f.executeGRPC(ctx)
 	}

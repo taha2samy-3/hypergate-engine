@@ -176,7 +176,7 @@ func (e *fixedWindowExecutor) Evaluate(ctx context.Context, descriptors []Descri
 				buf = append(buf, extracted[entry.Key]...)
 			}
 			buf = append(buf, '_')
-			strconv.AppendInt(buf, roundedTimestamp, 10)
+			buf = strconv.AppendInt(buf, roundedTimestamp, 10)
 
 			keyStr = string(buf)
 		}

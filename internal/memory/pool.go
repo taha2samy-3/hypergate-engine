@@ -28,14 +28,16 @@ func NewContextPool(initialHeaderCap int, preallocBodyBytes int) *ContextPool {
 		pool: &sync.Pool{
 			New: func() interface{} {
 				return &engine.RequestContext{
-					Headers:              make(map[string]string, initialHeaderCap),
-					HeadersToAdd:         make([]engine.Header, 0, sliceCap),
-					ResponseHeadersToAdd: make([]engine.Header, 0, sliceCap),
-					HeadersToRemove:      make([]string, 0, sliceCap),
-					UpstreamShadow:       make(map[string]string, initialHeaderCap),
-					DownstreamShadow:     make(map[string]string, initialHeaderCap),
-					SetHeaderOptions:     make([]*corev3.HeaderValueOption, 0, sliceCap),
-					RawBodyBuffer:        make([]byte, 0, preallocBodyBytes),
+					Headers:                 make(map[string]string, initialHeaderCap),
+					ResponseHeaders:         make(map[string]string, initialHeaderCap),
+					HeadersToAdd:            make([]engine.Header, 0, sliceCap),
+					ResponseHeadersToAdd:    make([]engine.Header, 0, sliceCap),
+					HeadersToRemove:         make([]string, 0, sliceCap),
+					ResponseHeadersToRemove: make([]string, 0, sliceCap),
+					UpstreamShadow:          make(map[string]string, initialHeaderCap),
+					DownstreamShadow:        make(map[string]string, initialHeaderCap),
+					SetHeaderOptions:        make([]*corev3.HeaderValueOption, 0, sliceCap),
+					RawBodyBuffer:           make([]byte, 0, preallocBodyBytes),
 				}
 			},
 		},

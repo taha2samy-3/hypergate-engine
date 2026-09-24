@@ -100,16 +100,19 @@ resources:
     memory: 512Mi
 
 # ── Probes ───────────────────────────────────────────────────────────────────
+# The engine serves /healthz and /readyz on server.health_address (default :9003).
+# /readyz only succeeds once a policy is compiled and the gRPC listener is serving.
 livenessProbe:
-  tcpSocket:
-    port: 9001
-  initialDelaySeconds: 5
+  httpGet:
+    path: /healthz
+    port: health
+  initialDelaySeconds: 10
   periodSeconds: 10
 
 readinessProbe:
-  tcpSocket:
-    port: 9001
-  initialDelaySeconds: 3
+  httpGet:
+    path: /readyz
+    port: health
   periodSeconds: 5
 
 # ── Security ─────────────────────────────────────────────────────────────────

@@ -16,13 +16,22 @@ func NewEngineRouter() *EngineRouter {
 	return &EngineRouter{}
 }
 
+// Route matches the request against the globally active config.
 func (r *EngineRouter) Route(ctx *engine.RequestContext) string {
+	activeCfg := config.GlobalConfig.Load()
+	if activeCfg == nil {
+		return ""
+	}
+	return r.RouteWith(&activeCfg.Router, ctx)
+}
+
+// RouteWith matches the request against rc and returns the target chain name.
+// An empty result means no route and no default chain are configured.
+func (r *EngineRouter) RouteWith(rc *config.RouterConfig, ctx *engine.RequestContext) string {
 	mylogger.Debug("Routing incoming request", zap.String("path", ctx.Path), zap.String("method", ctx.Method))
 
-	activeCfg := config.GlobalConfig.Load()
-
-	for i := 0; i < len(activeCfg.Router.Routes); i++ {
-		route := &activeCfg.Router.Routes[i]
+	for i := 0; i < len(rc.Routes); i++ {
+		route := &rc.Routes[i]
 
 		for j := 0; j < len(route.Matches); j++ {
 			match := &route.Matches[j]
@@ -81,9 +90,9 @@ func (r *EngineRouter) Route(ctx *engine.RequestContext) string {
 		}
 	}
 
-	fallbackChain := activeCfg.Router.DefaultChain
+	fallbackChain := rc.DefaultChain
 	if fallbackChain == "" {
-		fallbackChain = activeCfg.Router.Other
+		fallbackChain = rc.Other
 	}
 
 	mylogger.Debug("No route rule matched, falling back to 'default_chain'", zap.String("default_chain", fallbackChain))

@@ -28,6 +28,7 @@ var _ admission.Validator[*hyperv1alpha1.RedisMetadataEnricherFilter] = &FilterP
 var _ admission.Validator[*hyperv1alpha1.ApiKeyFilter] = &FilterProtectionValidator[*hyperv1alpha1.ApiKeyFilter]{Kind: "ApiKeyFilter"}
 var _ admission.Validator[*hyperv1alpha1.ExternalAuthFilter] = &FilterProtectionValidator[*hyperv1alpha1.ExternalAuthFilter]{Kind: "ExternalAuthFilter"}
 var _ admission.Validator[*hyperv1alpha1.FirewallFilter] = &FilterProtectionValidator[*hyperv1alpha1.FirewallFilter]{Kind: "FirewallFilter"}
+var _ admission.Validator[*hyperv1alpha1.JwtAuthFilter] = &FilterProtectionValidator[*hyperv1alpha1.JwtAuthFilter]{Kind: "JwtAuthFilter"}
 
 // ValidateCreate implements admission.Validator.
 func (v *FilterProtectionValidator[T]) ValidateCreate(ctx context.Context, obj T) (admission.Warnings, error) {
@@ -60,7 +61,7 @@ func (v *FilterProtectionValidator[T]) ValidateDelete(ctx context.Context, obj T
 	return nil, nil
 }
 
-// SetupFiltersWebhookWithManager registers the webhook for the four filter types
+// SetupFiltersWebhookWithManager registers the delete-protection webhook for every filter type
 func SetupFiltersWebhookWithManager(mgr ctrl.Manager) error {
 	c := mgr.GetClient()
 
@@ -116,6 +117,13 @@ func SetupFiltersWebhookWithManager(mgr ctrl.Manager) error {
 	// Register validator for FirewallFilter
 	if err := ctrl.NewWebhookManagedBy(mgr, &hyperv1alpha1.FirewallFilter{}).
 		WithValidator(&FilterProtectionValidator[*hyperv1alpha1.FirewallFilter]{Client: c, Kind: "FirewallFilter"}).
+		Complete(); err != nil {
+		return err
+	}
+
+	// Register validator for JwtAuthFilter
+	if err := ctrl.NewWebhookManagedBy(mgr, &hyperv1alpha1.JwtAuthFilter{}).
+		WithValidator(&FilterProtectionValidator[*hyperv1alpha1.JwtAuthFilter]{Client: c, Kind: "JwtAuthFilter"}).
 		Complete(); err != nil {
 		return err
 	}

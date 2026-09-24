@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 72" role="img" aria-label="Hypergate">
+  <title>Hypergate</title>
+  <defs>
+    <linearGradient id="hgw-fill" x1="14" y1="8" x2="58" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#22D3EE"/>
+      <stop offset="1" stop-color="#6366F1"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(4 4)">
+    <path d="M32 3 57.1 17.5v29L32 61 6.9 46.5v-29Z" fill="url(#hgw-fill)"/>
+    <path d="M20.5 19.5v25M43.5 19.5v25" stroke="#FFFFFF" stroke-width="5.5" stroke-linecap="round"/>
+    <path d="M28 24.5 35.5 32 28 39.5" fill="none" stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text x="80" y="47" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="34" font-weight="700" letter-spacing="-0.5" fill="#6366F1">Hyper<tspan fill="#22D3EE">gate</tspan></text>
+</svg>

@@ -22,6 +22,12 @@ spec:
             cluster_name: "default/hyper-engine-ext-proc/hyper-system:hyper-engine-svc:9001"
           timeout: 5s
         failure_mode_allow: false
+        # Lets filters (e.g. a FirewallFilter with inspectBody) ask for the request body.
+        allow_mode_override: true
+        # Envoy's view of the downstream peer; the engine uses it to resolve the client IP
+        # instead of trusting client-supplied X-Forwarded-For.
+        request_attributes:
+          - source.address
         processing_mode:
           request_header_mode: SEND
           response_header_mode: SEND

@@ -2,13 +2,10 @@ package rate_limiter
 
 import (
 	"context"
-	"crypto/sha1"
-	"encoding/hex"
 	"fmt"
 	"math"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 	"unsafe"
 
@@ -22,8 +19,7 @@ type leakyBucketExecutor struct {
 	client     redis.Client
 	options    FilterOptions
 	localCache *freecache.Cache
-	scriptSha1 string
-	luaBody    string
+	script     *luaScript
 }
 
 // getLeakyLuaScriptBody returns the atomic Lua script to evaluate leaky bucket limit checks.
@@ -76,11 +72,6 @@ return {allowed, tostring(water), math.ceil(reset_duration)}
 // NewLeakyBucketExecutor compiles the Lua script and instantiates a high-performance leaky bucket rate limiter.
 // It pre-sorts configured descriptors to prioritize specific (value-based) rules over generic fallback ones.
 func NewLeakyBucketExecutor(client redis.Client, opts FilterOptions, localCache *freecache.Cache) RateLimitExecutor {
-	body := getLeakyLuaScriptBody()
-	hasher := sha1.New()
-	hasher.Write([]byte(body))
-	sha := hex.EncodeToString(hasher.Sum(nil))
-
 	// Pre-sort descriptors: Most Specific Rules (with explicit values) must come BEFORE generic/wildcard rules (OTHER)
 	sort.Slice(opts.Descriptors, func(i, j int) bool {
 		countI, countJ := 0, 0
@@ -104,8 +95,7 @@ func NewLeakyBucketExecutor(client redis.Client, opts FilterOptions, localCache 
 		client:     client,
 		options:    opts,
 		localCache: localCache,
-		scriptSha1: sha,
-		luaBody:    body,
+		script:     newLuaScript(getLeakyLuaScriptBody()),
 	}
 }
 
@@ -240,25 +230,7 @@ func (e *leakyBucketExecutor) Evaluate(ctx context.Context, descriptors []Descri
 		var result []interface{}
 
 		// Attempt atomic execution using pre-compiled SHA
-		err := e.client.DoCmd(&result, "EVALSHA", "", e.scriptSha1, "1", keyStr, capacityStr, leakRateStr, costStr, nowStr, ttlStr)
-
-		// NOSCRIPT Fallback Loop
-		if err != nil && strings.Contains(err.Error(), "NOSCRIPT") {
-			mylogger.Info("EVALSHA NOSCRIPT error caught, loading script...", zap.String("sha", e.scriptSha1))
-
-			var newSha string
-			errLoad := e.client.DoCmd(&newSha, "SCRIPT", "", "LOAD", e.luaBody)
-			if errLoad != nil {
-				if policy.FailOpen {
-					mylogger.Error("Failed to SCRIPT LOAD Lua leaky bucket rate limiter, failing open", zap.Error(errLoad))
-					continue
-				}
-				return Decision{}, fmt.Errorf("failed to SCRIPT LOAD Lua leaky bucket rate limiter: %w", errLoad)
-			}
-
-			e.scriptSha1 = newSha // Update stored SHA locally for subsequent executions
-			err = e.client.DoCmd(&result, "EVALSHA", "", e.scriptSha1, "1", keyStr, capacityStr, leakRateStr, costStr, nowStr, ttlStr)
-		}
+		err := e.script.Eval(ctx, e.client, &result, 1, keyStr, capacityStr, leakRateStr, costStr, nowStr, ttlStr)
 
 		if err != nil {
 			mylogger.Error("Redis EVALSHA execution failed", zap.Error(err), zap.String("key", keyStr))

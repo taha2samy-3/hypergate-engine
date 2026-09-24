@@ -30,7 +30,10 @@ type clientImpl struct {
 	activeConns                int64
 }
 
-func (c *clientImpl) DoCmd(rcv interface{}, cmd, key string, args ...interface{}) error {
+func (c *clientImpl) DoCmd(ctx context.Context, rcv interface{}, cmd, key string, args ...interface{}) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	atomic.AddInt64(&c.activeConns, 1)
 	defer atomic.AddInt64(&c.activeConns, -1)
 
@@ -43,7 +46,7 @@ func (c *clientImpl) DoCmd(rcv interface{}, cmd, key string, args ...interface{}
 	}
 
 	action := radix.Cmd(rcv, cmd, all...)
-	if err := c.client.Do(context.Background(), action); err != nil {
+	if err := c.client.Do(ctx, action); err != nil {
 		return fmt.Errorf("redis[%s].DoCmd %s %q: %w", c.serviceName, cmd, key, err)
 	}
 	return nil

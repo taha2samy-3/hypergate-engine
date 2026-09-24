@@ -41,6 +41,9 @@ spec:
           env:
             - name: ENABLE_WEBHOOKS
               value: {{ .Values.operator.enableWebhooks | quote }}
+            # Engine image used when a HyperConfig does not set spec.engineImage.
+            - name: ENGINE_IMAGE
+              value: {{ printf "%s:%s" .Values.engine.image.repository (.Values.engine.image.tag | default .Chart.AppVersion) | quote }}
           ports:
             - containerPort: {{ .Values.operator.webhookPort }}
               name: webhook-server

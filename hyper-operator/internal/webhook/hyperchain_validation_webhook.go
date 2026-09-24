@@ -85,6 +85,9 @@ func (v *HyperChainValidator) validateFilters(ctx context.Context, chain *hyperv
 		case "FirewallFilter":
 			obj := &hyperv1alpha1.FirewallFilter{}
 			lookupErr = v.Client.Get(ctx, key, obj)
+		case "JwtAuthFilter":
+			obj := &hyperv1alpha1.JwtAuthFilter{}
+			lookupErr = v.Client.Get(ctx, key, obj)
 		default:
 			return nil, fmt.Errorf("unknown filter kind '%s' in HyperChain '%s'", ref.Kind, chain.Name)
 		}

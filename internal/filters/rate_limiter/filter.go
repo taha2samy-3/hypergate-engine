@@ -71,6 +71,10 @@ func (opts *FilterOptions) ApplyDefaults() {
 	if opts.DynamicCost.SourceHeader != "" {
 		opts.DynamicCost.SourceHeader = strings.ToLower(opts.DynamicCost.SourceHeader)
 	}
+	// Every request must consume at least one unit; max_allowed_cost <= 0 means "no cap".
+	if opts.DynamicCost.DefaultFallbackCost < 1 {
+		opts.DynamicCost.DefaultFallbackCost = 1
+	}
 	if opts.ResponseHeaders.LimitHeader == "" {
 		opts.ResponseHeaders.LimitHeader = "ratelimit-limit"
 	} else {
@@ -107,6 +111,24 @@ func (opts *FilterOptions) ApplyDefaults() {
 			}
 		}
 	}
+}
+
+// requestCost returns the quota units consumed by this request. A cost below 1 would
+// let a caller refund or skip quota (INCRBY with a negative value), so missing,
+// malformed, zero and negative values all fall back to the configured default.
+func (f *RateLimiterFilter) requestCost(ctx *engine.RequestContext) int64 {
+	dc := f.options.DynamicCost
+	if !dc.Enabled {
+		return 1
+	}
+	cost := dc.DefaultFallbackCost
+	if parsed, err := strconv.ParseInt(ctx.GetHeader(dc.SourceHeader), 10, 64); err == nil && parsed >= 1 {
+		cost = parsed
+	}
+	if dc.MaxAllowedCost > 0 && cost > dc.MaxAllowedCost {
+		cost = dc.MaxAllowedCost
+	}
+	return cost
 }
 
 // RateLimiterFilter is the entry-point filter of the embedded rate-limiting system.
@@ -155,12 +177,11 @@ func (f *RateLimiterFilter) Execute(ctx *engine.RequestContext) error {
 				val = ctx.GetHeader(entry.Key)
 			}
 
-			// Rule C (Default IP Fallbacks)
-			if val == "" && (entry.Key == "ip" || entry.Key == "client_ip" || entry.Key == "remote_ip") {
-				val = ctx.GetHeader("x-forwarded-for")
-				if val == "" {
-					val = ctx.GetHeader("x-real-ip")
-				}
+			// Rule C (Client IP): resolved from Envoy's peer address and trusted proxy
+			// hops only. Raw X-Forwarded-For is client-controlled and must never be
+			// used as a rate-limit key, so an explicit header mapping is ignored here.
+			if entry.Key == "ip" || entry.Key == "client_ip" || entry.Key == "remote_ip" {
+				val = ctx.ClientIP
 			}
 
 			// Rule D (Absolute Fallback)
@@ -172,25 +193,7 @@ func (f *RateLimiterFilter) Execute(ctx *engine.RequestContext) error {
 		}
 	}
 
-	// Extract dynamic cost
-	var cost int64 = 1
-	if f.options.DynamicCost.Enabled {
-		valStr := ctx.GetHeader(f.options.DynamicCost.SourceHeader)
-		if valStr == "" {
-			cost = f.options.DynamicCost.DefaultFallbackCost
-		} else {
-			parsedCost, err := strconv.ParseInt(valStr, 10, 64)
-			if err != nil {
-				cost = f.options.DynamicCost.DefaultFallbackCost
-			} else {
-				cost = parsedCost
-			}
-		}
-
-		if cost > f.options.DynamicCost.MaxAllowedCost {
-			cost = f.options.DynamicCost.MaxAllowedCost
-		}
-	}
+	cost := f.requestCost(ctx)
 
 	// Execution Dispatch
 	// Use propagated context with a defensive check to default to context.Background() if nil

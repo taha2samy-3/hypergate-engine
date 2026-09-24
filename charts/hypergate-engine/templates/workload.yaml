@@ -78,6 +78,9 @@ spec:
             - name: grpc
               containerPort: 9001
               protocol: TCP
+            - name: health
+              containerPort: 9003
+              protocol: TCP
           env:
             - name: CONFIG_PROVIDER
               value: {{ .Values.engine.configProvider | quote }}

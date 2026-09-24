@@ -10,6 +10,13 @@ image:
   # -- Defaults to the chart appVersion
   tag: ""
 
+# ── Engine managed by the operator ───────────────────────────────────────────
+engine:
+  image:
+    repository: ghcr.io/taha2samy-3/hyper-engine
+    # -- Defaults to the chart appVersion, so operator and engine stay in lockstep
+    tag: ""
+
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""

@@ -30,21 +30,15 @@ type RateLimitExecutor interface {
 	Evaluate(ctx context.Context, descriptors []DescriptorEntry, cost int64) (Decision, error)
 }
 
-// ResolveExecutor is a factory function that resolves and instantiates the correct
-// high-performance backend executor strategy at application boot based on configuration.
-// It inspects the `algorithm` string and queries the global redis.Manager for the
-// requested `redisService`.
+// ResolveExecutor instantiates the executor strategy selected by `algorithm`
+// on top of the given Redis client.
 func ResolveExecutor(
 	algorithm string,
-	redisService string,
-	redisManager *redis.Manager,
+	client redis.Client,
 	filterOpts FilterOptions,
 ) (RateLimitExecutor, error) {
-
-	// Query the global redis.Manager
-	client, ok := redisManager.GetClient(redisService)
-	if !ok {
-		return nil, fmt.Errorf("configured redis service %s not found in manager", redisService)
+	if client == nil {
+		return nil, fmt.Errorf("rate limiter requires a redis client")
 	}
 
 	// Inspect the algorithm string parameter (case-insensitive).

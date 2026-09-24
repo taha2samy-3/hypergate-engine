@@ -30,6 +30,9 @@ type DenyFilterConfig struct {
 type DenyFilter struct {
 	config        DenyFilterConfig
 	hasConditions bool
+	// matchesResponse is true when the filter has response header conditions and
+	// therefore has to be evaluated once the upstream response headers are known.
+	matchesResponse bool
 }
 
 func NewDenyFilter(cfg DenyFilterConfig) (*DenyFilter, error) {
@@ -62,9 +65,19 @@ func NewDenyFilter(cfg DenyFilterConfig) (*DenyFilter, error) {
 		len(cfg.Match.NotResponseHeaders) > 0
 
 	return &DenyFilter{
-		config:        cfg,
-		hasConditions: hasConditions,
+		config:          cfg,
+		hasConditions:   hasConditions,
+		matchesResponse: len(cfg.Match.ResponseHeaders) > 0 || len(cfg.Match.NotResponseHeaders) > 0,
 	}, nil
+}
+
+// SupportedPhases evaluates request-only conditions before the request is forwarded,
+// and response header conditions on the upstream response (replacing it on a match).
+func (f *DenyFilter) SupportedPhases() []engine.Phase {
+	if f.matchesResponse {
+		return []engine.Phase{engine.PhaseResponseHeaders}
+	}
+	return []engine.Phase{engine.PhaseRequestHeaders}
 }
 
 // lowercaseHeaderMapKeys returns a new map with all keys lowercased.
@@ -109,7 +122,7 @@ func (f *DenyFilter) Execute(ctx *engine.RequestContext) error {
 	}
 
 	for key, expected := range f.config.Match.ResponseHeaders {
-		actual := ctx.GetDownstreamHeader(key)
+		actual := ctx.GetResponseHeader(key)
 		if expected == "*" {
 			if actual == "" {
 				return nil
@@ -131,7 +144,7 @@ func (f *DenyFilter) Execute(ctx *engine.RequestContext) error {
 	}
 
 	for key, expected := range f.config.Match.NotResponseHeaders {
-		actual := ctx.GetDownstreamHeader(key)
+		actual := ctx.GetResponseHeader(key)
 		if expected == "*" {
 			if actual != "" {
 				return nil

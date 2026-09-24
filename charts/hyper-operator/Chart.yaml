@@ -41,6 +41,6 @@ annotations:
       description: Routes requests to a HyperChain based on path/header matchers
     - kind: HyperRedis
       version: v1alpha1
-      name: hyperredises.hyper.io
+      name: hyperredis.hyper.io
       displayName: HyperRedis
       description: A Redis service connection configuration

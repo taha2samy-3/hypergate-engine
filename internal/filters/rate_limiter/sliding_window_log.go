@@ -2,13 +2,10 @@ package rate_limiter
 
 import (
 	"context"
-	"crypto/sha1"
-	"encoding/hex"
 	"fmt"
 	"math"
 	"sort"
 	"strconv"
-	"strings"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -25,8 +22,7 @@ type slidingWindowLogExecutor struct {
 	client     redis.Client
 	options    FilterOptions
 	localCache *freecache.Cache
-	scriptSha1 string
-	luaBody    string
+	script     *luaScript
 }
 
 // getLogLuaScriptBody returns the atomic Lua script to evaluate sliding window log checks via ZSET.
@@ -64,11 +60,6 @@ end
 // NewSlidingWindowLogExecutor compiles the Lua script and instantiates a high-performance sliding window log executor.
 // It pre-sorts configured descriptors to prioritize specific (value-based) rules over generic fallback ones.
 func NewSlidingWindowLogExecutor(client redis.Client, opts FilterOptions, localCache *freecache.Cache) RateLimitExecutor {
-	body := getLogLuaScriptBody()
-	hasher := sha1.New()
-	hasher.Write([]byte(body))
-	sha := hex.EncodeToString(hasher.Sum(nil))
-
 	// Pre-sort descriptors: Most Specific Rules (with explicit values) must come BEFORE generic/wildcard rules (OTHER)
 	sort.Slice(opts.Descriptors, func(i, j int) bool {
 		countI, countJ := 0, 0
@@ -92,8 +83,7 @@ func NewSlidingWindowLogExecutor(client redis.Client, opts FilterOptions, localC
 		client:     client,
 		options:    opts,
 		localCache: localCache,
-		scriptSha1: sha,
-		luaBody:    body,
+		script:     newLuaScript(getLogLuaScriptBody()),
 	}
 }
 
@@ -236,25 +226,7 @@ func (e *slidingWindowLogExecutor) Evaluate(ctx context.Context, descriptors []D
 		var result []interface{}
 
 		// Execute atomic EVALSHA
-		err := e.client.DoCmd(&result, "EVALSHA", "", e.scriptSha1, "1", keyStr, limitStr, nowStr, windowStr, memberID)
-
-		// NOSCRIPT Fallback Loop
-		if err != nil && strings.Contains(err.Error(), "NOSCRIPT") {
-			mylogger.Info("EVALSHA NOSCRIPT error caught, loading log script...", zap.String("sha", e.scriptSha1))
-
-			var newSha string
-			errLoad := e.client.DoCmd(&newSha, "SCRIPT", "", "LOAD", e.luaBody)
-			if errLoad != nil {
-				if policy.FailOpen {
-					mylogger.Error("Failed to SCRIPT LOAD Lua rate limiter, failing open", zap.Error(errLoad))
-					continue
-				}
-				return Decision{}, fmt.Errorf("failed to SCRIPT LOAD sliding log lua script: %w", errLoad)
-			}
-
-			e.scriptSha1 = newSha
-			err = e.client.DoCmd(&result, "EVALSHA", "", e.scriptSha1, "1", keyStr, limitStr, nowStr, windowStr, memberID)
-		}
+		err := e.script.Eval(ctx, e.client, &result, 1, keyStr, limitStr, nowStr, windowStr, memberID)
 
 		if err != nil {
 			mylogger.Error("Redis EVALSHA sliding log execution failed", zap.Error(err), zap.String("key", keyStr))

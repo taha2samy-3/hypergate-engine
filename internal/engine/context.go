@@ -14,13 +14,29 @@ type Header struct {
 }
 
 type RequestContext struct {
-	Ctx                      context.Context
-	Path                     string
-	Method                   string
-	Headers                  map[string]string
+	Ctx context.Context
+	// Phase is the ext_proc phase currently being executed (set by ChainExecutor).
+	Phase  Phase
+	Path   string
+	Method string
+	// ClientIP is the resolved downstream client address (see internal/clientip).
+	// It is derived from the Envoy peer address and trusted X-Forwarded-For hops,
+	// never from raw client-supplied headers alone.
+	ClientIP string
+	// RequestEndOfStream is true when the request headers message carried
+	// end_of_stream, i.e. the request has no body or trailers.
+	RequestEndOfStream bool
+	// RequestBodySeen is true once the RequestBody phase has been received.
+	RequestBodySeen bool
+	// Headers holds the original request headers (and request trailers).
+	Headers map[string]string
+	// ResponseHeaders holds the upstream response headers (and response trailers).
+	// It is only populated once the ResponseHeaders phase has been reached.
+	ResponseHeaders          map[string]string
 	HeadersToAdd             []Header
 	ResponseHeadersToAdd     []Header
 	HeadersToRemove          []string
+	ResponseHeadersToRemove  []string
 	Blocked                  bool
 	ResponseStatus           int32
 	ResponseBody             string
@@ -46,12 +62,18 @@ type RequestContext struct {
 
 func (ctx *RequestContext) Reset() {
 	ctx.Ctx = nil
+	ctx.Phase = PhaseRequestHeaders
+	ctx.RequestBodySeen = false
 	ctx.Path = ""
 	ctx.Method = ""
+	ctx.ClientIP = ""
+	ctx.RequestEndOfStream = false
 	clear(ctx.Headers)
+	clear(ctx.ResponseHeaders)
 	ctx.HeadersToAdd = ctx.HeadersToAdd[:0]
 	ctx.ResponseHeadersToAdd = ctx.ResponseHeadersToAdd[:0]
 	ctx.HeadersToRemove = ctx.HeadersToRemove[:0]
+	ctx.ResponseHeadersToRemove = ctx.ResponseHeadersToRemove[:0]
 	clear(ctx.UpstreamShadow)
 	clear(ctx.DownstreamShadow)
 	ctx.Blocked = false
@@ -86,165 +108,156 @@ func (ctx *RequestContext) Reset() {
 	ctx.ResponseTrailersModified = false
 }
 
+// Block marks the request as denied. The gRPC layer turns this into an
+// ImmediateResponse in whichever phase the block happened.
+func (ctx *RequestContext) Block(status int32, body string) {
+	ctx.Blocked = true
+	ctx.ResponseStatus = status
+	ctx.ResponseBody = body
+}
+
 func (ctx *RequestContext) GetHeader(key string) string {
 	if val, ok := ctx.UpstreamShadow[key]; ok {
 		return val
 	}
-	for i := 0; i < len(ctx.HeadersToRemove); i++ {
-		if ctx.HeadersToRemove[i] == key {
-			return ""
-		}
+	if containsKey(ctx.HeadersToRemove, key) {
+		return ""
 	}
 	return ctx.Headers[key]
 }
 
+// GetDownstreamHeader returns a value the gateway itself has set (or is going to set)
+// on the downstream response. It does not look at upstream response headers; use
+// GetResponseHeader for the effective response value.
 func (ctx *RequestContext) GetDownstreamHeader(key string) string {
 	key = strings.ToLower(key)
 	return ctx.DownstreamShadow[key]
 }
 
+// GetResponseHeader returns the effective value of a response header: a value set by a
+// filter wins, a header removed by a filter reads as empty, and otherwise the upstream
+// response header is returned. Before the ResponseHeaders phase only filter-set values
+// are visible.
+func (ctx *RequestContext) GetResponseHeader(key string) string {
+	key = strings.ToLower(key)
+	if val, ok := ctx.DownstreamShadow[key]; ok {
+		return val
+	}
+	if containsKey(ctx.ResponseHeadersToRemove, key) {
+		return ""
+	}
+	return ctx.ResponseHeaders[key]
+}
+
+// SetPath rewrites the request :path sent upstream (e.g. to strip a credential from
+// the query string). Changing only the query does not affect Envoy's route selection.
+func (ctx *RequestContext) SetPath(path string) {
+	ctx.Path = path
+	ctx.SetHeaderUpstream(":path", path)
+}
+
 func (ctx *RequestContext) SetHeaderUpstream(key, value string) {
 	key = strings.ToLower(key)
 	ctx.UpstreamShadow[key] = value
-
-	for i := 0; i < len(ctx.HeadersToRemove); i++ {
-		if ctx.HeadersToRemove[i] == key {
-			ctx.HeadersToRemove[i] = ctx.HeadersToRemove[len(ctx.HeadersToRemove)-1]
-			ctx.HeadersToRemove = ctx.HeadersToRemove[:len(ctx.HeadersToRemove)-1]
-			break
-		}
-	}
-
-	for i := 0; i < len(ctx.HeadersToAdd); i++ {
-		if ctx.HeadersToAdd[i].Key == key {
-			ctx.HeadersToAdd[i].Value = value
-			return
-		}
-	}
-	ctx.HeadersToAdd = append(ctx.HeadersToAdd, Header{Key: key, Value: value, Append: false})
+	ctx.HeadersToRemove = removeKey(ctx.HeadersToRemove, key)
+	ctx.HeadersToAdd = upsertHeader(ctx.HeadersToAdd, key, value)
 }
 
 func (ctx *RequestContext) RemoveHeaderUpstream(key string) {
 	key = strings.ToLower(key)
 	delete(ctx.UpstreamShadow, key)
-
-	for i := 0; i < len(ctx.HeadersToAdd); i++ {
-		if ctx.HeadersToAdd[i].Key == key {
-			ctx.HeadersToAdd[i] = ctx.HeadersToAdd[len(ctx.HeadersToAdd)-1]
-			ctx.HeadersToAdd = ctx.HeadersToAdd[:len(ctx.HeadersToAdd)-1]
-			break
-		}
-	}
-
-	for i := 0; i < len(ctx.HeadersToRemove); i++ {
-		if ctx.HeadersToRemove[i] == key {
-			return
-		}
-	}
-	ctx.HeadersToRemove = append(ctx.HeadersToRemove, key)
+	ctx.HeadersToAdd = removeHeader(ctx.HeadersToAdd, key)
+	ctx.HeadersToRemove = appendKey(ctx.HeadersToRemove, key)
 }
 
 func (ctx *RequestContext) SetHeaderDownstream(key, value string) {
 	key = strings.ToLower(key)
 	ctx.DownstreamShadow[key] = value
-
-	for i := 0; i < len(ctx.ResponseHeadersToAdd); i++ {
-		if ctx.ResponseHeadersToAdd[i].Key == key {
-			ctx.ResponseHeadersToAdd[i].Value = value
-			return
-		}
-	}
-	ctx.ResponseHeadersToAdd = append(ctx.ResponseHeadersToAdd, Header{Key: key, Value: value, Append: false})
+	ctx.ResponseHeadersToRemove = removeKey(ctx.ResponseHeadersToRemove, key)
+	ctx.ResponseHeadersToAdd = upsertHeader(ctx.ResponseHeadersToAdd, key, value)
 }
 
+// RemoveHeaderDownstream removes a header from the response sent to the client,
+// including headers set by the upstream service.
 func (ctx *RequestContext) RemoveHeaderDownstream(key string) {
 	key = strings.ToLower(key)
 	delete(ctx.DownstreamShadow, key)
-
-	for i := 0; i < len(ctx.ResponseHeadersToAdd); i++ {
-		if ctx.ResponseHeadersToAdd[i].Key == key {
-			ctx.ResponseHeadersToAdd[i] = ctx.ResponseHeadersToAdd[len(ctx.ResponseHeadersToAdd)-1]
-			ctx.ResponseHeadersToAdd = ctx.ResponseHeadersToAdd[:len(ctx.ResponseHeadersToAdd)-1]
-			break
-		}
-	}
+	ctx.ResponseHeadersToAdd = removeHeader(ctx.ResponseHeadersToAdd, key)
+	ctx.ResponseHeadersToRemove = appendKey(ctx.ResponseHeadersToRemove, key)
 }
 
 func (ctx *RequestContext) SetTrailerUpstream(key, value string) {
 	key = strings.ToLower(key)
-	for i := 0; i < len(ctx.RequestTrailersToRemove); i++ {
-		if ctx.RequestTrailersToRemove[i] == key {
-			ctx.RequestTrailersToRemove[i] = ctx.RequestTrailersToRemove[len(ctx.RequestTrailersToRemove)-1]
-			ctx.RequestTrailersToRemove = ctx.RequestTrailersToRemove[:len(ctx.RequestTrailersToRemove)-1]
-			break
-		}
-	}
-	for i := 0; i < len(ctx.RequestTrailersToAdd); i++ {
-		if ctx.RequestTrailersToAdd[i].Key == key {
-			ctx.RequestTrailersToAdd[i].Value = value
-			ctx.RequestTrailersModified = true
-			return
-		}
-	}
-	// BUG FIX: was incorrectly appending to HeadersToAdd (request headers);
-	// trailers must be appended to RequestTrailersToAdd.
-	ctx.RequestTrailersToAdd = append(ctx.RequestTrailersToAdd, Header{Key: key, Value: value, Append: false})
+	ctx.RequestTrailersToRemove = removeKey(ctx.RequestTrailersToRemove, key)
+	ctx.RequestTrailersToAdd = upsertHeader(ctx.RequestTrailersToAdd, key, value)
 	ctx.RequestTrailersModified = true
 }
 
-
-
 func (ctx *RequestContext) RemoveHeaderUpstreamTrailer(key string) {
 	key = strings.ToLower(key)
-	for i := 0; i < len(ctx.HeadersToAdd); i++ {
-		if ctx.HeadersToAdd[i].Key == key {
-			ctx.HeadersToAdd[i] = ctx.HeadersToAdd[len(ctx.HeadersToAdd)-1]
-			ctx.HeadersToAdd = ctx.HeadersToAdd[:len(ctx.HeadersToAdd)-1]
-			break
-		}
-	}
-	for i := 0; i < len(ctx.RequestTrailersToRemove); i++ {
-		if ctx.RequestTrailersToRemove[i] == key {
-			return
-		}
-	}
-	ctx.RequestTrailersToRemove = append(ctx.RequestTrailersToRemove, key)
+	ctx.RequestTrailersToAdd = removeHeader(ctx.RequestTrailersToAdd, key)
+	ctx.RequestTrailersToRemove = appendKey(ctx.RequestTrailersToRemove, key)
 	ctx.RequestTrailersModified = true
 }
 
 func (ctx *RequestContext) SetTrailerDownstream(key, value string) {
 	key = strings.ToLower(key)
-	for i := 0; i < len(ctx.ResponseTrailersToRemove); i++ {
-		if ctx.ResponseTrailersToRemove[i] == key {
-			ctx.ResponseTrailersToRemove[i] = ctx.ResponseTrailersToRemove[len(ctx.ResponseTrailersToRemove)-1]
-			ctx.ResponseTrailersToRemove = ctx.ResponseTrailersToRemove[:len(ctx.ResponseTrailersToRemove)-1]
-			break
-		}
-	}
-	// BUG FIX: was incorrectly scanning/modifying ResponseHeadersToAdd (response headers);
-	// trailers must target ResponseTrailersToAdd.
-	for i := 0; i < len(ctx.ResponseTrailersToAdd); i++ {
-		if ctx.ResponseTrailersToAdd[i].Key == key {
-			ctx.ResponseTrailersToAdd[i].Value = value
-			ctx.ResponseTrailersModified = true
-			return
-		}
-	}
-	ctx.ResponseTrailersToAdd = append(ctx.ResponseTrailersToAdd, Header{Key: key, Value: value, Append: false})
+	ctx.ResponseTrailersToRemove = removeKey(ctx.ResponseTrailersToRemove, key)
+	ctx.ResponseTrailersToAdd = upsertHeader(ctx.ResponseTrailersToAdd, key, value)
 	ctx.ResponseTrailersModified = true
 }
 
 func (ctx *RequestContext) RemoveHeaderDownstreamTrailer(key string) {
 	key = strings.ToLower(key)
-	for i := 0; i < len(ctx.ResponseHeadersToAdd); i++ {
-		if ctx.ResponseHeadersToAdd[i].Key == key {
-			ctx.ResponseHeadersToAdd[i] = ctx.ResponseHeadersToAdd[len(ctx.ResponseHeadersToAdd)-1]
-			ctx.ResponseHeadersToAdd = ctx.ResponseHeadersToAdd[:len(ctx.ResponseHeadersToAdd)-1]
-			break
-		}
-	}
+	ctx.ResponseTrailersToAdd = removeHeader(ctx.ResponseTrailersToAdd, key)
+	ctx.ResponseTrailersToRemove = appendKey(ctx.ResponseTrailersToRemove, key)
+	ctx.ResponseTrailersModified = true
 }
 
-func (ctx *RequestContext) RequestHeadersToAddChecked() {
-	ctx.RequestTrailersModified = true
+// upsertHeader overwrites the value for key if present, otherwise appends it.
+func upsertHeader(headers []Header, key, value string) []Header {
+	for i := range headers {
+		if headers[i].Key == key {
+			headers[i].Value = value
+			return headers
+		}
+	}
+	return append(headers, Header{Key: key, Value: value})
+}
+
+// removeHeader deletes key from headers (order is not preserved).
+func removeHeader(headers []Header, key string) []Header {
+	for i := range headers {
+		if headers[i].Key == key {
+			headers[i] = headers[len(headers)-1]
+			return headers[:len(headers)-1]
+		}
+	}
+	return headers
+}
+
+func containsKey(keys []string, key string) bool {
+	for _, k := range keys {
+		if k == key {
+			return true
+		}
+	}
+	return false
+}
+
+func appendKey(keys []string, key string) []string {
+	if containsKey(keys, key) {
+		return keys
+	}
+	return append(keys, key)
+}
+
+func removeKey(keys []string, key string) []string {
+	for i := range keys {
+		if keys[i] == key {
+			keys[i] = keys[len(keys)-1]
+			return keys[:len(keys)-1]
+		}
+	}
+	return keys
 }

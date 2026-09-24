@@ -1,82 +1,124 @@
 package grpc
 
 import (
+	"net/http"
 	"strings"
 
 	"go.uber.org/zap"
 
+	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extprocv3 "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	typev3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 
+	"github.com/taha2samy/hypergate/internal/clientip"
 	"github.com/taha2samy/hypergate/internal/engine"
 	mylogger "github.com/taha2samy/hypergate/internal/logger"
 )
 
+// streamState is the per-stream routing decision. It is made once, against the
+// snapshot the stream acquired when it opened, and reused for every phase.
+type streamState struct {
+	snap     *engine.Snapshot
+	resolved bool
+	chain    engine.Chain
+	name     string
+}
+
+// resolve picks the filter chain for the request. A route that points at a chain
+// the snapshot does not contain fails closed; only "no route and no default chain"
+// lets a request through without policy.
+func (s *Server) resolve(st *streamState, reqCtx *engine.RequestContext) {
+	if st.resolved {
+		return
+	}
+	st.resolved = true
+
+	if st.snap.Config == nil {
+		mylogger.Error("No policy loaded, rejecting request", zap.String("path", reqCtx.Path))
+		reqCtx.Block(http.StatusServiceUnavailable, "Service Unavailable")
+		return
+	}
+
+	st.name = s.router.RouteWith(&st.snap.Config.Router, reqCtx)
+	if st.name == "" {
+		return
+	}
+	chain, ok := st.snap.Chains[st.name]
+	if !ok {
+		mylogger.Error("Route targets a chain that is not loaded, rejecting request",
+			zap.String("chain", st.name), zap.String("path", reqCtx.Path))
+		reqCtx.Block(http.StatusServiceUnavailable, "Service Unavailable")
+		return
+	}
+	st.chain = chain
+}
+
+func (s *Server) run(st *streamState, reqCtx *engine.RequestContext, phase engine.Phase) {
+	if reqCtx.Blocked || len(st.chain) == 0 {
+		return
+	}
+	if err := s.executor.Execute(reqCtx, st.chain, phase); err != nil {
+		mylogger.Error("Error executing chain", zap.String("chain", st.name), zap.Uint8("phase", uint8(phase)), zap.Error(err))
+	}
+}
+
+// immediateResponse ends the request with the status and body set by the blocking filter.
+func (s *Server) immediateResponse(stream extprocv3.ExternalProcessor_ProcessServer, reqCtx *engine.RequestContext) error {
+	status := reqCtx.ResponseStatus
+	if status == 0 {
+		status = http.StatusForbidden
+	}
+	mylogger.Info("Request blocked by filter chain, sending ImmediateResponse",
+		zap.String("path", reqCtx.Path),
+		zap.Int32("status_code", status),
+		zap.Uint8("phase", uint8(reqCtx.Phase)),
+	)
+	return stream.Send(&extprocv3.ProcessingResponse{
+		Response: &extprocv3.ProcessingResponse_ImmediateResponse{
+			ImmediateResponse: &extprocv3.ImmediateResponse{
+				Status:  &typev3.HttpStatus{Code: typev3.StatusCode(status)},
+				Headers: s.buildHeaderMutation(reqCtx, reqCtx.ResponseHeadersToAdd, nil),
+				Body:    []byte(reqCtx.ResponseBody),
+			},
+		},
+	})
+}
+
 // handleRequestHeaders processes the initial metadata and headers of an incoming request.
 func (s *Server) handleRequestHeaders(
 	stream extprocv3.ExternalProcessor_ProcessServer,
+	st *streamState,
 	reqCtx *engine.RequestContext,
+	req *extprocv3.ProcessingRequest,
 	msg *extprocv3.HttpHeaders,
-) (string, error) {
+) error {
 	mylogger.Debug("Received RequestHeaders phase")
-	headers := msg.Headers
-	if headers != nil {
-		for _, h := range headers.Headers {
-			key := strings.ToLower(h.Key)
-			var val string
-			if len(h.RawValue) > 0 {
-				val = string(h.RawValue)
-			} else {
-				val = h.Value
-			}
-			reqCtx.Headers[key] = val
-		}
-	}
+	copyHeaders(reqCtx.Headers, msg.GetHeaders())
 
 	reqCtx.Path = reqCtx.Headers[":path"]
 	reqCtx.Method = reqCtx.Headers[":method"]
+	reqCtx.RequestEndOfStream = msg.GetEndOfStream()
+
+	hops := 0
+	if st.snap.Config != nil {
+		hops = st.snap.Config.Server.ClientIP.TrustedProxyHops
+	}
+	reqCtx.ClientIP = clientip.Resolve(reqCtx.Headers["x-forwarded-for"], clientip.PeerFromAttributes(req.GetAttributes()), hops)
 
 	mylogger.Debug("Parsed RequestHeaders attributes",
 		zap.String("path", reqCtx.Path),
 		zap.String("method", reqCtx.Method),
+		zap.String("client_ip", reqCtx.ClientIP),
 	)
 
-	// Routing logic to find the appropriate filter chain.
-	targetChainName := s.router.Route(reqCtx)
-	if targetChainName != "" {
-		chain, exists := s.registry.Get(targetChainName)
-		if !exists {
-			mylogger.Warn("Target chain not found in registry", zap.String("chain", targetChainName))
-		} else {
-			if err := s.executor.Execute(reqCtx, chain, engine.PhaseRequestHeaders); err != nil {
-				mylogger.Error("Error executing chain", zap.String("chain", targetChainName), zap.Error(err))
-			}
-		}
-	}
+	s.resolve(st, reqCtx)
+	s.run(st, reqCtx, engine.PhaseRequestHeaders)
 
-	// If a filter blocked the request, send an ImmediateResponse (e.g., 401, 403, 429).
 	if reqCtx.Blocked {
-		mylogger.Info("Request blocked by filter chain, sending ImmediateResponse",
-			zap.String("path", reqCtx.Path),
-			zap.Int32("status_code", reqCtx.ResponseStatus),
-		)
-
-		resp := &extprocv3.ProcessingResponse{
-			Response: &extprocv3.ProcessingResponse_ImmediateResponse{
-				ImmediateResponse: &extprocv3.ImmediateResponse{
-					Status: &typev3.HttpStatus{
-						Code: typev3.StatusCode(reqCtx.ResponseStatus),
-					},
-					Headers: s.buildHeaderMutation(reqCtx, reqCtx.ResponseHeadersToAdd, nil),
-					Body:    []byte(reqCtx.ResponseBody),
-				},
-			},
-		}
-		return targetChainName, stream.Send(resp)
+		return s.immediateResponse(stream, reqCtx)
 	}
 
-	// Normal path: send mutations and potential mode overrides.
-	resp := &extprocv3.ProcessingResponse{
+	return stream.Send(&extprocv3.ProcessingResponse{
 		Response: &extprocv3.ProcessingResponse_RequestHeaders{
 			RequestHeaders: &extprocv3.HeadersResponse{
 				Response: &extprocv3.CommonResponse{
@@ -85,37 +127,35 @@ func (s *Server) handleRequestHeaders(
 			},
 		},
 		ModeOverride: s.buildModeOverride(reqCtx),
-	}
-	return targetChainName, stream.Send(resp)
+	})
 }
 
 // handleRequestBody processes the payload of the request if buffering is enabled.
 func (s *Server) handleRequestBody(
 	stream extprocv3.ExternalProcessor_ProcessServer,
+	st *streamState,
 	reqCtx *engine.RequestContext,
 	msg *extprocv3.HttpBody,
-	targetChainName string,
 ) error {
 	mylogger.Debug("Received RequestBody phase")
+	reqCtx.RequestBodySeen = true
 	bodyLen := len(msg.Body)
-	if bodyLen > 0 && bodyLen <= cap(reqCtx.RawBodyBuffer) {
+	if bodyLen <= cap(reqCtx.RawBodyBuffer) {
 		reqCtx.RawBodyBuffer = append(reqCtx.RawBodyBuffer[:0], msg.Body...)
 		reqCtx.RequestBody = reqCtx.RawBodyBuffer
 	} else {
-		// Fallback for oversized bodies (> 64KB)
+		// Fallback for bodies larger than the pooled buffer
 		reqCtx.RequestBody = msg.Body
 	}
 
-	if targetChainName != "" {
-		chain, exists := s.registry.Get(targetChainName)
-		if exists {
-			if err := s.executor.Execute(reqCtx, chain, engine.PhaseRequestBody); err != nil {
-				mylogger.Error("Error executing chain on body", zap.Error(err))
-			}
-		}
+	s.resolve(st, reqCtx)
+	s.run(st, reqCtx, engine.PhaseRequestBody)
+
+	if reqCtx.Blocked {
+		return s.immediateResponse(stream, reqCtx)
 	}
 
-	resp := &extprocv3.ProcessingResponse{
+	return stream.Send(&extprocv3.ProcessingResponse{
 		Response: &extprocv3.ProcessingResponse_RequestBody{
 			RequestBody: &extprocv3.BodyResponse{
 				Response: &extprocv3.CommonResponse{
@@ -123,123 +163,99 @@ func (s *Server) handleRequestBody(
 				},
 			},
 		},
-	}
-	return stream.Send(resp)
+	})
 }
 
 // handleRequestTrailers processes any gRPC or HTTP trailers sent with the request.
 func (s *Server) handleRequestTrailers(
 	stream extprocv3.ExternalProcessor_ProcessServer,
+	st *streamState,
 	reqCtx *engine.RequestContext,
 	msg *extprocv3.HttpTrailers,
-	targetChainName string,
 ) error {
 	mylogger.Debug("Received RequestTrailers phase")
-	trailers := msg.Trailers
-	if trailers != nil {
-		for _, h := range trailers.Headers {
-			key := strings.ToLower(h.Key)
-			var val string
-			if len(h.RawValue) > 0 {
-				val = string(h.RawValue)
-			} else {
-				val = h.Value
-			}
-			reqCtx.Headers[key] = val
-		}
+	copyHeaders(reqCtx.Headers, msg.GetTrailers())
+
+	s.resolve(st, reqCtx)
+	s.run(st, reqCtx, engine.PhaseRequestTrailers)
+
+	if reqCtx.Blocked {
+		return s.immediateResponse(stream, reqCtx)
 	}
 
-	if targetChainName != "" {
-		chain, exists := s.registry.Get(targetChainName)
-		if exists {
-			if err := s.executor.Execute(reqCtx, chain, engine.PhaseRequestTrailers); err != nil {
-				mylogger.Error("Error executing chain on request trailers", zap.Error(err))
-			}
-		}
-	}
-
-	resp := &extprocv3.ProcessingResponse{
+	return stream.Send(&extprocv3.ProcessingResponse{
 		Response: &extprocv3.ProcessingResponse_RequestTrailers{
 			RequestTrailers: &extprocv3.TrailersResponse{
 				HeaderMutation: s.buildHeaderMutation(reqCtx, reqCtx.RequestTrailersToAdd, reqCtx.RequestTrailersToRemove),
 			},
 		},
-	}
-	return stream.Send(resp)
+	})
 }
 
 // handleResponseHeaders processes the headers returned by the upstream service.
 func (s *Server) handleResponseHeaders(
 	stream extprocv3.ExternalProcessor_ProcessServer,
+	st *streamState,
 	reqCtx *engine.RequestContext,
 	msg *extprocv3.HttpHeaders,
 ) error {
 	mylogger.Debug("Received ResponseHeaders phase")
-	headers := msg.Headers
-	if headers != nil {
-		for _, h := range headers.Headers {
-			key := strings.ToLower(h.Key)
-			var val string
-			if len(h.RawValue) > 0 {
-				val = string(h.RawValue)
-			} else {
-				val = h.Value
-			}
-			reqCtx.Headers[key] = val
-		}
+	copyHeaders(reqCtx.ResponseHeaders, msg.GetHeaders())
+
+	s.resolve(st, reqCtx)
+
+	// A filter asked to inspect the request body but Envoy forwarded the request
+	// without sending it (mode override not allowed by the Envoy ext_proc config).
+	// The inspection never happened, so do not let the response through.
+	if !reqCtx.Blocked && reqCtx.RequestBodyRequired && !reqCtx.RequestBodySeen && !reqCtx.RequestEndOfStream {
+		mylogger.Error("Request body inspection was required but Envoy never sent the body; " +
+			"set allow_mode_override: true (or request_body_mode: BUFFERED) on the ext_proc filter")
+		reqCtx.Block(http.StatusInternalServerError, "Internal Server Error")
 	}
 
-	// ResponseHeaders phase: run filters that declared interest in response headers.
-	targetChainName := s.router.Route(reqCtx)
-	if targetChainName != "" {
-		chain, exists := s.registry.Get(targetChainName)
-		if exists {
-			if err := s.executor.Execute(reqCtx, chain, engine.PhaseResponseHeaders); err != nil {
-				mylogger.Error("Error executing chain on response headers", zap.Error(err))
-			}
-		}
+	s.run(st, reqCtx, engine.PhaseResponseHeaders)
+
+	if reqCtx.Blocked {
+		return s.immediateResponse(stream, reqCtx)
 	}
 
-	resp := &extprocv3.ProcessingResponse{
+	return stream.Send(&extprocv3.ProcessingResponse{
 		Response: &extprocv3.ProcessingResponse_ResponseHeaders{
 			ResponseHeaders: &extprocv3.HeadersResponse{
 				Response: &extprocv3.CommonResponse{
-					HeaderMutation: s.buildHeaderMutation(reqCtx, reqCtx.ResponseHeadersToAdd, nil),
+					HeaderMutation: s.buildHeaderMutation(reqCtx, reqCtx.ResponseHeadersToAdd, reqCtx.ResponseHeadersToRemove),
 				},
 			},
 		},
 		ModeOverride: s.buildModeOverride(reqCtx),
-	}
-	return stream.Send(resp)
+	})
 }
 
 // handleResponseBody processes the upstream response body.
 func (s *Server) handleResponseBody(
 	stream extprocv3.ExternalProcessor_ProcessServer,
+	st *streamState,
 	reqCtx *engine.RequestContext,
 	msg *extprocv3.HttpBody,
-	targetChainName string,
 ) error {
 	mylogger.Debug("Received ResponseBody phase")
 	bodyLen := len(msg.Body)
-	if bodyLen > 0 && bodyLen <= cap(reqCtx.RawBodyBuffer) {
+	if bodyLen <= cap(reqCtx.RawBodyBuffer) {
 		reqCtx.RawBodyBuffer = append(reqCtx.RawBodyBuffer[:0], msg.Body...)
 		reqCtx.ResponseBodyBytes = reqCtx.RawBodyBuffer
 	} else {
-		// Fallback for oversized response bodies (> 64KB)
+		// Fallback for response bodies larger than the pooled buffer
 		reqCtx.ResponseBodyBytes = msg.Body
 	}
 
-	if targetChainName != "" {
-		chain, exists := s.registry.Get(targetChainName)
-		if exists {
-			if err := s.executor.Execute(reqCtx, chain, engine.PhaseResponseBody); err != nil {
-				mylogger.Error("Error executing chain on response body", zap.Error(err))
-			}
-		}
+	s.resolve(st, reqCtx)
+	s.run(st, reqCtx, engine.PhaseResponseBody)
+
+	if reqCtx.Blocked {
+		return s.immediateResponse(stream, reqCtx)
 	}
 
-	resp := &extprocv3.ProcessingResponse{
+	return stream.Send(&extprocv3.ProcessingResponse{
 		Response: &extprocv3.ProcessingResponse_ResponseBody{
 			ResponseBody: &extprocv3.BodyResponse{
 				Response: &extprocv3.CommonResponse{
@@ -247,47 +263,51 @@ func (s *Server) handleResponseBody(
 				},
 			},
 		},
-	}
-	return stream.Send(resp)
+	})
 }
 
 // handleResponseTrailers processes the upstream response trailers.
 func (s *Server) handleResponseTrailers(
 	stream extprocv3.ExternalProcessor_ProcessServer,
+	st *streamState,
 	reqCtx *engine.RequestContext,
 	msg *extprocv3.HttpTrailers,
-	targetChainName string,
 ) error {
 	mylogger.Debug("Received ResponseTrailers phase")
-	trailers := msg.Trailers
-	if trailers != nil {
-		for _, h := range trailers.Headers {
-			key := strings.ToLower(h.Key)
-			var val string
-			if len(h.RawValue) > 0 {
-				val = string(h.RawValue)
-			} else {
-				val = h.Value
-			}
-			reqCtx.Headers[key] = val
-		}
-	}
+	copyHeaders(reqCtx.ResponseHeaders, msg.GetTrailers())
 
-	if targetChainName != "" {
-		chain, exists := s.registry.Get(targetChainName)
-		if exists {
-			if err := s.executor.Execute(reqCtx, chain, engine.PhaseResponseTrailers); err != nil {
-				mylogger.Error("Error executing chain on response trailers", zap.Error(err))
-			}
-		}
-	}
+	s.resolve(st, reqCtx)
+	s.run(st, reqCtx, engine.PhaseResponseTrailers)
 
-	resp := &extprocv3.ProcessingResponse{
+	// Response headers have already been sent downstream, so a block can no longer
+	// replace the response; trailers are forwarded with the requested mutations.
+	return stream.Send(&extprocv3.ProcessingResponse{
 		Response: &extprocv3.ProcessingResponse_ResponseTrailers{
 			ResponseTrailers: &extprocv3.TrailersResponse{
 				HeaderMutation: s.buildHeaderMutation(reqCtx, reqCtx.ResponseTrailersToAdd, reqCtx.ResponseTrailersToRemove),
 			},
 		},
+	})
+}
+
+// copyHeaders lower-cases keys and folds repeated headers into one value.
+func copyHeaders(dst map[string]string, headers *corev3.HeaderMap) {
+	if headers == nil {
+		return
 	}
-	return stream.Send(resp)
+	for _, h := range headers.Headers {
+		key := strings.ToLower(h.Key)
+		val := h.Value
+		if len(h.RawValue) > 0 {
+			val = string(h.RawValue)
+		}
+		if prev, ok := dst[key]; ok && prev != "" {
+			sep := ", "
+			if key == "cookie" {
+				sep = "; "
+			}
+			val = prev + sep + val
+		}
+		dst[key] = val
+	}
 }

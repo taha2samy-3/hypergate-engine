@@ -25,7 +25,7 @@ webhooks:
     admissionReviewVersions: ["v1"]
     sideEffects: None
 
-{{- range $filter := list "correlationidfilter" "denyfilter" "headermodifierfilter" "ratelimitfilter" "redismetadataenricherfilter" "apikeyfilter" "externalauthfilter" "firewallfilter" }}
+{{- range $filter := list "correlationidfilter" "denyfilter" "headermodifierfilter" "ratelimitfilter" "redismetadataenricherfilter" "apikeyfilter" "externalauthfilter" "firewallfilter" "jwtauthfilter" }}
   - name: v{{ $filter | trunc 6 }}.kb.io
     clientConfig:
       service:

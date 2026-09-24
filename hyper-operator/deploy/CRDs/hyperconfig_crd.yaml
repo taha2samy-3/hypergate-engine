@@ -51,7 +51,28 @@ spec:
                   default: "hyper-system"
                 engineImage:
                   type: string
-                  default: "ghcr.io/taha2samy-3/hyper-engine:1.0.0"
+                  description: "Defaults to the engine image matching the operator release."
+                engineResources:
+                  type: object
+                  properties:
+                    limits:
+                      type: object
+                      additionalProperties:
+                        anyOf:
+                          - type: integer
+                          - type: string
+                        x-kubernetes-int-or-string: true
+                    requests:
+                      type: object
+                      additionalProperties:
+                        anyOf:
+                          - type: integer
+                          - type: string
+                        x-kubernetes-int-or-string: true
+                trustedProxyHops:
+                  type: integer
+                  minimum: 0
+                  description: "Proxies in front of Envoy whose X-Forwarded-For entries are trusted."
                 redisServiceRef:
                   type: string
                 defaultChain:
@@ -67,3 +88,8 @@ spec:
                   default: 65536
             status:
               type: object
+              properties:
+                state:
+                  type: string
+                message:
+                  type: string

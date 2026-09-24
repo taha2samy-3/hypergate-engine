@@ -213,11 +213,7 @@ func (f *RedisMetadataEnricherFilter) resolveSourceValue(ctx *engine.RequestCont
 	case "{method}":
 		return ctx.Method
 	case "{client_ip}":
-		val := ctx.GetHeader("x-forwarded-for")
-		if val == "" {
-			val = ctx.GetHeader("x-real-ip")
-		}
-		return val
+		return ctx.ClientIP
 	default:
 		// Header name has already been lowercased at boot-time in NewRedisMetadataEnricherFilter.
 		if strings.HasPrefix(source, "{header:") && strings.HasSuffix(source, "}") {

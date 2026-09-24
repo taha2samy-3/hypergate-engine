@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -34,9 +35,20 @@ type HyperConfigSpec struct {
 	TargetNamespace string `json:"targetNamespace,omitempty"`
 
 	// EngineImage is the full registry path of the engine container image.
-	// +kubebuilder:default="taha/myprog-engine:latest"
+	// Defaults to the engine image matching the operator release.
 	// +optional
 	EngineImage string `json:"engineImage,omitempty"`
+
+	// EngineResources sets the engine container's resource requests and limits.
+	// +optional
+	EngineResources *corev1.ResourceRequirements `json:"engineResources,omitempty"`
+
+	// TrustedProxyHops is the number of proxies/load balancers in front of Envoy whose
+	// X-Forwarded-For entries are trusted when resolving the client IP. Default 0
+	// (the client is Envoy's direct peer).
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	TrustedProxyHops int32 `json:"trustedProxyHops,omitempty"`
 
 	// +kubebuilder:validation:Required
 	RedisServiceRef string `json:"redisServiceRef"`
@@ -63,6 +75,13 @@ type HyperConfigSpec struct {
 // +kubebuilder:object:generate=true
 // HyperConfigStatus defines the observed state of HyperConfig
 type HyperConfigStatus struct {
+	// State is Ready, or Conflict when another HyperConfig already manages the same
+	// targetNamespace (the oldest one wins).
+	// +optional
+	State string `json:"state,omitempty"`
+	// Message explains State.
+	// +optional
+	Message string `json:"message,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -71,6 +90,7 @@ type HyperConfigStatus struct {
 // +kubebuilder:printcolumn:name="Server Address",type="string",JSONPath=".spec.serverAddress"
 // +kubebuilder:printcolumn:name="Log Level",type="string",JSONPath=".spec.logLevel"
 // +kubebuilder:printcolumn:name="Redis Ref",type="string",JSONPath=".spec.redisServiceRef"
+// +kubebuilder:printcolumn:name="State",type="string",JSONPath=".status.state"
 
 // HyperConfig is the Schema for the hyperconfigs API
 type HyperConfig struct {

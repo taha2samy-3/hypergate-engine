@@ -18,8 +18,23 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// RedisLookup resolves a configured Redis service name to its client.
+type RedisLookup func(service string) (redis.Client, bool)
+
+func resolveRedis(lookup RedisLookup, filterType, service string) (redis.Client, error) {
+	if lookup == nil {
+		return nil, fmt.Errorf("%s: no redis services configured", filterType)
+	}
+	client, ok := lookup(service)
+	if !ok {
+		return nil, fmt.Errorf("%s: configured redis service %q not found", filterType, service)
+	}
+	return client, nil
+}
+
 // CreateFilter instantiates the correct polymorphic filter instance based on the configuration type.
-func CreateFilter(filterType string, rawOptions interface{}) (engine.Filter, error) {
+// Redis-backed filters resolve their client through lookup.
+func CreateFilter(filterType string, rawOptions interface{}, lookup RedisLookup) (engine.Filter, error) {
 	optsBytes, err := yaml.Marshal(rawOptions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal raw options for filter type %q: %w", filterType, err)
@@ -36,20 +51,10 @@ func CreateFilter(filterType string, rawOptions interface{}) (engine.Filter, err
 			return nil, fmt.Errorf("failed to apply defaults/validate config for api_key: %w", err)
 		}
 
-		// Verify global Redis connection manager is fully initialized
-		if redis.GlobalManager == nil {
-			return nil, fmt.Errorf("global redis manager is not initialized")
+		client, err := resolveRedis(lookup, filterType, cfg.RedisService)
+		if err != nil {
+			return nil, err
 		}
-
-		// Resolve the specific connection pool client at boot-time
-		client, ok := redis.GlobalManager.GetClient(cfg.RedisService)
-		if !ok {
-			return nil, fmt.Errorf("configured redis service %s not found in manager", cfg.RedisService)
-		}
-
-		// We will implement the concrete api_key package in the next step.
-		// For now, return a placeholder or comment it so it compiles.
-		// Example stub:
 		return api_key.NewAPIKeyFilter("api_key", cfg, client), nil
 
 	case "redis_metadata_enricher":
@@ -58,18 +63,11 @@ func CreateFilter(filterType string, rawOptions interface{}) (engine.Filter, err
 			return nil, fmt.Errorf("failed to unmarshal config for redis_metadata_enricher: %w", err)
 		}
 
-		// Verify global Redis connection manager is fully initialized
-		if redis.GlobalManager == nil {
-			return nil, fmt.Errorf("global redis manager is not initialized")
+		client, err := resolveRedis(lookup, filterType, cfg.RedisService)
+		if err != nil {
+			return nil, err
 		}
 
-		// Resolve the specific connection pool client at boot-time
-		client, ok := redis.GlobalManager.GetClient(cfg.RedisService)
-		if !ok {
-			return nil, fmt.Errorf("configured redis service %s not found in manager", cfg.RedisService)
-		}
-
-		// Return the initialized Redis Metadata Enricher filter
 		return redis_metadata_enricher.NewRedisMetadataEnricherFilter("redis_metadata_enricher", cfg, client), nil
 
 	case "embedded_rate_limiter":
@@ -81,13 +79,13 @@ func CreateFilter(filterType string, rawOptions interface{}) (engine.Filter, err
 		// Enforce default values for response headers
 		cfg.ApplyDefaults()
 
-		// Resolve the K8s Redis Client
-		if redis.GlobalManager == nil {
-			return nil, fmt.Errorf("global redis manager is not initialized")
+		client, err := resolveRedis(lookup, filterType, cfg.RedisService)
+		if err != nil {
+			return nil, err
 		}
 
 		// Compile and instantiate the selected polymorphic strategy
-		executor, err := rate_limiter.ResolveExecutor(cfg.Algorithm, cfg.RedisService, redis.GlobalManager, cfg)
+		executor, err := rate_limiter.ResolveExecutor(cfg.Algorithm, client, cfg)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve rate limiter executor: %w", err)
 		}

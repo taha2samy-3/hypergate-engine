@@ -24,6 +24,14 @@ type TLSConfig struct {
 	MutualTLS bool `yaml:"mutual_tls"`
 }
 
+// ClientIPConfig controls how the downstream client address is resolved.
+type ClientIPConfig struct {
+	// TrustedProxyHops is the number of proxies/load balancers in front of Envoy
+	// whose X-Forwarded-For entries are trusted. 0 (default) means the client is
+	// Envoy's direct peer. See internal/clientip.
+	TrustedProxyHops int `yaml:"trusted_proxy_hops"`
+}
+
 // ServerConfig defines the gRPC server settings.
 type ServerConfig struct {
 	Address                 string    `yaml:"address"`
@@ -32,4 +40,10 @@ type ServerConfig struct {
 	InitialHeaderCapacity   int       `yaml:"initial_header_capacity"`
 	PreallocBodyBufferBytes int       `yaml:"prealloc_body_buffer_bytes"`
 	TLS                     TLSConfig `yaml:"tls"`
+	// HealthAddress serves /healthz and /readyz for Kubernetes probes. Default ":9003".
+	HealthAddress string `yaml:"health_address"`
+	// PprofAddress enables the Go pprof endpoints on the given address when set,
+	// e.g. "127.0.0.1:6060". Disabled by default; never expose it publicly.
+	PprofAddress string         `yaml:"pprof_address"`
+	ClientIP     ClientIPConfig `yaml:"client_ip"`
 }

@@ -124,3 +124,18 @@ webhooks:
         resources: ["externalauthfilters"]
     admissionReviewVersions: ["v1"]
     sideEffects: None
+
+  - name: vjwtaut.kb.io
+    clientConfig:
+      service:
+        name: hyper-operator
+        namespace: hyper-system
+        path: /validate-hyper-io-v1alpha1-jwtauthfilter
+    failurePolicy: Fail
+    rules:
+      - apiGroups: ["hyper.io"]
+        apiVersions: ["v1alpha1"]
+        operations: ["DELETE"]
+        resources: ["jwtauthfilters"]
+    admissionReviewVersions: ["v1"]
+    sideEffects: None

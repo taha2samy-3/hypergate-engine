@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"sort"
 
 	"gopkg.in/yaml.v3"
@@ -31,7 +32,7 @@ type HyperChainMasterCompilerReconciler struct {
 }
 
 // +kubebuilder:rbac:groups=hyper.io,resources=hyperconfigs,verbs=get;list;watch
-// +kubebuilder:rbac:groups=hyper.io,resources=hyperredises,verbs=get;list;watch
+// +kubebuilder:rbac:groups=hyper.io,resources=hyperredis,verbs=get;list;watch
 // +kubebuilder:rbac:groups=hyper.io,resources=hyperroutes,verbs=get;list;watch
 // +kubebuilder:rbac:groups=hyper.io,resources=hyperchains,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=hyper.io,resources=hyperchains/status,verbs=get;update;patch
@@ -43,6 +44,7 @@ type HyperChainMasterCompilerReconciler struct {
 // +kubebuilder:rbac:groups=hyper.io,resources=apikeyfilters,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=hyper.io,resources=externalauthfilters,verbs=get;list;watch
 // +kubebuilder:rbac:groups=hyper.io,resources=firewallfilters,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=hyper.io,resources=jwtauthfilters,verbs=get;list;watch
 // +kubebuilder:rbac:groups=hyper.io,resources=apikeyfilters/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 
@@ -63,7 +65,8 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 		return ctrl.Result{}, nil
 	}
 
-	activeConfig := configList.Items[0]
+	// One compiled ConfigMap per target namespace, from the HyperConfig that owns it.
+	activeConfigs, _ := activeHyperConfigs(configList.Items)
 
 	// Fetch HyperRedis list
 	var redisList hyperv1alpha1.HyperRedisList
@@ -135,38 +138,26 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 		return ctrl.Result{}, err
 	}
 
+	var jwtList hyperv1alpha1.JwtAuthFilterList
+	if err := r.List(ctx, &jwtList); err != nil {
+		reqLogger.Error(err, "unable to list JwtAuthFilters")
+		return ctrl.Result{}, err
+	}
+
 	// Sort routes by priority descending
 	routes := routeList.Items
 	sort.Slice(routes, func(i, j int) bool {
 		return routes[i].Spec.Priority > routes[j].Spec.Priority
 	})
 
-	// Mapping to Engine Structs
-	engineConfig := config.Config{
-		Version: "v1",
-		Server: config.ServerConfig{
-			Address:               activeConfig.Spec.ServerAddress,
-			MaxConcurrentStreams: activeConfig.Spec.MaxConcurrentStreams,
-			PoolPrewarmSize:       int(activeConfig.Spec.PoolPrewarmSize),
-			InitialHeaderCapacity: int(activeConfig.Spec.InitialHeaderCapacity),
-			PreallocBodyBufferBytes: int(activeConfig.Spec.PreallocBodyBufferBytes),
-		},
-		Telemetry: config.TelemetryConfig{
-			Logging: mylogger.LoggingConfig{
-				Level: string(activeConfig.Spec.LogLevel),
-			},
-		},
-		Redis:  make(map[string]config.RedisServiceConfig),
-		Chains: make(map[string]config.Chain),
-		Router: config.RouterConfig{
-			Routes:       []config.RouteConfig{},
-			DefaultChain: activeConfig.Spec.DefaultChain,
-		},
-	}
+	// Cluster-wide policy shared by every engine deployment.
+	redisConfigs := make(map[string]config.RedisServiceConfig)
+	chainConfigs := make(map[string]config.Chain)
+	var routeConfigs []config.RouteConfig
 
 	// Map HyperRedis list
 	for _, hr := range redisList.Items {
-		engineConfig.Redis[hr.Name] = config.RedisServiceConfig{
+		redisConfigs[hr.Name] = config.RedisServiceConfig{
 			URL:                   hr.Spec.Url,
 			Type:                  string(hr.Spec.Type),
 			PoolSize:              hr.Spec.PoolSize,
@@ -216,8 +207,12 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 		firewallMap[firewallList.Items[i].Name] = &firewallList.Items[i]
 	}
 
+	jwtMap := make(map[string]*hyperv1alpha1.JwtAuthFilter)
+	for i := range jwtList.Items {
+		jwtMap[jwtList.Items[i].Name] = &jwtList.Items[i]
+	}
+
 	// Map HyperChain list and handle status bubbling
-	validChains := make(map[string]bool)
 	for _, chainObj := range chainList.Items {
 		var chain config.Chain
 		failed := false
@@ -294,9 +289,9 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 				// The socket path is deterministically derived from the CRD name.
 				socketPath := fmt.Sprintf("/var/run/hypergate/ext-auth-%s.sock", f.Name)
 				resolvedOptions = map[string]interface{}{
-					"protocol":    f.Spec.Protocol,
-					"socket_path": socketPath,
-					"timeout":     f.Spec.EngineRules.Timeout,
+					"protocol":        f.Spec.Protocol,
+					"socket_path":     socketPath,
+					"timeout":         f.Spec.EngineRules.Timeout,
 					"forward_headers": f.Spec.EngineRules.ForwardHeaders,
 					"on_success": map[string]interface{}{
 						"upstream_headers_to_add":    f.Spec.EngineRules.OnSuccess.UpstreamHeadersToAdd,
@@ -330,6 +325,15 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 						"downstream_pass_through_headers": f.Spec.EngineRules.OnFailure.DownstreamPassThroughHeaders,
 					},
 				}
+			case "JwtAuthFilter":
+				filterType = "jwt_auth"
+				f, exists := jwtMap[filterRef.Name]
+				if !exists {
+					failed = true
+					failMsg = fmt.Sprintf("Filter %s of Kind JwtAuthFilter not found", filterRef.Name)
+					break
+				}
+				resolvedOptions = jwtAuthOptions(f)
 			default:
 				failed = true
 				failMsg = fmt.Sprintf("Unknown filter Kind %s", filterRef.Kind)
@@ -364,13 +368,16 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 		// Update Status
 		statusCopy := chainObj.Status.DeepCopy()
 		if failed {
+			// Fail closed: a degraded chain keeps its name but rejects every request,
+			// instead of disappearing and letting its routes fall through to a
+			// weaker (or no) policy.
 			statusCopy.State = "Degraded"
 			statusCopy.Message = failMsg
+			chainConfigs[chainObj.Name] = degradedChain()
 		} else {
 			statusCopy.State = "Ready"
 			statusCopy.Message = "Chain successfully compiled"
-			engineConfig.Chains[chainObj.Name] = chain
-			validChains[chainObj.Name] = true
+			chainConfigs[chainObj.Name] = chain
 		}
 
 		if statusCopy.State != chainObj.Status.State || statusCopy.Message != chainObj.Status.Message {
@@ -384,9 +391,21 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 
 	// Map HyperRoute list
 	for _, hr := range routes {
-		// Only include routes pointing to successfully compiled (valid) chains
-		if !validChains[hr.Spec.TargetPolicy] {
+		// The engine rejects a whole config containing an invalid route, which would
+		// freeze every later update; drop the broken route and report it instead.
+		if hr.Spec.TargetPolicy == "" {
+			reqLogger.Error(nil, "HyperRoute has no targetPolicy, skipping", "route", hr.Name)
 			continue
+		}
+		if err := validateRouteRegexes(&hr); err != nil {
+			reqLogger.Error(err, "HyperRoute has an invalid regex, skipping", "route", hr.Name)
+			continue
+		}
+
+		// A route to a chain that does not exist fails closed as well.
+		if _, ok := chainConfigs[hr.Spec.TargetPolicy]; !ok {
+			reqLogger.Info("HyperRoute targets a missing HyperChain, requests will be rejected", "route", hr.Name, "chain", hr.Spec.TargetPolicy)
+			chainConfigs[hr.Spec.TargetPolicy] = degradedChain()
 		}
 
 		var matchConfigs []config.MatchConfig
@@ -405,66 +424,126 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 				Headers:          hmConfigs,
 			})
 		}
-		engineConfig.Router.Routes = append(engineConfig.Router.Routes, config.RouteConfig{
+		routeConfigs = append(routeConfigs, config.RouteConfig{
 			Name:        hr.Name,
 			TargetChain: hr.Spec.TargetPolicy,
 			Matches:     matchConfigs,
 		})
 	}
 
-	// YAML Generation
-	yamlBytes, err := yaml.Marshal(&engineConfig)
-	if err != nil {
-		reqLogger.Error(err, "unable to marshal config to YAML")
-		return ctrl.Result{}, err
-	}
+	for targetNS, hc := range activeConfigs {
+		chains := chainConfigs
+		if dc := hc.Spec.DefaultChain; dc != "" {
+			if _, ok := chainConfigs[dc]; !ok {
+				reqLogger.Info("HyperConfig defaultChain does not exist, unmatched requests will be rejected", "hyperconfig", hc.Name, "chain", dc)
+				chains = make(map[string]config.Chain, len(chainConfigs)+1)
+				for k, v := range chainConfigs {
+					chains[k] = v
+				}
+				chains[dc] = degradedChain()
+			}
+		}
 
-	targetNS := activeConfig.Spec.TargetNamespace
-	if targetNS == "" {
-		targetNS = "hyper-system"
-	}
-
-	// ConfigMap Write
-	cm := &corev1.ConfigMap{}
-	cmName := types.NamespacedName{
-		Name:      "hyper-engine-config",
-		Namespace: targetNS,
-	}
-
-	err = r.Get(ctx, cmName, cm)
-	if err != nil && errors.IsNotFound(err) {
-		// Create ConfigMap
-		cm = &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      cmName.Name,
-				Namespace: cmName.Namespace,
+		engineConfig := config.Config{
+			Version: "v1",
+			Server: config.ServerConfig{
+				Address:                 hc.Spec.ServerAddress,
+				MaxConcurrentStreams:    hc.Spec.MaxConcurrentStreams,
+				PoolPrewarmSize:         int(hc.Spec.PoolPrewarmSize),
+				InitialHeaderCapacity:   int(hc.Spec.InitialHeaderCapacity),
+				PreallocBodyBufferBytes: int(hc.Spec.PreallocBodyBufferBytes),
+				HealthAddress:           fmt.Sprintf(":%d", engineHealthPort),
+				ClientIP:                config.ClientIPConfig{TrustedProxyHops: int(hc.Spec.TrustedProxyHops)},
 			},
-			Data: map[string]string{
-				"config.yaml": string(yamlBytes),
+			Telemetry: config.TelemetryConfig{
+				Logging: mylogger.LoggingConfig{
+					Level: string(hc.Spec.LogLevel),
+				},
+			},
+			Redis:  redisConfigs,
+			Chains: chains,
+			Router: config.RouterConfig{
+				Routes:       routeConfigs,
+				DefaultChain: hc.Spec.DefaultChain,
 			},
 		}
-		if err := r.Create(ctx, cm); err != nil {
-			reqLogger.Error(err, "unable to create ConfigMap")
+		if engineConfig.Router.Routes == nil {
+			engineConfig.Router.Routes = []config.RouteConfig{}
+		}
+
+		if err := r.writeConfigMap(ctx, targetNS, &engineConfig); err != nil {
+			reqLogger.Error(err, "unable to write engine ConfigMap", "namespace", targetNS)
 			return ctrl.Result{}, err
 		}
-		reqLogger.Info("Created ConfigMap hyper-engine-config")
-	} else if err == nil {
-		// Update ConfigMap
+	}
+
+	return ctrl.Result{}, nil
+}
+
+func (r *HyperChainMasterCompilerReconciler) writeConfigMap(ctx context.Context, namespace string, engineConfig *config.Config) error {
+	yamlBytes, err := yaml.Marshal(engineConfig)
+	if err != nil {
+		return fmt.Errorf("marshal config: %w", err)
+	}
+
+	cm := &corev1.ConfigMap{}
+	key := types.NamespacedName{Name: engineConfigMapName, Namespace: namespace}
+	err = r.Get(ctx, key, cm)
+	switch {
+	case errors.IsNotFound(err):
+		cm = &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: key.Name, Namespace: key.Namespace},
+			Data:       map[string]string{"config.yaml": string(yamlBytes)},
+		}
+		if err := r.Create(ctx, cm); err != nil {
+			return fmt.Errorf("create configmap: %w", err)
+		}
+		log.FromContext(ctx).Info("Created ConfigMap", "namespace", namespace, "name", key.Name)
+	case err != nil:
+		return fmt.Errorf("get configmap: %w", err)
+	default:
+		if cm.Data["config.yaml"] == string(yamlBytes) {
+			return nil // unchanged: avoid a needless engine reload
+		}
 		if cm.Data == nil {
 			cm.Data = make(map[string]string)
 		}
 		cm.Data["config.yaml"] = string(yamlBytes)
 		if err := r.Update(ctx, cm); err != nil {
-			reqLogger.Error(err, "unable to update ConfigMap")
-			return ctrl.Result{}, err
+			return fmt.Errorf("update configmap: %w", err)
 		}
-		reqLogger.Info("Updated ConfigMap hyper-engine-config")
-	} else {
-		reqLogger.Error(err, "unable to get ConfigMap")
-		return ctrl.Result{}, err
+		log.FromContext(ctx).Info("Updated ConfigMap", "namespace", namespace, "name", key.Name)
 	}
+	return nil
+}
 
-	return ctrl.Result{}, nil
+// degradedChain rejects every request. It replaces chains that failed to compile
+// and chains that are referenced but do not exist.
+func degradedChain() config.Chain {
+	return config.Chain{{
+		Type: "deny",
+		Options: map[string]interface{}{
+			"status_code": degradedChainStatusCode,
+			"body":        degradedChainResponseBody,
+		},
+	}}
+}
+
+// jwtAuthOptions maps a JwtAuthFilter to engine options. Secret references become
+// file paths of the Secrets the HyperConfig controller mounts into the engine pod.
+func jwtAuthOptions(f *hyperv1alpha1.JwtAuthFilter) map[string]interface{} {
+	opts := map[string]interface{}{}
+	specBytes, err := yaml.Marshal(f.Spec)
+	if err == nil {
+		_ = yaml.Unmarshal(specBytes, &opts)
+	}
+	if ref := f.Spec.LocalSecretRef; ref != nil {
+		opts["local_secret_file"] = jwtSecretFile(f.Name, ref, jwtLocalSecretFile)
+	}
+	if ref := f.Spec.IntrospectionAuthSecretRef; ref != nil {
+		opts["introspection_auth_header_file"] = jwtSecretFile(f.Name, ref, jwtIntrospectionAuthFile)
+	}
+	return opts
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -506,5 +585,18 @@ func (r *HyperChainMasterCompilerReconciler) SetupWithManager(mgr ctrl.Manager) 
 		Watches(&hyperv1alpha1.ApiKeyFilter{}, triggerFunc).
 		Watches(&hyperv1alpha1.ExternalAuthFilter{}, triggerFunc).
 		Watches(&hyperv1alpha1.FirewallFilter{}, triggerFunc).
+		Watches(&hyperv1alpha1.JwtAuthFilter{}, triggerFunc).
 		Complete(r)
+}
+
+func validateRouteRegexes(hr *hyperv1alpha1.HyperRoute) error {
+	for i, m := range hr.Spec.Matches {
+		if m.PathRegexPattern == "" {
+			continue
+		}
+		if _, err := regexp.Compile(m.PathRegexPattern); err != nil {
+			return fmt.Errorf("matches[%d].pathRegexPattern: %w", i, err)
+		}
+	}
+	return nil
 }

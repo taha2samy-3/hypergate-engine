@@ -278,3 +278,57 @@ func TestRequestContext_Reset(t *testing.T) {
 		t.Fatal("Reset should clear HeadersToAdd slice")
 	}
 }
+
+func TestRequestContext_TrailerOpsTouchOnlyTrailers(t *testing.T) {
+	ctx := newCtx()
+	ctx.SetHeaderUpstream("x-keep", "1")
+	ctx.SetHeaderDownstream("x-keep", "1")
+
+	ctx.SetTrailerUpstream("grpc-status", "0")
+	ctx.RemoveHeaderUpstreamTrailer("x-keep")
+	ctx.SetTrailerDownstream("grpc-message", "ok")
+	ctx.RemoveHeaderDownstreamTrailer("x-keep")
+
+	if len(ctx.HeadersToAdd) != 1 || len(ctx.ResponseHeadersToAdd) != 1 {
+		t.Fatal("trailer removal must not touch header mutations")
+	}
+	if len(ctx.RequestTrailersToRemove) != 1 || len(ctx.ResponseTrailersToRemove) != 1 {
+		t.Fatalf("trailer removals not recorded: %v %v", ctx.RequestTrailersToRemove, ctx.ResponseTrailersToRemove)
+	}
+	if len(ctx.RequestTrailersToAdd) != 1 || len(ctx.ResponseTrailersToAdd) != 1 {
+		t.Fatal("trailer additions not recorded")
+	}
+}
+
+func TestRequestContext_RemoveHeaderDownstream(t *testing.T) {
+	ctx := newCtx()
+	ctx.ResponseHeaders = map[string]string{"server": "nginx"}
+	ctx.SetHeaderDownstream("X-Temp", "1")
+	ctx.RemoveHeaderDownstream("x-temp")
+	ctx.RemoveHeaderDownstream("Server")
+
+	if len(ctx.ResponseHeadersToAdd) != 0 {
+		t.Fatal("removed header still queued for addition")
+	}
+	if len(ctx.ResponseHeadersToRemove) != 2 {
+		t.Fatalf("expected 2 removals, got %v", ctx.ResponseHeadersToRemove)
+	}
+	if ctx.GetResponseHeader("server") != "" {
+		t.Fatal("removed upstream header still visible")
+	}
+	ctx.SetHeaderDownstream("server", "hypergate")
+	if ctx.GetResponseHeader("server") != "hypergate" || len(ctx.ResponseHeadersToRemove) != 1 {
+		t.Fatal("setting a header must cancel its removal")
+	}
+}
+
+func TestRequestContext_SetPathEmitsPseudoHeader(t *testing.T) {
+	ctx := newCtx()
+	ctx.SetPath("/v1/items?page=2")
+	if ctx.Path != "/v1/items?page=2" {
+		t.Fatalf("path not updated: %q", ctx.Path)
+	}
+	if len(ctx.HeadersToAdd) != 1 || ctx.HeadersToAdd[0].Key != ":path" {
+		t.Fatalf("expected :path mutation, got %v", ctx.HeadersToAdd)
+	}
+}

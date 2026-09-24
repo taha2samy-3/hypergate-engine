@@ -20,6 +20,7 @@ func NewChainExecutor() *ChainExecutor {
 // The executor fast-fails immediately if the context becomes blocked.
 func (e *ChainExecutor) Execute(ctx *RequestContext, chain Chain, phase Phase) error {
 	mylogger.Debug("Executing filter chain", zap.Int("filters_count", len(chain)), zap.Uint8("phase", uint8(phase)))
+	ctx.Phase = phase
 
 	for i := 0; i < len(chain); i++ {
 		// Fast-Fail / Circuit Break if previously blocked

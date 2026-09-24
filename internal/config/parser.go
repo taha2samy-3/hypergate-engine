@@ -16,6 +16,10 @@ import (
 	"k8s.io/client-go/rest"
 )
 
+// initialK8sResourceVersion records the ConfigMap version read at boot so the
+// watcher can resume from it without missing or replaying updates.
+var initialK8sResourceVersion string
+
 const (
 	DefaultConfigPath = "/etc/hyper-engine/config.yaml"
 	EnvConfigPath     = "CONFIG_FILE_PATH"
@@ -64,6 +68,7 @@ func LoadConfig() (*Config, string, error) {
 		}
 		data = []byte(yamlContent)
 		configPath = cmName
+		initialK8sResourceVersion = cm.ResourceVersion
 	case "URL":
 		configURL := os.Getenv(EnvConfigURL)
 		if configURL == "" {
@@ -136,6 +141,12 @@ func ParseBytes(data []byte) (*Config, error) {
 	if cfg.Server.InitialHeaderCapacity <= 0 {
 		cfg.Server.InitialHeaderCapacity = 64
 	}
+	if cfg.Server.HealthAddress == "" {
+		cfg.Server.HealthAddress = ":9003"
+	}
+	if cfg.Server.ClientIP.TrustedProxyHops < 0 {
+		return nil, fmt.Errorf("server.client_ip.trusted_proxy_hops must be >= 0, got %d", cfg.Server.ClientIP.TrustedProxyHops)
+	}
 
 	if cfg.Telemetry.Logging.Level == "" {
 		cfg.Telemetry.Logging.Level = "INFO"
@@ -170,5 +181,32 @@ func ParseBytes(data []byte) (*Config, error) {
 		}
 	}
 
+	if err := validateChainReferences(&cfg); err != nil {
+		return nil, err
+	}
+
 	return &cfg, nil
+}
+
+// validateChainReferences rejects configs whose routes or default chain point at a
+// chain that is not defined. Accepting them would make those requests either fail
+// or silently bypass their policy.
+func validateChainReferences(cfg *Config) error {
+	for _, route := range cfg.Router.Routes {
+		if route.TargetChain == "" {
+			return fmt.Errorf("route %q has no target_chain", route.Name)
+		}
+		if _, ok := cfg.Chains[route.TargetChain]; !ok {
+			return fmt.Errorf("route %q targets undefined chain %q", route.Name, route.TargetChain)
+		}
+	}
+	for field, name := range map[string]string{"default_chain": cfg.Router.DefaultChain, "other": cfg.Router.Other} {
+		if name == "" {
+			continue
+		}
+		if _, ok := cfg.Chains[name]; !ok {
+			return fmt.Errorf("router.%s references undefined chain %q", field, name)
+		}
+	}
+	return nil
 }

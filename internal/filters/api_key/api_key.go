@@ -299,7 +299,10 @@ func (f *APIKeyFilter) stripCredentials(ctx *engine.RequestContext, keyName stri
 			ctx.RemoveHeaderUpstream(keyName)
 		}
 		if f.config.KeyInQuery {
-			ctx.Path = f.stripQueryParam(ctx.Path, keyName)
+			if stripped := f.stripQueryParam(ctx.Path, keyName); stripped != ctx.Path {
+				// Send the rewritten :path to Envoy; changing ctx.Path alone never reached upstream.
+				ctx.SetPath(stripped)
+			}
 		}
 	}
 }

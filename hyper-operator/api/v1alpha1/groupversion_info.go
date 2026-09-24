@@ -1,3 +1,6 @@
+// Package v1alpha1 contains the hyper.io v1alpha1 API types.
+// +kubebuilder:object:generate=true
+// +groupName=hyper.io
 package v1alpha1
 
 import (

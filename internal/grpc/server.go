@@ -12,9 +12,11 @@ import (
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/status"
 
 	extprocv3 "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 
@@ -131,9 +133,16 @@ func buildTLSCredentials(cfg *config.TLSConfig) (credentials.TransportCredential
 }
 
 // Process is the main bidirectional stream handler for Envoy ext_proc.
+//
+// The stream pins the policy snapshot that is current when it opens, so a hot
+// reload never changes the chain applied to an in-flight request. Errors are
+// returned to Envoy as gRPC statuses so its failure_mode_allow setting applies.
 func (s *Server) Process(stream extprocv3.ExternalProcessor_ProcessServer) error {
 	mylogger.Debug("ext_proc bidirectional stream opened")
 	startTime := time.Now()
+
+	st := &streamState{snap: s.registry.Acquire()}
+	defer st.snap.Release()
 
 	reqCtx := s.pool.Acquire()
 	reqCtx.Ctx = stream.Context()
@@ -142,40 +151,43 @@ func (s *Server) Process(stream extprocv3.ExternalProcessor_ProcessServer) error
 		s.pool.Release(reqCtx)
 	}()
 
-	var targetChainName string
-
 	for {
 		req, err := stream.Recv()
-		// Gracefully handle stream closure and context cancellation to prevent transport resets
-		if err == io.EOF || errors.Is(err, context.Canceled) {
+		if err == io.EOF {
 			return nil
 		}
+		if err != nil {
+			if stream.Context().Err() != nil || errors.Is(err, context.Canceled) || status.Code(err) == codes.Canceled {
+				// Envoy closed the stream (request finished or was reset); nothing to report.
+				return nil
+			}
+			mylogger.Error("ext_proc stream receive error", zap.Error(err))
+			return err
+		}
+
+		switch msg := req.Request.(type) {
+		case *extprocv3.ProcessingRequest_RequestHeaders:
+			err = s.handleRequestHeaders(stream, st, reqCtx, req, msg.RequestHeaders)
+		case *extprocv3.ProcessingRequest_RequestBody:
+			err = s.handleRequestBody(stream, st, reqCtx, msg.RequestBody)
+		case *extprocv3.ProcessingRequest_RequestTrailers:
+			err = s.handleRequestTrailers(stream, st, reqCtx, msg.RequestTrailers)
+		case *extprocv3.ProcessingRequest_ResponseHeaders:
+			err = s.handleResponseHeaders(stream, st, reqCtx, msg.ResponseHeaders)
+		case *extprocv3.ProcessingRequest_ResponseBody:
+			err = s.handleResponseBody(stream, st, reqCtx, msg.ResponseBody)
+		case *extprocv3.ProcessingRequest_ResponseTrailers:
+			err = s.handleResponseTrailers(stream, st, reqCtx, msg.ResponseTrailers)
+		default:
+			err = status.Errorf(codes.InvalidArgument, "unsupported ext_proc message %T", req.Request)
+		}
+
 		if err != nil {
 			if stream.Context().Err() != nil {
 				return nil
 			}
-			mylogger.Error("ext_proc stream receive error", zap.Error(err))
-			return nil
-		}
-
-		// Dispatch to specific handlers based on the request type.
-		switch msg := req.Request.(type) {
-		case *extprocv3.ProcessingRequest_RequestHeaders:
-			targetChainName, err = s.handleRequestHeaders(stream, reqCtx, msg.RequestHeaders)
-		case *extprocv3.ProcessingRequest_RequestBody:
-			err = s.handleRequestBody(stream, reqCtx, msg.RequestBody, targetChainName)
-		case *extprocv3.ProcessingRequest_RequestTrailers:
-			err = s.handleRequestTrailers(stream, reqCtx, msg.RequestTrailers, targetChainName)
-		case *extprocv3.ProcessingRequest_ResponseHeaders:
-			err = s.handleResponseHeaders(stream, reqCtx, msg.ResponseHeaders)
-		case *extprocv3.ProcessingRequest_ResponseBody:
-			err = s.handleResponseBody(stream, reqCtx, msg.ResponseBody, targetChainName)
-		case *extprocv3.ProcessingRequest_ResponseTrailers:
-			err = s.handleResponseTrailers(stream, reqCtx, msg.ResponseTrailers, targetChainName)
-		}
-
-		if err != nil {
-			return nil
+			mylogger.Error("ext_proc stream send error", zap.Error(err))
+			return err
 		}
 	}
 }

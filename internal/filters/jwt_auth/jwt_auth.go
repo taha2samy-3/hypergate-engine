@@ -13,7 +13,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -53,7 +55,11 @@ type Config struct {
 	// LocalSecret is the shared secret for HMAC (HS256/HS384/HS512) validation.
 	// Use this when you don't have a JWKS endpoint.
 	LocalSecret string `yaml:"local_secret"`
-	// Algorithm specifies the expected signing algorithm. Default: "RS256".
+	// LocalSecretFile reads LocalSecret from a file (e.g. a mounted Kubernetes Secret)
+	// so the secret never has to appear in the config itself.
+	LocalSecretFile string `yaml:"local_secret_file"`
+	// Algorithm specifies the expected signing algorithm for LocalSecret.
+	// Default: "HS256" with a local secret, otherwise "RS256".
 	Algorithm string `yaml:"algorithm"`
 
 	// Issuer is the expected "iss" claim value. If empty, not validated.
@@ -70,6 +76,8 @@ type Config struct {
 	IntrospectionEndpoint string `yaml:"introspection_endpoint"`
 	// IntrospectionAuthHeader is the Authorization header value sent to the introspection endpoint.
 	IntrospectionAuthHeader string `yaml:"introspection_auth_header"`
+	// IntrospectionAuthHeaderFile reads IntrospectionAuthHeader from a file.
+	IntrospectionAuthHeaderFile string `yaml:"introspection_auth_header_file"`
 	// IntrospectionTimeout is the timeout for the introspection HTTP call. Default: 2s.
 	IntrospectionTimeout time.Duration `yaml:"introspection_timeout"`
 
@@ -91,9 +99,6 @@ func (c *Config) ApplyDefaults() {
 	} else {
 		c.HeaderName = strings.ToLower(c.HeaderName)
 	}
-	if c.Algorithm == "" {
-		c.Algorithm = "RS256"
-	}
 	if c.JWKSRefreshInterval <= 0 {
 		c.JWKSRefreshInterval = 5 * time.Minute
 	}
@@ -108,6 +113,32 @@ func (c *Config) ApplyDefaults() {
 	c.ClaimMappings = lower
 }
 
+// loadSecretFiles resolves *_file options into their values.
+func (c *Config) loadSecretFiles() error {
+	read := func(path string) (string, error) {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return "", fmt.Errorf("jwt_auth: read secret file %s: %w", path, err)
+		}
+		return strings.TrimSpace(string(b)), nil
+	}
+	if c.LocalSecretFile != "" {
+		v, err := read(c.LocalSecretFile)
+		if err != nil {
+			return err
+		}
+		c.LocalSecret = v
+	}
+	if c.IntrospectionAuthHeaderFile != "" {
+		v, err := read(c.IntrospectionAuthHeaderFile)
+		if err != nil {
+			return err
+		}
+		c.IntrospectionAuthHeader = v
+	}
+	return nil
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Filter implementation
 // ─────────────────────────────────────────────────────────────────────────────
@@ -120,10 +151,10 @@ type Filter struct {
 	// without blocking request-path goroutines.
 	keySet atomic.Pointer[jwk.Set]
 
-
 	httpClient *http.Client // for introspection endpoint
 
 	stopRefresh chan struct{}
+	closeOnce   sync.Once
 }
 
 // NewFilter creates and starts the JWT auth filter.
@@ -131,6 +162,19 @@ type Filter struct {
 // then kicks off a background refresh goroutine.
 func NewFilter(cfg Config) (*Filter, error) {
 	cfg.ApplyDefaults()
+	if err := cfg.loadSecretFiles(); err != nil {
+		return nil, err
+	}
+	if cfg.Algorithm == "" {
+		// A shared secret implies HMAC; RS256 with an HMAC secret would reject every token.
+		cfg.Algorithm = "RS256"
+		if cfg.LocalSecret != "" {
+			cfg.Algorithm = "HS256"
+		}
+	}
+	if cfg.JWKSEndpoint == "" && cfg.LocalSecret == "" && cfg.IntrospectionEndpoint == "" {
+		return nil, fmt.Errorf("jwt_auth: one of jwks_endpoint, local_secret(_file) or introspection_endpoint is required")
+	}
 	f := &Filter{
 		cfg: cfg,
 		httpClient: &http.Client{
@@ -154,14 +198,13 @@ func NewFilter(cfg Config) (*Filter, error) {
 	return f, nil
 }
 
-// Close stops the background JWKS refresh goroutine.
-func (f *Filter) Close() {
-	select {
-	case <-f.stopRefresh:
-		// already closed
-	default:
+// Close stops the background JWKS refresh goroutine and idle introspection connections.
+func (f *Filter) Close() error {
+	f.closeOnce.Do(func() {
 		close(f.stopRefresh)
-	}
+		f.httpClient.CloseIdleConnections()
+	})
+	return nil
 }
 
 // SupportedPhases declares that this filter only runs during request header processing.
