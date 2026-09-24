@@ -61,6 +61,14 @@ func (cfg *APIKeyFilterConfig) ApplyDefaults() error {
 		return fmt.Errorf("invalid value_format: %s", cfg.ValueFormat)
 	}
 
+	// A plain string has no status field; enabling the check would reject every key.
+	if cfg.StatusCheck.Enabled && cfg.ValueFormat == "plain" {
+		return fmt.Errorf("status_check requires value_format hash or json")
+	}
+	if cfg.StatusCheck.Enabled && cfg.StatusCheck.FieldName == "" {
+		return fmt.Errorf("status_check.field_name is required when status_check is enabled")
+	}
+
 	// Validate HashAlgorithm
 	switch cfg.HashAlgorithm {
 	case "sha256", "md5", "none":

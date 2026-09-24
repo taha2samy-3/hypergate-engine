@@ -101,5 +101,6 @@ podAntiAffinity:
 
 podAnnotations: {}
 
-# -- CRD installation. Set to false to manage CRDs externally.
-installCRDs: true
+# CRDs are installed from the chart's crds/ directory on first install.
+# Use `helm install --skip-crds` to manage them externally, and apply
+# charts/hyper-operator/crds/ yourself on upgrades (Helm never upgrades CRDs).

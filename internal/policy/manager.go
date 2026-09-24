@@ -33,8 +33,8 @@ import (
 	"github.com/taha2samy/hypergate/internal/redis"
 )
 
-// RedisFactory creates a Redis client for a named service.
-type RedisFactory func(name string, cfg config.RedisServiceConfig) (redis.Client, error)
+// RedisFactory creates a Redis client for a named service. ctx bounds connection retries.
+type RedisFactory func(ctx context.Context, name string, cfg config.RedisServiceConfig) (redis.Client, error)
 
 // FilterFactory compiles one filter. It defaults to filters.CreateFilter.
 type FilterFactory func(filterType string, options interface{}, lookup filters.RedisLookup) (engine.Filter, error)
@@ -54,6 +54,11 @@ type Manager struct {
 
 	// HealthCheckInterval is the PING interval for services with active_conn_health_check.
 	HealthCheckInterval time.Duration
+	// ReloadDialTimeout bounds how long a reload waits for a new Redis service whose
+	// startup_max_elapsed_time is unset. The first Apply (boot) may wait indefinitely,
+	// but a reload must not block later reloads forever; on timeout the previous
+	// policy stays active.
+	ReloadDialTimeout time.Duration
 
 	mu      sync.Mutex
 	redis   map[string]*redisEntry
@@ -69,6 +74,7 @@ func NewManager(ctx context.Context, registry *engine.ChainRegistry, newRedis Re
 		newRedis:            newRedis,
 		newFilter:           filters.CreateFilter,
 		HealthCheckInterval: 5 * time.Second,
+		ReloadDialTimeout:   30 * time.Second,
 		redis:               make(map[string]*redisEntry),
 		filters:             make(map[string]engine.Filter),
 	}
@@ -107,7 +113,12 @@ func (m *Manager) Apply(cfg *config.Config) error {
 			nextRedis[name] = old
 			continue
 		}
-		client, err := m.newRedis(name, svcCfg)
+		dialCtx, cancel := m.ctx, context.CancelFunc(func() {})
+		if m.ready.Load() && svcCfg.StartupMaxElapsedTimeDuration <= 0 && m.ReloadDialTimeout > 0 {
+			dialCtx, cancel = context.WithTimeout(m.ctx, m.ReloadDialTimeout)
+		}
+		client, err := m.newRedis(dialCtx, name, svcCfg)
+		cancel()
 		if err != nil {
 			return abort(fmt.Errorf("redis service %q: %w", name, err))
 		}

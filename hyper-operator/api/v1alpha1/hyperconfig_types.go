@@ -50,8 +50,10 @@ type HyperConfigSpec struct {
 	// +optional
 	TrustedProxyHops int32 `json:"trustedProxyHops,omitempty"`
 
-	// +kubebuilder:validation:Required
-	RedisServiceRef string `json:"redisServiceRef"`
+	// RedisServiceRef is deprecated and ignored: every Redis-backed filter names its
+	// HyperRedis in its own spec.
+	// +optional
+	RedisServiceRef string `json:"redisServiceRef,omitempty"`
 
 	// +optional
 	DefaultChain string `json:"defaultChain,omitempty"`

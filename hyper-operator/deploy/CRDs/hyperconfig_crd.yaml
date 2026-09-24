@@ -30,8 +30,6 @@ spec:
               type: object
             spec:
               type: object
-              required:
-                - redisServiceRef
               properties:
                 serverAddress:
                   type: string
@@ -75,6 +73,7 @@ spec:
                   description: "Proxies in front of Envoy whose X-Forwarded-For entries are trusted."
                 redisServiceRef:
                   type: string
+                  description: "Deprecated and ignored; filters name their Redis service directly."
                 defaultChain:
                   type: string
                 poolPrewarmSize:

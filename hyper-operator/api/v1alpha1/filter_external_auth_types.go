@@ -114,7 +114,8 @@ type EngineRulesSpec struct {
 // ExternalAuthFilterSpec defines the desired state of ExternalAuthFilter
 type ExternalAuthFilterSpec struct {
 	// Protocol is the communication protocol with the sidecar.
-	// Only "http" is currently implemented. "grpc" is planned.
+	// "http": forward-auth style HTTP check (2xx allows). "grpc": Envoy ext_authz
+	// (envoy.service.auth.v3.Authorization/Check).
 	// +kubebuilder:validation:Enum=http;grpc
 	// +kubebuilder:default="http"
 	// +optional

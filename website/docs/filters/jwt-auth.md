@@ -10,7 +10,7 @@ import Icon from '@site/static/img/icons/jwt.svg';
 
 The JWT filter validates bearer tokens inside the engine: the signature, `exp`/`nbf`, and optionally `iss` and `aud`. It needs no network call per request. Keys come from a JWKS endpoint that is refreshed in the background, or from a shared HMAC secret. Tokens that fail local validation can optionally be checked against an RFC 7662 introspection endpoint, which also covers opaque tokens.
 
-| | |
+| At a glance | |
 | --- | --- |
 | CRD kind | `JwtAuthFilter` |
 | Engine filter type | `jwt_auth` |

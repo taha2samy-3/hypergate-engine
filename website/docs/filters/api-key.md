@@ -10,7 +10,7 @@ import Icon from '@site/static/img/icons/api-key.svg';
 
 The API key filter reads a key from a header or query parameter, hashes it, and looks the hash up in Redis. It rejects missing, unknown and suspended keys. For valid keys, it copies fields of the stored record into upstream headers, so your services get `x-tenant-id` or `x-plan` without calling Redis themselves.
 
-| | |
+| At a glance | |
 | --- | --- |
 | CRD kind | `ApiKeyFilter` |
 | Engine filter type | `api_key` |

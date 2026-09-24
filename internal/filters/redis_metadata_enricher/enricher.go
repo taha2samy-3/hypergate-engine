@@ -2,6 +2,7 @@ package redis_metadata_enricher
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"strings"
 	"time"
@@ -39,7 +40,12 @@ type VariableRule struct {
 // It parses the configurable cache timeout string into a time.Duration at boot-time.
 // NewRedisMetadataEnricherFilter instantiates and compiles the advanced metadata enrichment filter.
 // It dynamically evaluates the cache size and TTL from the configuration, falling back to safe defaults.
-func NewRedisMetadataEnricherFilter(name string, cfg config.RedisMetadataEnricherConfig, client redis.Client) *RedisMetadataEnricherFilter {
+// An invalid regex_pattern or cache_timeout is reported as an error so the config is
+// rejected instead of crashing the engine.
+func NewRedisMetadataEnricherFilter(name string, cfg config.RedisMetadataEnricherConfig, client redis.Client) (*RedisMetadataEnricherFilter, error) {
+	if cfg.KeyPattern == "" {
+		return nil, fmt.Errorf("redis_metadata_enricher: key_pattern is required")
+	}
 	// 1. Calculate dynamic L1 Cache Size (Default is 10MB if omitted or zero)
 	cacheSize := 10 * 1024 * 1024 // 10MB in bytes
 	if cfg.CacheSizeMB > 0 {
@@ -50,16 +56,22 @@ func NewRedisMetadataEnricherFilter(name string, cfg config.RedisMetadataEnriche
 	// 2. Calculate dynamic L1 Cache TTL (Default is 10 seconds if omitted or invalid)
 	cacheTTL := 10 * time.Second
 	if cfg.CacheTimeout != "" {
-		if parsed, err := time.ParseDuration(cfg.CacheTimeout); err == nil {
-			cacheTTL = parsed
+		parsed, err := time.ParseDuration(cfg.CacheTimeout)
+		if err != nil {
+			return nil, fmt.Errorf("redis_metadata_enricher: invalid cache_timeout %q: %w", cfg.CacheTimeout, err)
 		}
+		cacheTTL = parsed
 	}
 
 	compiledVars := make(map[string]VariableRule, len(cfg.Variables))
 	for varName, v := range cfg.Variables {
 		var re *regexp.Regexp
 		if v.RegexPattern != "" {
-			re = regexp.MustCompile(v.RegexPattern)
+			compiled, err := regexp.Compile(v.RegexPattern)
+			if err != nil {
+				return nil, fmt.Errorf("redis_metadata_enricher: variable %q: invalid regex_pattern: %w", varName, err)
+			}
+			re = compiled
 		}
 		// Pre-lowercase header names extracted from {header:X-Foo} source patterns at boot-time.
 		source := v.Source
@@ -93,7 +105,7 @@ func NewRedisMetadataEnricherFilter(name string, cfg config.RedisMetadataEnriche
 		cacheTTL:      cacheTTL,
 		variables:     compiledVars,
 		outputMapping: lowerMappings,
-	}
+	}, nil
 }
 
 // Execute performs dynamic variable resolution, L1 cache lookup, Redis fetching, and JSON path header injection.

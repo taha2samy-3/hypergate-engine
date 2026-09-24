@@ -10,7 +10,7 @@ import Icon from '@site/static/img/icons/rate-limit.svg';
 
 The rate limiter counts requests in Redis and rejects requests over the limit with `429 Too Many Requests`. Counters are shared by every engine replica that uses the same Redis service, so a limit is global across the cluster rather than per node.
 
-| | |
+| At a glance | |
 | --- | --- |
 | CRD kind | `RateLimitFilter` |
 | Engine filter type | `embedded_rate_limiter` |

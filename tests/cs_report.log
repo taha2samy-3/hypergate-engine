@@ -7,3 +7,21 @@ Voluntary CS     : 505
 Non-Voluntary CS : 0
 ==========================================
 
+==========================================
+TIMESTAMP        : 2026-09-24 16:22:17
+COMMAND/TEST     : pipenv run pytest tests/rate_limit/test_rate_limit.py -v -s
+ENGINE PID       : 310639
+DURATION         : 466.90s
+Voluntary CS     : 30075
+Non-Voluntary CS : 788
+==========================================
+
+==========================================
+TIMESTAMP        : 2026-09-24 16:32:16
+COMMAND/TEST     : pipenv run pytest tests/rate_limit/test_rate_limit.py -v -s
+ENGINE PID       : 327267
+DURATION         : 461.36s
+Voluntary CS     : 26307
+Non-Voluntary CS : 302
+==========================================
+

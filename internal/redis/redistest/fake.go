@@ -87,6 +87,12 @@ func (c *Client) exec(cl call) error {
 		cur += by
 		c.data[cl.key] = strconv.FormatInt(cur, 10)
 		assign(cl.rcv, cur)
+	case "EXISTS":
+		var n int64
+		if _, ok := c.data[cl.key]; ok {
+			n = 1
+		}
+		assign(cl.rcv, n)
 	case "EXPIRE", "PING":
 		assign(cl.rcv, "PONG")
 	default:

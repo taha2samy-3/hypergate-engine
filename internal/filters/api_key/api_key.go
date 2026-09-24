@@ -183,6 +183,24 @@ func (f *APIKeyFilter) Execute(ctx *engine.RequestContext) error {
 			fields = append(fields, f.config.StatusCheck.FieldName)
 		}
 
+		if len(fields) == 0 {
+			// Nothing to read: only check that the key exists (HMGET needs a field).
+			var exists int64
+			var p redis.Pipeline
+			p = f.client.PipeAppend(p, &exists, "EXISTS", redisKey)
+			if err := f.client.PipeDo(ctx.Ctx, p); err != nil {
+				ctx.Blocked = true
+				ctx.ResponseStatus = 500
+				return fmt.Errorf("redis connection error: %w", err)
+			}
+			if exists == 0 {
+				f.cacheBlock(redisKeyBytes, "Unauthorized: Invalid API Key", 10*time.Second)
+				ctx.Block(401, "Unauthorized: Invalid API Key")
+				return nil
+			}
+			break
+		}
+
 		var reply []string
 		var p redis.Pipeline
 		// client.PipeAppend is (pipeline, rcv, cmd, key, args...)

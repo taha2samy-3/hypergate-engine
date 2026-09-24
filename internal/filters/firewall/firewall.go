@@ -18,12 +18,14 @@ import (
 
 	"github.com/taha2samy/hypergate/internal/config"
 	"github.com/taha2samy/hypergate/internal/engine"
+	"github.com/taha2samy/hypergate/internal/filters/sidecar"
 	mylogger "github.com/taha2samy/hypergate/internal/logger"
 )
 
 type FirewallFilter struct {
 	config     *config.FirewallFilterConfig
 	httpClient *http.Client
+	transport  *http.Transport
 	grpcClient extprocv3.ExternalProcessorClient
 	grpcConn   *grpc.ClientConn
 }
@@ -61,17 +63,22 @@ func NewFirewallFilter(cfg *config.FirewallFilterConfig) (*FirewallFilter, error
 	}
 
 	httpClient := &http.Client{
-		Transport: transport,
-		Timeout:   cfg.TimeoutDuration,
+		Transport:     transport,
+		Timeout:       cfg.TimeoutDuration,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
 
 	return &FirewallFilter{
 		config:     cfg,
 		httpClient: httpClient,
+		transport:  transport,
 	}, nil
 }
 
 func (f *FirewallFilter) Close() error {
+	if f.transport != nil {
+		f.transport.CloseIdleConnections()
+	}
 	if f.grpcConn != nil {
 		return f.grpcConn.Close()
 	}
@@ -129,39 +136,17 @@ func (f *FirewallFilter) executeGRPC(ctx *engine.RequestContext) error {
 		return nil
 	}
 
-	var headerValues []*configv3.HeaderValue
-	headerValues = append(headerValues, &configv3.HeaderValue{
-		Key:   ":path",
-		Value: ctx.Path,
-	})
-	headerValues = append(headerValues, &configv3.HeaderValue{
-		Key:   ":method",
-		Value: ctx.Method,
-	})
-
-	forwardAll := len(f.config.ForwardHeaders) == 0
-	if !forwardAll {
-		for _, h := range f.config.ForwardHeaders {
-			lower := strings.ToLower(h)
-			if lower == "*" || lower == "all" {
-				forwardAll = true
-				break
-			}
+	headerValues := []*configv3.HeaderValue{
+		{Key: ":path", Value: ctx.Path},
+		{Key: ":method", Value: ctx.Method},
+	}
+	for _, pseudo := range []string{":authority", ":scheme"} {
+		if v := ctx.Headers[pseudo]; v != "" {
+			headerValues = append(headerValues, &configv3.HeaderValue{Key: pseudo, Value: v})
 		}
 	}
-
-	if forwardAll {
-		for k := range ctx.Headers {
-			if val := ctx.GetHeader(k); val != "" {
-				headerValues = append(headerValues, &configv3.HeaderValue{Key: k, Value: val})
-			}
-		}
-	} else {
-		for _, k := range f.config.ForwardHeaders {
-			if val := ctx.GetHeader(k); val != "" {
-				headerValues = append(headerValues, &configv3.HeaderValue{Key: k, Value: val})
-			}
-		}
+	for k, v := range sidecar.SelectHeaders(ctx, f.config.ForwardHeaders) {
+		headerValues = append(headerValues, &configv3.HeaderValue{Key: k, Value: v})
 	}
 
 	headerMsg := &extprocv3.ProcessingRequest_RequestHeaders{
@@ -289,15 +274,13 @@ func (f *FirewallFilter) executeGRPC(ctx *engine.RequestContext) error {
 	return nil
 }
 
+// executeHTTP replays the request to the sidecar with its original method, path,
+// headers and (when inspect_body is on) body, so an HTTP WAF sees the real request.
+// Any 2xx allows; any other status blocks with that status and body.
 func (f *FirewallFilter) executeHTTP(ctx *engine.RequestContext) error {
 	reqCtx := ctx.Ctx
 	if reqCtx == nil {
 		reqCtx = context.Background()
-	}
-
-	method := http.MethodGet
-	if len(ctx.RequestBody) > 0 {
-		method = http.MethodPost
 	}
 
 	var bodyReader io.Reader
@@ -310,51 +293,33 @@ func (f *FirewallFilter) executeHTTP(ctx *engine.RequestContext) error {
 		bodyReader = bytes.NewReader(bodySlice)
 	}
 
-	req, err := http.NewRequestWithContext(reqCtx, method, "http://localhost/", bodyReader)
+	method := ctx.Method
+	if method == "" {
+		method = http.MethodGet
+	}
+	path := ctx.Path
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	req, err := http.NewRequestWithContext(reqCtx, method, "http://localhost"+path, bodyReader)
 	if err != nil {
 		mylogger.Error("firewall: failed to create request for sidecar", zap.Error(err))
-		ctx.Blocked = true
-		ctx.ResponseStatus = http.StatusInternalServerError
-		ctx.ResponseBody = "Internal Server Error"
+		ctx.Block(http.StatusInternalServerError, "Internal Server Error")
 		return nil
 	}
-
-	forwardAll := len(f.config.ForwardHeaders) == 0
-	if !forwardAll {
-		for _, h := range f.config.ForwardHeaders {
-			lower := strings.ToLower(h)
-			if lower == "*" || lower == "all" {
-				forwardAll = true
-				break
-			}
-		}
-	}
-
-	if forwardAll {
-		for k := range ctx.Headers {
-			if val := ctx.GetHeader(k); val != "" {
-				req.Header.Set(k, val)
-			}
-		}
-	} else {
-		for _, k := range f.config.ForwardHeaders {
-			if val := ctx.GetHeader(k); val != "" {
-				req.Header.Set(k, val)
-			}
-		}
+	sidecar.SetHTTPHeaders(req, sidecar.SelectHeaders(ctx, f.config.ForwardHeaders))
+	sidecar.SetForwardedRequest(req, ctx)
+	if host := ctx.Headers[":authority"]; host != "" {
+		req.Host = host
 	}
 
 	resp, err := f.httpClient.Do(req)
 	if err != nil {
 		mylogger.Error("firewall: UDS sidecar communication failed", zap.Error(err))
-		ctx.Blocked = true
-		ctx.ResponseStatus = http.StatusInternalServerError
-		ctx.ResponseBody = "Internal Server Error"
+		ctx.Block(http.StatusInternalServerError, "Internal Server Error")
 		return nil
 	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
+	defer sidecar.DrainAndClose(resp.Body)
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		for _, k := range f.config.OnSuccess.UpstreamHeadersToAdd {
@@ -368,16 +333,11 @@ func (f *FirewallFilter) executeHTTP(ctx *engine.RequestContext) error {
 		return nil
 	}
 
-	ctx.Blocked = true
-	ctx.ResponseStatus = int32(resp.StatusCode)
-
-	limitReader := io.LimitReader(resp.Body, 16*1024)
-	bodyBytes, err := io.ReadAll(limitReader)
-	if err == nil {
-		ctx.ResponseBody = string(bodyBytes)
-	} else {
+	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, 16*1024))
+	if err != nil {
 		mylogger.Error("firewall: failed to read response body from sidecar", zap.Error(err))
 	}
+	ctx.Block(int32(resp.StatusCode), string(bodyBytes))
 
 	for _, k := range f.config.OnFailure.DownstreamPassThroughHeaders {
 		if vals, ok := resp.Header[http.CanonicalHeaderKey(k)]; ok && len(vals) > 0 {

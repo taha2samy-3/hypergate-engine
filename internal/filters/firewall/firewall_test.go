@@ -99,3 +99,28 @@ func TestFirewall_BodylessRequestInspectedImmediately(t *testing.T) {
 		t.Fatal("bodyless request must not ask Envoy to buffer a body")
 	}
 }
+
+func TestFirewall_HTTPForwardAllWithPseudoHeaders(t *testing.T) {
+	sock, calls := startWAF(t)
+	cfg, err := config.ParseFirewallFilterConfig(map[string]interface{}{"protocol": "http", "socket_path": sock})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := NewFirewallFilter(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := newCtx(true)
+	// Real Envoy requests always carry pseudo-headers; they used to make every call fail.
+	ctx.Headers[":path"] = "/submit"
+	ctx.Headers[":method"] = "POST"
+	ctx.Headers[":authority"] = "shop.example.com"
+	ctx.Headers["user-agent"] = "curl"
+	_ = engine.NewChainExecutor().Execute(ctx, engine.Chain{f}, engine.PhaseRequestHeaders)
+	if ctx.Blocked {
+		t.Fatalf("clean request blocked: %d %s", ctx.ResponseStatus, ctx.ResponseBody)
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("expected one WAF call, got %d", calls.Load())
+	}
+}

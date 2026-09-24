@@ -68,7 +68,7 @@ func CreateFilter(filterType string, rawOptions interface{}, lookup RedisLookup)
 			return nil, err
 		}
 
-		return redis_metadata_enricher.NewRedisMetadataEnricherFilter("redis_metadata_enricher", cfg, client), nil
+		return redis_metadata_enricher.NewRedisMetadataEnricherFilter("redis_metadata_enricher", cfg, client)
 
 	case "embedded_rate_limiter":
 		var cfg rate_limiter.FilterOptions

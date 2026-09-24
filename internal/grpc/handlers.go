@@ -159,7 +159,11 @@ func (s *Server) handleRequestBody(
 		Response: &extprocv3.ProcessingResponse_RequestBody{
 			RequestBody: &extprocv3.BodyResponse{
 				Response: &extprocv3.CommonResponse{
-					BodyMutation: s.buildBodyMutation(reqCtx.RequestBody, reqCtx.RequestBodyModified),
+					// In buffered mode the request headers are still held by Envoy, so header
+					// changes made while inspecting the body (e.g. by a firewall) are applied too.
+					// Mutations already sent with the headers are idempotent and harmless to repeat.
+					HeaderMutation: s.buildHeaderMutation(reqCtx, reqCtx.HeadersToAdd, reqCtx.HeadersToRemove),
+					BodyMutation:   s.buildBodyMutation(reqCtx.RequestBody, reqCtx.RequestBodyModified),
 				},
 			},
 		},

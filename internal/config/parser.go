@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -168,6 +169,15 @@ func ParseBytes(data []byte) (*Config, error) {
 				cfg.Router.Routes[i].Matches[j].CompiledPathRegex = re
 			}
 
+			// Request headers are stored lower-cased, so route header names must be too.
+			if len(match.Headers) > 0 {
+				lowered := make(map[string]HeaderMatchConfig, len(match.Headers))
+				for k, v := range match.Headers {
+					lowered[strings.ToLower(k)] = v
+				}
+				cfg.Router.Routes[i].Matches[j].Headers = lowered
+				match.Headers = lowered
+			}
 			for headerKey, headerMatch := range match.Headers {
 				if headerMatch.RegexPattern != "" {
 					re, err := regexp.Compile(headerMatch.RegexPattern)
@@ -181,11 +191,39 @@ func ParseBytes(data []byte) (*Config, error) {
 		}
 	}
 
+	applyTLSEnvOverrides(&cfg.Server.TLS)
+
 	if err := validateChainReferences(&cfg); err != nil {
 		return nil, err
 	}
 
 	return &cfg, nil
+}
+
+// TLS listener settings can come from the environment (the hypergate-engine Helm
+// chart mounts the certificate Secret and sets these), so TLS works regardless of
+// who writes the config file or ConfigMap.
+const (
+	EnvTLSCertFile  = "TLS_CERT_FILE"
+	EnvTLSKeyFile   = "TLS_KEY_FILE"
+	EnvTLSCAFile    = "TLS_CA_FILE"
+	EnvTLSMutualTLS = "TLS_MUTUAL_TLS"
+)
+
+func applyTLSEnvOverrides(tls *TLSConfig) {
+	cert, key := os.Getenv(EnvTLSCertFile), os.Getenv(EnvTLSKeyFile)
+	if cert == "" || key == "" {
+		return
+	}
+	tls.Enabled = true
+	tls.CertFile = cert
+	tls.KeyFile = key
+	if ca := os.Getenv(EnvTLSCAFile); ca != "" {
+		tls.CAFile = ca
+	}
+	if os.Getenv(EnvTLSMutualTLS) == "true" {
+		tls.MutualTLS = true
+	}
 }
 
 // validateChainReferences rejects configs whose routes or default chain point at a

@@ -38,7 +38,7 @@ Filters run in the order they are listed in the chain. A filter sees the effect 
 
 Header changes are collected while the chain runs and sent to Envoy in the response to the current message:
 
-- **Upstream request headers** (set or remove) are sent with the request-headers response. Setting a header replaces any existing value (`OVERWRITE_IF_EXISTS_OR_ADD`).
+- **Upstream request headers** (set or remove) are sent with the request-headers response. Setting a header replaces any existing value (`OVERWRITE_IF_EXISTS_OR_ADD`). Because Envoy holds the request headers while it buffers the body, header changes made during the body phase (for example by a firewall with `inspect_body`) are sent with the request-body response and applied too.
 - **`:path`**: the API key filter rewrites `:path` when it strips a key from the query string. Changing only the query does not change Envoy's route selection, which has already happened.
 - **Client-facing response headers** (rate-limit headers, a correlation ID sent downstream, `header_modifier` `downstream` rules) are recorded during the request phase and applied when the response headers arrive. `downstream.remove` also removes headers that the upstream set.
 

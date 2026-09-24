@@ -190,7 +190,6 @@ metadata:
   name: default-engine
 spec:
   targetNamespace: hyper-system
-  redisServiceRef: shared-redis
   logLevel: INFO
   trustedProxyHops: 0
 ```

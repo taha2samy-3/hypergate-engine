@@ -85,7 +85,7 @@ func main() {
 	mylogger.Info("Configuration loaded successfully", zap.String("version", initialConfig.Version))
 
 	registry := engine.NewChainRegistry()
-	policyMgr := policy.NewManager(ctx, registry, redis.NewPoolClient)
+	policyMgr := policy.NewManager(ctx, registry, redis.NewClientConn)
 	if err := policyMgr.Apply(initialConfig); err != nil {
 		mylogger.Fatal("Failed to compile policy on boot", zap.Error(err))
 	}

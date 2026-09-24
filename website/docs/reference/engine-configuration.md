@@ -174,9 +174,9 @@ Omitted fields get the defaults below; every duration is a Go duration string su
 | `wait_timeout` | duration | `1s` | Validated, but not currently applied by the client. |
 | `startup_initial_interval` | duration | `1s` | First back-off interval when connecting, and minimum reconnect interval of the pool. |
 | `startup_max_interval` | duration | `30s` | Maximum back-off interval when connecting, and maximum reconnect interval of the pool. |
-| `startup_max_elapsed_time` | duration | `0s` | Total time to keep retrying the initial connection. `0s` retries forever. See the note below. |
+| `startup_max_elapsed_time` | duration | `0s` | Total time to keep retrying the initial connection. `0s` retries forever at start-up and for 30 s on reloads. See the note below. |
 
-When a service is added or its settings change, the engine connects to it and waits for a successful `PING` before the configuration is accepted. At start-up this delays readiness; on reload it delays (and, with `0s`, can indefinitely hold) the reload. Set `startup_max_elapsed_time` for services that may be down. Services whose settings are unchanged keep their existing connections across reloads.
+When a service is added or its settings change, the engine connects to it and waits for a successful `PING` before the configuration is accepted. At start-up this delays readiness; on reload it delays the reload (at most 30 s with the `0s` default, after which the reload is rejected). Set `startup_max_elapsed_time` for services that may be down. Services whose settings are unchanged keep their existing connections across reloads.
 
 ## chains
 
@@ -259,6 +259,9 @@ A configuration is rejected, at start-up (the engine exits) or on reload (the pr
 | `CONFIG_K8S_NAME` | `hyper-engine-config` | `K8S` provider: ConfigMap name. The configuration is read from the key `config.yaml`. |
 | `CONFIG_K8S_NAMESPACE` | `hyper-system` | `K8S` provider: ConfigMap namespace. Uses the in-cluster service account, which needs `get` and `watch` on the ConfigMap. |
 | `CONFIG_URL` | none | `URL` provider: URL fetched with `GET` at start-up and on every reload. Required with `URL`. |
+| `TLS_CERT_FILE`, `TLS_KEY_FILE` | none | When both are set, TLS is enabled on the gRPC listener with these files, overriding `server.tls`. Used by the `hypergate-engine` Helm chart. |
+| `TLS_CA_FILE` | none | CA bundle for client certificates, overriding `server.tls.ca_file`. |
+| `TLS_MUTUAL_TLS` | none | `true` requires client certificates (mTLS). |
 | `CONFIG_RELOAD_ADDRESS` | `127.0.0.1:9002`, or `:9002` when a token is set | `URL` provider: listen address of `POST /v1/reload`. |
 | `CONFIG_RELOAD_TOKEN` | none | `URL` provider: when set, reload calls must send `Authorization: Bearer <token>`. |
 

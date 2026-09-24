@@ -30,7 +30,7 @@ type harness struct {
 
 func newHarness() *harness {
 	h := &harness{registry: engine.NewChainRegistry()}
-	h.mgr = policy.NewManager(context.Background(), h.registry, func(string, config.RedisServiceConfig) (redis.Client, error) {
+	h.mgr = policy.NewManager(context.Background(), h.registry, func(context.Context, string, config.RedisServiceConfig) (redis.Client, error) {
 		c := redistest.New()
 		h.clients = append(h.clients, c)
 		return c, nil

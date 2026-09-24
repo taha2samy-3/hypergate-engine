@@ -35,19 +35,11 @@ serviceAccount:
   annotations: {}
 
 # ── Engine Configuration ─────────────────────────────────────────────────────
+# Listener address, stream limits and pool sizes are part of the engine config
+# (initialConfig.content below, or the operator-generated ConfigMap).
 engine:
-  # -- gRPC listen address
-  address: "0.0.0.0:9001"
-  # -- Maximum concurrent gRPC streams
-  maxConcurrentStreams: 10000
-  # -- Number of RequestContext objects to pre-warm in the pool
-  poolPrewarmSize: 5000
-  # -- Initial header map capacity per request
-  initialHeaderCapacity: 64
-  # -- Pre-allocated body buffer size in bytes
-  preallocBodyBufferBytes: 65536
-
-  # -- TLS / mTLS configuration for the gRPC listener
+  # -- TLS / mTLS for the gRPC listener. The Secret is mounted and passed to the
+  # engine via TLS_* environment variables, which override server.tls in the config.
   tls:
     enabled: false
     # -- Name of a Kubernetes Secret containing tls.crt and tls.key

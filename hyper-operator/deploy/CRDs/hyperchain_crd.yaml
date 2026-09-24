@@ -49,6 +49,10 @@ spec:
                       - DenyFilter
                       - CorrelationIdFilter
                       - RedisMetadataEnricherFilter
+                      - ApiKeyFilter
+                      - ExternalAuthFilter
+                      - FirewallFilter
+                      - JwtAuthFilter
                     name:
                       type: string
           status:

@@ -72,3 +72,24 @@ func TestParseBytes_Defaults(t *testing.T) {
 		t.Fatalf("pprof must be disabled by default, got %q", cfg.Server.PprofAddress)
 	}
 }
+
+func TestParseBytes_LowercasesRouteHeaderNames(t *testing.T) {
+	cfg, err := config.ParseBytes([]byte(`
+version: v1
+chains:
+  internal: []
+router:
+  routes:
+    - name: internal
+      target_chain: internal
+      matches:
+        - headers:
+            X-Internal: "true"
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := cfg.Router.Routes[0].Matches[0].Headers["x-internal"]; !ok {
+		t.Fatalf("route header names must be lower-cased, got %v", cfg.Router.Routes[0].Matches[0].Headers)
+	}
+}

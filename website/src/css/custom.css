@@ -70,8 +70,10 @@ body {
   --ifm-footer-background-color: #070b1c;
 }
 
-/* Diagrams carry their own background panel; keep them crisp and centred. */
-.markdown img[src*='/img/diagrams/'] {
+/* Diagrams carry their own background panel; keep them crisp and centred.
+   Small SVGs are inlined by the bundler as data: URIs, so match both forms. */
+.markdown img[src*='/img/diagrams/'],
+.markdown img[src^='data:image/svg+xml'] {
   display: block;
   margin: 1.5rem auto;
   width: 100%;
@@ -85,11 +87,6 @@ body {
   vertical-align: -0.15em;
   margin-right: 0.3em;
   color: var(--ifm-color-primary);
-}
-
-.markdown table {
-  display: table;
-  width: 100%;
 }
 
 .markdown h1 {

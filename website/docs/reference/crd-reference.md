@@ -60,7 +60,7 @@ spec:
 | `engineImage` | string | operator's `ENGINE_IMAGE` (the chart sets it to the engine release matching the operator) | | Engine container image. |
 | `engineResources` | `ResourceRequirements` (`requests`, `limits`) | requests `cpu: 100m`, `memory: 128Mi`; limits `memory: 512Mi` | | Engine container resources. When set, replaces the defaults entirely. |
 | `trustedProxyHops` | integer, minimum `0` | `0` | `server.client_ip.trusted_proxy_hops` | Trusted proxies in front of Envoy. See [Client IP](../concepts/client-ip.md). |
-| `redisServiceRef` | string | none, **required** | | Name of a HyperRedis. Required by the schema; the compiler currently does not use it (filters name their Redis service themselves). |
+| `redisServiceRef` | string | empty | | Deprecated and ignored; each Redis-backed filter names its HyperRedis in its own spec. |
 | `defaultChain` | string | empty | `router.default_chain` | HyperChain for unmatched requests. If it names a missing HyperChain, a `503` deny chain is compiled under that name. |
 | `poolPrewarmSize` | integer | `5000` | `server.pool_prewarm_size` | Request contexts allocated at start-up. |
 | `initialHeaderCapacity` | integer | `64` | `server.initial_header_capacity` | Initial header map capacity per context. |
@@ -142,10 +142,10 @@ spec:
 | `filters[].kind` | enum, **required** | | Filter kind (see below). |
 | `filters[].name` | string, **required** | | `metadata.name` of the filter resource. |
 
-The compiler and the validating webhook accept all nine filter kinds: `RateLimitFilter`, `HeaderModifierFilter`, `DenyFilter`, `CorrelationIdFilter`, `RedisMetadataEnricherFilter`, `ApiKeyFilter`, `ExternalAuthFilter`, `FirewallFilter`, `JwtAuthFilter`.
+`kind` is one of the nine filter kinds: `RateLimitFilter`, `HeaderModifierFilter`, `DenyFilter`, `CorrelationIdFilter`, `RedisMetadataEnricherFilter`, `ApiKeyFilter`, `ExternalAuthFilter`, `FirewallFilter`, `JwtAuthFilter`.
 
-:::caution Check the installed schema
-The `kind` enum is enforced by the CRD schema installed in your cluster. The HyperChain CRD in `charts/hyper-operator/crds/hyperchain_crd.yaml` at the time of writing lists only `RateLimitFilter`, `HeaderModifierFilter`, `DenyFilter`, `CorrelationIdFilter` and `RedisMetadataEnricherFilter`; with that schema the API server rejects references to the other four kinds with `Unsupported value`. Check with `kubectl get crd hyperchains.hyper.io -o yaml` and update the CRD if needed.
+:::note Upgrading from an older release
+Older CRD manifests listed only the first five kinds, and Helm never upgrades CRDs. If the API server rejects a chain with `Unsupported value`, re-apply `charts/hyper-operator/crds/`.
 :::
 
 With webhooks enabled, creating or updating a HyperChain fails if a referenced filter does not exist, and deleting a HyperChain fails while a HyperConfig uses it as `defaultChain`.
@@ -362,8 +362,9 @@ spec:
 | --- | --- | --- | --- |
 | `protocol` | enum `http`, `grpc` | `http` | `protocol` |
 | `container` | object, **required** | | Sidecar container. See [Sidecar container](#sidecar-container). |
-| `engineRules.timeout` | string (duration) | `2s` | `timeout` |
-| `engineRules.forwardHeaders` | list of string | empty | `forward_headers` |
+| `engineRules.timeout` | string (duration) | `2s` | `timeout` (both protocols) |
+| `engineRules.path` | string | `/` | `path`: request path of HTTP checks, e.g. `/oauth2/auth` |
+| `engineRules.forwardHeaders` | list of string | empty (all headers) | `forward_headers` |
 | `engineRules.onSuccess.upstreamHeadersToAdd` | list of string | empty | `on_success.upstream_headers_to_add` |
 | `engineRules.onSuccess.upstreamHeadersToRemove` | list of string | empty | `on_success.upstream_headers_to_remove` |
 | `engineRules.onFailure.downstreamPassThroughHeaders` | list of string | empty | `on_failure.downstream_pass_through_headers` |
@@ -511,7 +512,7 @@ spec:
 | `responseHeaderName` | string | unset (engine: `headerName`) | `response_header_name` |
 | `validationRegex` | string | empty | `validation_regex` |
 
-`propagateToUpstream` and `propagateToDownstream` are compiled only when `true`; a `false` value is dropped and the engine default `true` applies, so propagation cannot be turned off through the CRD. `status` is an empty object.
+`propagateToUpstream` and `propagateToDownstream` default to `true` and are always compiled, so setting either to `false` turns that direction off. `status` is an empty object.
 
 ## RedisMetadataEnricherFilter
 

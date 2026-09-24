@@ -129,5 +129,5 @@ The file you pass is the engine configuration described in [Engine configuration
 | `resources`, probes, security contexts, scheduling | see `values.yaml` | Probes target `/healthz` and `/readyz` on the `health` port (9003). |
 
 :::note
-The engine reads TLS settings only from `server.tls` in its configuration. With `engine.tls.enabled` the chart mounts the certificates, and you point the configuration at them, for example `cert_file: /etc/hypergate/tls/tls.crt` and `key_file: /etc/hypergate/tls/tls.key`. The `engine.address`, `engine.maxConcurrentStreams` and pool values in `values.yaml` are not injected into the configuration either; set the corresponding `server.*` fields in `initialConfig.content`.
+With `engine.tls.enabled` the chart mounts the certificate Secret and passes the file paths to the engine through the `TLS_CERT_FILE`, `TLS_KEY_FILE` (and, with `mutualTLS`, `TLS_CA_FILE`, `TLS_MUTUAL_TLS`) environment variables. These override `server.tls`, so TLS stays on even when the operator rewrites the ConfigMap. Listener address, stream limits and pool sizes are part of the engine configuration: set the `server.*` fields in `initialConfig.content`.
 :::

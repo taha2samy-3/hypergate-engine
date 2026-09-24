@@ -69,3 +69,34 @@ func TestHeaderKeyNameIsCaseInsensitive(t *testing.T) {
 		t.Fatalf("mixed-case key_names must match the lower-cased header: %s", ctx.ResponseBody)
 	}
 }
+
+func TestHashFormatWithoutFieldsChecksExistence(t *testing.T) {
+	cfg := config.APIKeyFilterConfig{HashAlgorithm: "none", ValueFormat: "hash"}
+	if err := cfg.ApplyDefaults(); err != nil {
+		t.Fatal(err)
+	}
+	client := redistest.New()
+	client.Set("apikey:known", "x")
+	f := NewAPIKeyFilter("api_key", cfg, client)
+
+	for key, wantBlocked := range map[string]bool{"known": false, "unknown": true} {
+		ctx := &engine.RequestContext{
+			Headers:          map[string]string{"x-api-key": key},
+			UpstreamShadow:   map[string]string{},
+			DownstreamShadow: map[string]string{},
+		}
+		if err := f.Execute(ctx); err != nil {
+			t.Fatalf("%s: %v", key, err)
+		}
+		if ctx.Blocked != wantBlocked {
+			t.Fatalf("%s: blocked=%v status=%d", key, ctx.Blocked, ctx.ResponseStatus)
+		}
+	}
+}
+
+func TestStatusCheckRejectedForPlainFormat(t *testing.T) {
+	cfg := config.APIKeyFilterConfig{ValueFormat: "plain", StatusCheck: config.APIKeyStatusCheck{Enabled: true, FieldName: "s"}}
+	if err := cfg.ApplyDefaults(); err == nil {
+		t.Fatal("status_check with plain format must be rejected")
+	}
+}
