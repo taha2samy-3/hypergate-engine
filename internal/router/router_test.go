@@ -242,8 +242,7 @@ func TestRouter_AtomicConfigReload(t *testing.T) {
 	}
 
 	// Simulate hot-reload: store a new config atomically.
-	var p atomic.Pointer[config.Config]
-	_ = p // just verify it compiles; config.GlobalConfig is the actual atomic.Pointer
+
 	loadConfig(config.Config{
 		Version: "v1",
 		Router: config.RouterConfig{

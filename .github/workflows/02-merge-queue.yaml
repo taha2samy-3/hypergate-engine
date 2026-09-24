@@ -48,7 +48,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Dry-Run Build with Docker Bake
-        uses: docker/bake-action@v3
+        uses: docker/bake-action@v5
         with:
           targets: ${{ matrix.target }}
           push: false

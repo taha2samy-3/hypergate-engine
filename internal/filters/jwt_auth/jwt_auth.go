@@ -120,7 +120,7 @@ type Filter struct {
 	// keySet is an atomic pointer so the background refresher can swap it
 	// without blocking request-path goroutines.
 	keySet atomic.Pointer[jwk.Set]
-	keyMu  sync.Mutex // guards the initial fetch only
+
 
 	httpClient *http.Client // for introspection endpoint
 
