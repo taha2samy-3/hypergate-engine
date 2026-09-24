@@ -1,0 +1,125 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 600" role="img" aria-labelledby="t d">
+  <title id="t">Request lifecycle across ext_proc phases</title>
+  <desc id="d">The six ext_proc phases in order: request headers, request body, request trailers, response headers, response body, response trailers. The diagram lists which built-in filters run in each phase and shows that every phase except response trailers can end the request with an ImmediateResponse.</desc>
+  <defs>
+    <style>
+      text { font-family: Inter, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #E2E8F0; }
+      .h { font-size: 16px; font-weight: 700; }
+      .n { font-size: 13px; font-weight: 700; fill: #A5B4FC; }
+      .nc { font-size: 13px; font-weight: 700; fill: #67E8F9; }
+      .b { font-size: 14px; }
+      .s { font-size: 12.5px; fill: #94A3B8; }
+      .cap { font-size: 12.5px; fill: #94A3B8; letter-spacing: 0.08em; }
+      .req { fill: #1E293B; stroke: #6366F1; stroke-width: 2; }
+      .res { fill: #1E293B; stroke: #22D3EE; stroke-width: 2; }
+      .list { fill: #111A2E; stroke: #334155; stroke-width: 1.2; }
+      .blk { fill: #3B0D1A; stroke: #F43F5E; stroke-width: 1.5; }
+      .nob { fill: #1E293B; stroke: #475569; stroke-width: 1.5; stroke-dasharray: 5 4; }
+      .bt { font-size: 13px; fill: #FDA4AF; font-weight: 600; }
+      .nt { font-size: 13px; fill: #94A3B8; font-weight: 600; }
+    </style>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#94A3B8"/></marker>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="600" rx="18" fill="#0F172A"/>
+  <rect x="0.75" y="0.75" width="1198.5" height="598.5" rx="18" fill="none" stroke="#1E293B" stroke-width="1.5"/>
+
+  <!-- path brackets -->
+  <text x="36" y="44" class="cap">REQUEST PATH (before the upstream is called)</text>
+  <path d="M36 58 H592" stroke="#6366F1" stroke-width="2"/>
+  <text x="608" y="44" class="cap">RESPONSE PATH (after the upstream answered)</text>
+  <path d="M608 58 H1164" stroke="#22D3EE" stroke-width="2"/>
+  <path d="M36 72 H1156" stroke="#475569" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <!-- phase boxes -->
+  <g>
+    <rect x="36" y="90" width="178" height="74" rx="12" class="req"/>
+    <text x="52" y="113" class="n">1</text>
+    <text x="52" y="136" class="h">Request headers</text>
+    <text x="52" y="155" class="s">always sent</text>
+
+    <rect x="226" y="90" width="178" height="74" rx="12" class="req"/>
+    <text x="242" y="113" class="n">2</text>
+    <text x="242" y="136" class="h">Request body</text>
+    <text x="242" y="155" class="s">BUFFERED, on demand</text>
+
+    <rect x="416" y="90" width="178" height="74" rx="12" class="req"/>
+    <text x="432" y="113" class="n">3</text>
+    <text x="432" y="136" class="h">Request trailers</text>
+    <text x="432" y="155" class="s">SKIP by default</text>
+
+    <rect x="606" y="90" width="178" height="74" rx="12" class="res"/>
+    <text x="622" y="113" class="nc">4</text>
+    <text x="622" y="136" class="h">Response headers</text>
+    <text x="622" y="155" class="s">SEND by default</text>
+
+    <rect x="796" y="90" width="178" height="74" rx="12" class="res"/>
+    <text x="812" y="113" class="nc">5</text>
+    <text x="812" y="136" class="h">Response body</text>
+    <text x="812" y="155" class="s">NONE by default</text>
+
+    <rect x="986" y="90" width="178" height="74" rx="12" class="res"/>
+    <text x="1002" y="113" class="nc">6</text>
+    <text x="1002" y="136" class="h">Response trailers</text>
+    <text x="1002" y="155" class="s">SKIP by default</text>
+  </g>
+
+  <!-- filter lists -->
+  <text x="36" y="192" class="cap">WHAT RUNS HERE</text>
+  <rect x="36" y="204" width="178" height="236" rx="10" class="list"/>
+  <text x="50" y="230" class="b" font-weight="600">route → chain</text>
+  <text x="50" y="249" class="s">snapshot pinned for stream</text>
+  <text x="50" y="276" class="b">rate limit</text>
+  <text x="50" y="298" class="b">API key · JWT</text>
+  <text x="50" y="320" class="b">external auth</text>
+  <text x="50" y="342" class="b">deny (request match)</text>
+  <text x="50" y="364" class="b">header modifier</text>
+  <text x="50" y="386" class="b">correlation ID · enricher</text>
+  <text x="50" y="408" class="b">firewall ¹</text>
+  <text x="50" y="428" class="s">may request the body</text>
+
+  <rect x="226" y="204" width="178" height="236" rx="10" class="list"/>
+  <text x="240" y="230" class="b">firewall with</text>
+  <text x="240" y="250" class="b">inspect_body</text>
+  <text x="240" y="274" class="s">headers + body sent to</text>
+  <text x="240" y="292" class="s">the sidecar in one call</text>
+
+  <rect x="416" y="204" width="178" height="236" rx="10" class="list"/>
+  <text x="430" y="230" class="s">no built-in filter</text>
+
+  <rect x="606" y="204" width="178" height="236" rx="10" class="list"/>
+  <text x="620" y="230" class="b">deny (response</text>
+  <text x="620" y="250" class="b">header match)</text>
+  <text x="620" y="280" class="b">apply queued</text>
+  <text x="620" y="300" class="b">downstream headers</text>
+  <text x="620" y="320" class="s">rate-limit, correlation ID,</text>
+  <text x="620" y="338" class="s">header modifier</text>
+  <text x="620" y="368" class="b">body required but</text>
+  <text x="620" y="388" class="b">never sent → 500</text>
+
+  <rect x="796" y="204" width="178" height="236" rx="10" class="list"/>
+  <text x="810" y="230" class="s">no built-in filter</text>
+
+  <rect x="986" y="204" width="178" height="236" rx="10" class="list"/>
+  <text x="1000" y="230" class="s">trailer mutations only</text>
+
+  <!-- block row -->
+  <text x="36" y="470" class="cap">CAN A FILTER END THE REQUEST?</text>
+  <rect x="36" y="482" width="178" height="52" rx="10" class="blk"/>
+  <text x="125" y="513" class="bt" text-anchor="middle">ImmediateResponse</text>
+  <rect x="226" y="482" width="178" height="52" rx="10" class="blk"/>
+  <text x="315" y="513" class="bt" text-anchor="middle">ImmediateResponse</text>
+  <rect x="416" y="482" width="178" height="52" rx="10" class="blk"/>
+  <text x="505" y="513" class="bt" text-anchor="middle">ImmediateResponse</text>
+  <rect x="606" y="482" width="178" height="52" rx="10" class="blk"/>
+  <text x="695" y="506" class="bt" text-anchor="middle">ImmediateResponse</text>
+  <text x="695" y="524" class="s" text-anchor="middle" style="fill:#FDA4AF">replaces upstream reply</text>
+  <rect x="796" y="482" width="178" height="52" rx="10" class="blk"/>
+  <text x="885" y="506" class="bt" text-anchor="middle">ImmediateResponse</text>
+  <text x="885" y="524" class="s" text-anchor="middle" style="fill:#FDA4AF">replaces upstream reply</text>
+  <rect x="986" y="482" width="178" height="52" rx="10" class="nob"/>
+  <text x="1075" y="506" class="nt" text-anchor="middle">cannot block</text>
+  <text x="1075" y="524" class="s" text-anchor="middle">headers already sent</text>
+
+  <text x="36" y="572" class="s">¹ The firewall calls its sidecar on request headers unless inspect_body is set and the request has a body; then it asks Envoy for the buffered body and runs in phase 2.</text>
+</svg>

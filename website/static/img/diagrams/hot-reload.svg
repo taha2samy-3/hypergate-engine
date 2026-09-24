@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 600" role="img" aria-labelledby="t d">
+  <title id="t">Transactional hot reload</title>
+  <desc id="d">A new config is parsed, validated and fully compiled. Any error rejects it and the previous policy keeps serving. On success the routes and chains are published together as a new snapshot. Streams that started on the old snapshot finish on it; retired filters and Redis clients are closed after the last of them ends.</desc>
+  <defs>
+    <style>
+      text { font-family: Inter, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #E2E8F0; }
+      .h { font-size: 16px; font-weight: 700; }
+      .b { font-size: 14px; }
+      .s { font-size: 13px; fill: #94A3B8; }
+      .cap { font-size: 12.5px; fill: #94A3B8; letter-spacing: 0.08em; }
+      .box { fill: #1E293B; stroke: #334155; stroke-width: 1.5; }
+      .acc { fill: #1E293B; stroke: #6366F1; stroke-width: 2; }
+      .ok { fill: #0B2A22; stroke: #10B981; stroke-width: 2; }
+      .bad { fill: #3B0D1A; stroke: #F43F5E; stroke-width: 2; }
+      .ln { stroke: #94A3B8; stroke-width: 2; fill: none; }
+      .lnr { stroke: #F43F5E; stroke-width: 2; fill: none; }
+    </style>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#94A3B8"/></marker>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#F43F5E"/></marker>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="600" rx="18" fill="#0F172A"/>
+  <rect x="0.75" y="0.75" width="1198.5" height="598.5" rx="18" fill="none" stroke="#1E293B" stroke-width="1.5"/>
+
+  <text x="36" y="50" class="cap">APPLYING A NEW CONFIG</text>
+
+  <rect x="36" y="70" width="214" height="118" rx="12" class="box"/>
+  <text x="54" y="98" class="h">New config</text>
+  <text x="54" y="124" class="s">FILE: fsnotify</text>
+  <text x="54" y="146" class="s">K8S: ConfigMap watch</text>
+  <text x="54" y="168" class="s">URL: POST /v1/reload</text>
+
+  <rect x="290" y="70" width="226" height="118" rx="12" class="acc"/>
+  <text x="308" y="98" class="h">Parse and validate</text>
+  <text x="308" y="124" class="s">version: v1, server fields,</text>
+  <text x="308" y="146" class="s">regexes compile, routes</text>
+  <text x="308" y="168" class="s">point at defined chains</text>
+
+  <rect x="556" y="70" width="262" height="118" rx="12" class="acc"/>
+  <text x="574" y="98" class="h">Compile everything</text>
+  <text x="574" y="124" class="s">Redis clients: reuse unchanged,</text>
+  <text x="574" y="146" class="s">dial new or changed ones</text>
+  <text x="574" y="168" class="s">every filter of every chain</text>
+
+  <rect x="858" y="70" width="306" height="118" rx="12" class="ok"/>
+  <text x="876" y="98" class="h">Publish snapshot N+1</text>
+  <text x="876" y="124" class="s" style="fill:#A7F3D0">routes and chains swapped together</text>
+  <text x="876" y="146" class="s" style="fill:#A7F3D0">identical filters and Redis clients</text>
+  <text x="876" y="168" class="s" style="fill:#A7F3D0">are carried over with warm caches</text>
+
+  <path d="M250 129 H282" class="ln" marker-end="url(#a)"/>
+  <path d="M516 129 H548" class="ln" marker-end="url(#a)"/>
+  <path d="M818 129 H850" class="ln" marker-end="url(#a)"/>
+  <text x="834" y="118" class="s" text-anchor="middle">ok</text>
+
+  <path d="M403 188 V238" class="lnr" marker-end="url(#ar)"/>
+  <path d="M687 188 V238" class="lnr" marker-end="url(#ar)"/>
+  <text x="414" y="218" class="s" style="fill:#FDA4AF">error</text>
+  <text x="698" y="218" class="s" style="fill:#FDA4AF">error</text>
+
+  <rect x="290" y="246" width="528" height="70" rx="12" class="bad"/>
+  <text x="308" y="274" class="h">Rejected: snapshot N keeps serving</text>
+  <text x="308" y="298" class="s" style="fill:#FECDD3">error is logged (URL provider answers 422); anything built so far is closed</text>
+
+  <!-- timeline -->
+  <text x="36" y="360" class="cap">IN-FLIGHT STREAMS AND RESOURCE LIFETIME</text>
+
+  <text x="36" y="410" class="b" font-weight="700">snapshot N</text>
+  <text x="36" y="430" class="s">old routes + chains</text>
+  <rect x="190" y="386" width="600" height="64" rx="10" fill="#1E1B4B" stroke="#4338CA" stroke-width="1.2"/>
+  <rect x="200" y="396" width="140" height="10" rx="5" fill="#818CF8"/>
+  <rect x="250" y="413" width="220" height="10" rx="5" fill="#818CF8"/>
+  <rect x="330" y="430" width="260" height="10" rx="5" fill="#818CF8"/>
+  <rect x="440" y="396" width="330" height="10" rx="5" fill="#818CF8"/>
+  <rect x="490" y="413" width="100" height="10" rx="5" fill="#818CF8"/>
+
+  <text x="36" y="498" class="b" font-weight="700">snapshot N+1</text>
+  <text x="36" y="518" class="s">new routes + chains</text>
+  <rect x="520" y="474" width="644" height="64" rx="10" fill="#052E24" stroke="#059669" stroke-width="1.2"/>
+  <rect x="534" y="484" width="170" height="10" rx="5" fill="#34D399"/>
+  <rect x="600" y="501" width="260" height="10" rx="5" fill="#34D399"/>
+  <rect x="690" y="518" width="300" height="10" rx="5" fill="#34D399"/>
+  <rect x="880" y="484" width="240" height="10" rx="5" fill="#34D399"/>
+  <rect x="1010" y="501" width="140" height="10" rx="5" fill="#34D399"/>
+
+  <path d="M520 374 V548" stroke="#10B981" stroke-width="2" stroke-dasharray="6 5"/>
+  <text x="520" y="368" class="s" text-anchor="middle" style="fill:#6EE7B7">atomic swap</text>
+
+  <path d="M780 386 V450" stroke="#F59E0B" stroke-width="2.5"/>
+  <circle cx="780" cy="401" r="5" fill="#F59E0B"/>
+  <text x="808" y="408" class="b" style="fill:#FCD34D">last stream on N ends</text>
+  <text x="808" y="430" class="s">retired filters and Redis clients are closed</text>
+
+  <path d="M190 566 H1156" class="ln" marker-end="url(#a)"/>
+  <text x="1164" y="588" class="s" text-anchor="end">time</text>
+  <text x="190" y="588" class="s">each bar is one ext_proc stream; it keeps the snapshot it opened with</text>
+</svg>

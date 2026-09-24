@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 680" role="img" aria-labelledby="t d">
+  <title id="t">Hypergate architecture</title>
+  <desc id="d">Clients reach Envoy, which calls the Hypergate engine over an ext_proc gRPC stream. The engine pod runs the engine container and injected sidecars that share Unix domain sockets. The engine uses Redis. The operator compiles hyper.io CRDs into a ConfigMap that the engine watches, and manages the engine DaemonSet.</desc>
+  <defs>
+    <style>
+      text { font-family: Inter, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #E2E8F0; }
+      .h { font-size: 17px; font-weight: 700; }
+      .b { font-size: 15px; }
+      .s { font-size: 13px; fill: #94A3B8; }
+      .lbl { font-size: 13px; fill: #CBD5E1; }
+      .box { fill: #1E293B; stroke: #334155; stroke-width: 1.5; }
+      .acc { fill: #1E293B; stroke: #6366F1; stroke-width: 2; }
+      .cy { fill: #1E293B; stroke: #22D3EE; stroke-width: 2; }
+      .inner { fill: #0F172A; stroke: #334155; stroke-width: 1.2; }
+      .ln { stroke: #94A3B8; stroke-width: 2; fill: none; }
+      .lnc { stroke: #22D3EE; stroke-width: 2; fill: none; }
+      .lni { stroke: #6366F1; stroke-width: 2; fill: none; }
+    </style>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#94A3B8"/></marker>
+    <marker id="ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#22D3EE"/></marker>
+    <marker id="acs" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="4.5" markerHeight="4.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#22D3EE"/></marker>
+    <marker id="ai" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6366F1"/></marker>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="680" rx="18" fill="#0F172A"/>
+  <rect x="0.75" y="0.75" width="1198.5" height="678.5" rx="18" fill="none" stroke="#1E293B" stroke-width="1.5"/>
+
+  <!-- Data plane: client, Envoy, upstream -->
+  <text x="40" y="52" class="s" style="letter-spacing:0.08em">DATA PLANE</text>
+  <rect x="40" y="100" width="150" height="64" rx="12" class="box"/>
+  <text x="115" y="138" class="h" text-anchor="middle">Client</text>
+
+  <rect x="300" y="88" width="340" height="88" rx="12" class="acc"/>
+  <text x="470" y="122" class="h" text-anchor="middle">Envoy proxy</text>
+  <text x="470" y="148" class="s" text-anchor="middle">HTTP filter envoy.filters.http.ext_proc</text>
+
+  <rect x="740" y="100" width="180" height="64" rx="12" class="box"/>
+  <text x="830" y="138" class="h" text-anchor="middle">Upstream service</text>
+
+  <path d="M190 132 H292" class="ln" marker-end="url(#a)"/>
+  <text x="245" y="122" class="lbl" text-anchor="middle">HTTP</text>
+  <path d="M640 132 H732" class="ln" marker-end="url(#a)"/>
+  <text x="690" y="122" class="lbl" text-anchor="middle">allowed</text>
+
+  <!-- ext_proc stream -->
+  <path d="M540 176 V282" class="lnc" marker-end="url(#ac)"/>
+  <path d="M590 282 V184" class="lnc" marker-end="url(#ac)"/>
+  <text x="604" y="214" class="lbl">ext_proc gRPC stream (one per request)</text>
+  <text x="604" y="234" class="s">mutations or ImmediateResponse</text>
+
+  <!-- Engine pod -->
+  <rect x="160" y="250" width="630" height="310" rx="16" fill="none" stroke="#6366F1" stroke-width="1.8" stroke-dasharray="7 6"/>
+  <text x="180" y="276" class="s">Engine pod (DaemonSet in targetNamespace)</text>
+
+  <rect x="190" y="300" width="180" height="92" rx="12" class="box"/>
+  <text x="280" y="334" class="b" text-anchor="middle" font-weight="700">ext-auth-&lt;name&gt;</text>
+  <text x="280" y="358" class="s" text-anchor="middle">ExternalAuthFilter</text>
+  <text x="280" y="378" class="s" text-anchor="middle">sidecar</text>
+
+  <rect x="190" y="420" width="180" height="92" rx="12" class="box"/>
+  <text x="280" y="454" class="b" text-anchor="middle" font-weight="700">fw-&lt;name&gt;</text>
+  <text x="280" y="478" class="s" text-anchor="middle">FirewallFilter</text>
+  <text x="280" y="498" class="s" text-anchor="middle">sidecar</text>
+
+  <rect x="398" y="296" width="46" height="220" rx="10" fill="#083344" stroke="#22D3EE" stroke-width="1.5"/>
+  <text transform="translate(427 406) rotate(-90)" class="s" text-anchor="middle" style="fill:#A5F3FC">/var/run/hypergate</text>
+
+  <path d="M373 346 H395" class="lnc" marker-start="url(#acs)" marker-end="url(#acs)"/>
+  <path d="M373 466 H395" class="lnc" marker-start="url(#acs)" marker-end="url(#acs)"/>
+  <path d="M447 406 H467" class="lnc" marker-start="url(#acs)" marker-end="url(#acs)"/>
+
+  <rect x="470" y="290" width="290" height="240" rx="12" class="acc"/>
+  <text x="490" y="318" class="h">engine container</text>
+  <rect x="488" y="332" width="254" height="36" rx="8" class="inner"/>
+  <text x="615" y="355" class="b" text-anchor="middle">router: request → chain</text>
+  <rect x="488" y="376" width="254" height="36" rx="8" class="inner"/>
+  <text x="615" y="399" class="b" text-anchor="middle">policy snapshot (routes + chains)</text>
+  <rect x="488" y="420" width="254" height="94" rx="8" class="inner"/>
+  <text x="615" y="443" class="b" text-anchor="middle">native filters</text>
+  <text x="615" y="465" class="s" text-anchor="middle">rate limit · API key · JWT · deny</text>
+  <text x="615" y="484" class="s" text-anchor="middle">header modifier · correlation ID</text>
+  <text x="615" y="503" class="s" text-anchor="middle">Redis metadata enricher</text>
+
+  <!-- Control plane column -->
+  <text x="870" y="212" class="s" style="letter-spacing:0.08em">CONTROL PLANE</text>
+  <rect x="870" y="226" width="290" height="70" rx="12" class="box"/>
+  <text x="1015" y="254" class="h" text-anchor="middle">hyper.io CRDs</text>
+  <text x="1015" y="278" class="s" text-anchor="middle">HyperConfig · HyperChain · HyperRoute …</text>
+
+  <rect x="870" y="330" width="290" height="70" rx="12" class="acc"/>
+  <text x="1015" y="358" class="h" text-anchor="middle">hyper-operator</text>
+  <text x="1015" y="382" class="s" text-anchor="middle">compiles CRDs · manages the DaemonSet</text>
+
+  <rect x="870" y="436" width="290" height="70" rx="12" class="box"/>
+  <text x="1015" y="464" class="h" text-anchor="middle">ConfigMap</text>
+  <text x="1015" y="488" class="s" text-anchor="middle">hyper-engine-config / config.yaml</text>
+
+  <rect x="870" y="580" width="290" height="70" rx="12" class="box"/>
+  <text x="1015" y="608" class="h" text-anchor="middle">Redis</text>
+  <text x="1015" y="632" class="s" text-anchor="middle">counters · API keys · metadata</text>
+
+  <path d="M1015 296 V322" class="ln" marker-end="url(#a)"/>
+  <path d="M1015 400 V428" class="ln" marker-end="url(#a)"/>
+  <path d="M868 365 H798" class="lni" stroke-dasharray="6 5" marker-end="url(#ai)"/>
+  <text x="833" y="355" class="s" text-anchor="middle">manages</text>
+  <path d="M868 471 H768" class="ln" marker-end="url(#a)"/>
+  <text x="818" y="461" class="s" text-anchor="middle">watch</text>
+  <path d="M615 530 V615 H862" class="ln" marker-end="url(#a)"/>
+  <text x="740" y="605" class="lbl" text-anchor="middle">Redis protocol (TCP or unix)</text>
+</svg>
