@@ -1,0 +1,72 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: redismetadataenricherfilters.hyper.io
+spec:
+  group: hyper.io
+  names:
+    kind: RedisMetadataEnricherFilter
+    listKind: RedisMetadataEnricherFilterList
+    plural: redismetadataenricherfilters
+    singular: redismetadataenricherfilter
+    shortNames:
+    - rmef
+  scope: Cluster
+  versions:
+  - name: v1alpha1
+    served: true
+    storage: true
+    subresources:
+      status: {}
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            type: object
+            required:
+            - redisService
+            - keyPattern
+            properties:
+              redisService:
+                type: string
+              cacheSizeMB:
+                type: integer
+              cacheTimeout:
+                type: string
+              variables:
+                type: object
+                additionalProperties:
+                  type: object
+                  required:
+                  - source
+                  properties:
+                    source:
+                      type: string
+                    default:
+                      type: string
+                    regexPattern:
+                      type: string
+                    jsonPath:
+                      type: string
+              keyPattern:
+                type: string
+              outputMappings:
+                type: array
+                items:
+                  type: object
+                  required:
+                  - targetHeader
+                  properties:
+                    jsonPath:
+                      type: string
+                    targetHeader:
+                      type: string
+          status:
+            type: object

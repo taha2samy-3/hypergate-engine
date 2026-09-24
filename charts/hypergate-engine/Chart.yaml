@@ -1,0 +1,28 @@
+apiVersion: v2
+name: hypergate-engine
+description: >
+  Hypergate Engine — a high-performance, zero-allocation Envoy ext_proc gRPC server
+  for API Gateway logic (JWT auth, rate limiting, API key validation, firewall, header
+  mutation). Designed as a DaemonSet alongside Cilium / Envoy-based gateways.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+home: https://github.com/taha2samy/hypergate
+sources:
+  - https://github.com/taha2samy/hypergate
+keywords:
+  - envoy
+  - ext_proc
+  - gateway
+  - api-gateway
+  - cilium
+  - rate-limiting
+  - auth
+maintainers:
+  - name: taha2samy
+    url: https://github.com/taha2samy
+annotations:
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/signKey: |
+    fingerprint: <your-gpg-fingerprint>
+    url: https://keybase.io/taha2samy/pgp_keys.asc

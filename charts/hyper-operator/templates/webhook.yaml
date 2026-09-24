@@ -1,0 +1,44 @@
+{{- if .Values.operator.enableWebhooks }}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: {{ include "hyper-operator.fullname" . }}-webhook-config
+  labels:
+    {{- include "hyper-operator.labels" . | nindent 4 }}
+  {{- if .Values.certManager.enabled }}
+  annotations:
+    cert-manager.io/inject-ca-from: {{ printf "%s/%s" .Release.Namespace .Values.certManager.certificateName | quote }}
+  {{- end }}
+webhooks:
+  - name: vhyperchain.kb.io
+    clientConfig:
+      service:
+        name: {{ include "hyper-operator.fullname" . }}
+        namespace: {{ .Release.Namespace }}
+        path: /validate-hyper-io-v1alpha1-hyperchain
+    failurePolicy: Fail
+    rules:
+      - apiGroups: ["hyper.io"]
+        apiVersions: ["v1alpha1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["hyperchains"]
+    admissionReviewVersions: ["v1"]
+    sideEffects: None
+
+{{- range $filter := list "correlationidfilter" "denyfilter" "headermodifierfilter" "ratelimitfilter" "redismetadataenricherfilter" "apikeyfilter" "externalauthfilter" "firewallfilter" }}
+  - name: v{{ $filter | trunc 6 }}.kb.io
+    clientConfig:
+      service:
+        name: {{ include "hyper-operator.fullname" $ }}
+        namespace: {{ $.Release.Namespace }}
+        path: /validate-hyper-io-v1alpha1-{{ $filter }}
+    failurePolicy: Fail
+    rules:
+      - apiGroups: ["hyper.io"]
+        apiVersions: ["v1alpha1"]
+        operations: ["DELETE"]
+        resources: ["{{ $filter }}s"]
+    admissionReviewVersions: ["v1"]
+    sideEffects: None
+{{- end }}
+{{- end }}

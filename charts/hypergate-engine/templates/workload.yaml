@@ -1,0 +1,132 @@
+{{- $fullName := include "hypergate-engine.fullname" . -}}
+{{- $selectorLabels := include "hypergate-engine.selectorLabels" . -}}
+apiVersion: {{ if eq .Values.workload.kind "DaemonSet" }}apps/v1{{ else }}apps/v1{{ end }}
+kind: {{ .Values.workload.kind }}
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ include "hypergate-engine.namespace" . }}
+  labels:
+    {{- include "hypergate-engine.labels" . | nindent 4 }}
+  {{- with .Values.podAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if ne .Values.workload.kind "DaemonSet" }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "hypergate-engine.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "hypergate-engine.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "hypergate-engine.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        {{- if .Values.engine.tls.enabled }}
+        - name: tls-certs
+          secret:
+            secretName: {{ .Values.engine.tls.secretName }}
+        {{- if .Values.engine.tls.mutualTLS }}
+        - name: tls-ca
+          secret:
+            secretName: {{ .Values.engine.tls.caSecretName }}
+        {{- end }}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      containers:
+        - name: engine
+          image: {{ include "hypergate-engine.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: grpc
+              containerPort: 9001
+              protocol: TCP
+          env:
+            - name: CONFIG_PROVIDER
+              value: {{ .Values.engine.configProvider | quote }}
+            {{- if eq .Values.engine.configProvider "K8S" }}
+            - name: CONFIG_K8S_NAME
+              value: {{ .Values.engine.configMapName | quote }}
+            - name: CONFIG_K8S_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            {{- end }}
+            {{- if .Values.engine.tls.enabled }}
+            - name: TLS_CERT_FILE
+              value: /etc/hypergate/tls/tls.crt
+            - name: TLS_KEY_FILE
+              value: /etc/hypergate/tls/tls.key
+            {{- if .Values.engine.tls.mutualTLS }}
+            - name: TLS_CA_FILE
+              value: /etc/hypergate/ca/ca.crt
+            - name: TLS_MUTUAL_TLS
+              value: "true"
+            {{- end }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          volumeMounts:
+            {{- if .Values.engine.tls.enabled }}
+            - name: tls-certs
+              mountPath: /etc/hypergate/tls
+              readOnly: true
+            {{- if .Values.engine.tls.mutualTLS }}
+            - name: tls-ca
+              mountPath: /etc/hypergate/ca
+              readOnly: true
+            {{- end }}
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}

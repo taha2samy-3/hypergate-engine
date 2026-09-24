@@ -470,7 +470,27 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 // SetupWithManager sets up the controller with the Manager.
 func (r *HyperChainMasterCompilerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	triggerFunc := handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []reconcile.Request {
-		return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: "global", Namespace: "default"}}}
+		var routeList hyperv1alpha1.HyperRouteList
+		if err := mgr.GetClient().List(ctx, &routeList); err != nil {
+			return nil
+		}
+		reqs := make([]reconcile.Request, len(routeList.Items))
+		for i, route := range routeList.Items {
+			reqs[i] = reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      route.Name,
+					Namespace: route.Namespace,
+				},
+			}
+		}
+		// Also ensure a default reconciliation runs in case no routes exist yet
+		// to build the base config with the default chain.
+		if len(reqs) == 0 {
+			reqs = append(reqs, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: "global", Namespace: "default"},
+			})
+		}
+		return reqs
 	})
 
 	return ctrl.NewControllerManagedBy(mgr).

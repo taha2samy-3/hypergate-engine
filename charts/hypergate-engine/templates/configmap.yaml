@@ -1,0 +1,16 @@
+{{- if .Values.initialConfig.create }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.engine.configMapName }}
+  namespace: {{ include "hypergate-engine.namespace" . }}
+  labels:
+    {{- include "hypergate-engine.labels" . | nindent 4 }}
+  annotations:
+    # This ConfigMap is the bootstrap config only.
+    # The hyper-operator will continuously reconcile and overwrite this.
+    helm.sh/resource-policy: keep
+data:
+  config.yaml: |
+    {{- .Values.initialConfig.content | nindent 4 }}
+{{- end }}

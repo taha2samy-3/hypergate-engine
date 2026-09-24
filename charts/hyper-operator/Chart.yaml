@@ -1,0 +1,46 @@
+apiVersion: v2
+name: hyper-operator
+description: >
+  Hyper Operator — the Kubernetes operator that manages the Hypergate Engine lifecycle.
+  Watches HyperConfig, HyperChain, HyperRoute and all filter CRDs, then compiles them
+  into a ConfigMap that the engine hot-reloads. Also manages the engine DaemonSet and
+  injects auth/firewall sidecars automatically.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+home: https://github.com/taha2samy/hypergate
+sources:
+  - https://github.com/taha2samy/hypergate
+keywords:
+  - operator
+  - envoy
+  - ext_proc
+  - gateway
+  - cilium
+  - kubernetes-operator
+maintainers:
+  - name: taha2samy
+    url: https://github.com/taha2samy
+annotations:
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/crds: |
+    - kind: HyperConfig
+      version: v1alpha1
+      name: hyperconfigs.hyper.io
+      displayName: HyperConfig
+      description: Global configuration for the Hypergate Engine DaemonSet
+    - kind: HyperChain
+      version: v1alpha1
+      name: hyperchains.hyper.io
+      displayName: HyperChain
+      description: A named ordered filter chain
+    - kind: HyperRoute
+      version: v1alpha1
+      name: hyperroutes.hyper.io
+      displayName: HyperRoute
+      description: Routes requests to a HyperChain based on path/header matchers
+    - kind: HyperRedis
+      version: v1alpha1
+      name: hyperredises.hyper.io
+      displayName: HyperRedis
+      description: A Redis service connection configuration

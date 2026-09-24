@@ -75,7 +75,7 @@ func (r *HyperConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	engineImage := hyperConfig.Spec.EngineImage
 	if engineImage == "" {
-		engineImage = "taha/myprog-engine:latest"
+		engineImage = "ghcr.io/taha2samy-3/hyper-engine:latest"
 	}
 
 	namespace := targetNS
@@ -132,16 +132,16 @@ func (r *HyperConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
-	// List all ExternalAuthFilters to determine what sidecars to inject.
+	// List ExternalAuthFilters in the target namespace to determine what sidecars to inject.
 	var externalAuthList hyperv1alpha1.ExternalAuthFilterList
-	if err := r.List(ctx, &externalAuthList); err != nil {
+	if err := r.List(ctx, &externalAuthList, client.InNamespace(targetNS)); err != nil {
 		logger.Error(err, "failed to list ExternalAuthFilters")
 		return ctrl.Result{}, err
 	}
 
-	// List all FirewallFilters to determine what sidecars to inject.
+	// List FirewallFilters in the target namespace to determine what sidecars to inject.
 	var firewallList hyperv1alpha1.FirewallFilterList
-	if err := r.List(ctx, &firewallList); err != nil {
+	if err := r.List(ctx, &firewallList, client.InNamespace(targetNS)); err != nil {
 		logger.Error(err, "failed to list FirewallFilters")
 		return ctrl.Result{}, err
 	}

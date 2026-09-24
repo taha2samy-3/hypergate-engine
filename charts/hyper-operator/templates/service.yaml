@@ -1,0 +1,17 @@
+{{- if .Values.operator.enableWebhooks }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "hyper-operator.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "hyper-operator.labels" . | nindent 4 }}
+spec:
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.targetPort }}
+      name: webhook
+      protocol: TCP
+  selector:
+    {{- include "hyper-operator.selectorLabels" . | nindent 4 }}
+{{- end }}

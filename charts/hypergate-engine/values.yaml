@@ -1,0 +1,148 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Hypergate Engine — Helm values
+# ─────────────────────────────────────────────────────────────────────────────
+
+# -- Number of replicas. For a DaemonSet (default) this value is ignored.
+# Set workload.kind: Deployment to use replicas.
+replicaCount: 1
+
+image:
+  # -- Container image repository
+  repository: ghcr.io/taha2samy-3/hyper-engine
+  # -- Image pull policy
+  pullPolicy: IfNotPresent
+  # -- Image tag. Defaults to the chart appVersion.
+  tag: ""
+
+# -- Image pull secrets (list of secret names)
+imagePullSecrets: []
+
+# -- Override the chart name
+nameOverride: ""
+# -- Override the full name
+fullnameOverride: ""
+
+# ── Workload ─────────────────────────────────────────────────────────────────
+workload:
+  # -- kind: DaemonSet (default, recommended for ext_proc node-local routing)
+  # or Deployment (for smaller clusters)
+  kind: DaemonSet
+
+# ── Service Account ──────────────────────────────────────────────────────────
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# ── Engine Configuration ─────────────────────────────────────────────────────
+engine:
+  # -- gRPC listen address
+  address: "0.0.0.0:9001"
+  # -- Maximum concurrent gRPC streams
+  maxConcurrentStreams: 10000
+  # -- Number of RequestContext objects to pre-warm in the pool
+  poolPrewarmSize: 5000
+  # -- Initial header map capacity per request
+  initialHeaderCapacity: 64
+  # -- Pre-allocated body buffer size in bytes
+  preallocBodyBufferBytes: 65536
+
+  # -- TLS / mTLS configuration for the gRPC listener
+  tls:
+    enabled: false
+    # -- Name of a Kubernetes Secret containing tls.crt and tls.key
+    secretName: ""
+    # -- Set to true to enable mutual TLS (requires caSecretName)
+    mutualTLS: false
+    # -- Name of a Kubernetes Secret containing ca.crt for client verification
+    caSecretName: ""
+
+  # -- Config provider: FILE, K8S, or URL
+  configProvider: "K8S"
+  # -- Name of the ConfigMap to read config from (used when configProvider=K8S)
+  configMapName: "hyper-engine-config"
+
+# ── Initial ConfigMap ─────────────────────────────────────────────────────────
+# The operator will overwrite this continuously. This is only the bootstrap config.
+initialConfig:
+  # -- Set to false to skip creating the ConfigMap (useful when operator manages it)
+  create: true
+  # -- Raw YAML content for config.yaml
+  content: |
+    version: v1
+    server:
+      address: "0.0.0.0:9001"
+      max_concurrent_streams: 10000
+      pool_prewarm_size: 5000
+      initial_header_capacity: 64
+    router:
+      default_chain: "public"
+    chains:
+      public: []
+
+# ── Service ──────────────────────────────────────────────────────────────────
+service:
+  type: ClusterIP
+  port: 9001
+  # -- appProtocol tells Envoy this is an h2c (plaintext HTTP/2 / gRPC) service
+  appProtocol: "kubernetes.io/h2c"
+  # -- TrafficDistribution: PreferSameNode keeps ext_proc calls node-local (K8s 1.31+)
+  trafficDistribution: "PreferSameNode"
+  annotations: {}
+
+# ── Resources ────────────────────────────────────────────────────────────────
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 2000m
+    memory: 512Mi
+
+# ── Probes ───────────────────────────────────────────────────────────────────
+livenessProbe:
+  tcpSocket:
+    port: 9001
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  tcpSocket:
+    port: 9001
+  initialDelaySeconds: 3
+  periodSeconds: 5
+
+# ── Security ─────────────────────────────────────────────────────────────────
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# ── Scheduling ───────────────────────────────────────────────────────────────
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+topologySpreadConstraints: []
+
+# ── Extra env vars ────────────────────────────────────────────────────────────
+extraEnv: []
+# - name: MY_VAR
+#   value: "my-value"
+
+# ── Extra volumes ─────────────────────────────────────────────────────────────
+extraVolumes: []
+extraVolumeMounts: []
+
+# ── Pod annotations ───────────────────────────────────────────────────────────
+podAnnotations: {}
+
+# -- Namespace to deploy into. Defaults to the Helm release namespace.
+namespaceOverride: ""

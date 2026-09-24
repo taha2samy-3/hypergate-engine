@@ -1,0 +1,56 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: hyperroutes.hyper.io
+spec:
+  group: hyper.io
+  names:
+    kind: HyperRoute
+    listKind: HyperRouteList
+    plural: hyperroutes
+    singular: hyperroute
+    shortNames:
+      - hrt
+  scope: Cluster
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              type: object
+              required:
+                - priority
+                - targetPolicy
+                - matches
+              properties:
+                priority:
+                  type: integer
+                targetPolicy:
+                  type: string
+                matches:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      pathPrefix:
+                        type: string
+                      pathRegexPattern:
+                        type: string
+                      headers:
+                        type: object
+                        additionalProperties:
+                          type: string
+            status:
+              type: object

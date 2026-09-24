@@ -1,5 +1,5 @@
-name: 'Run Integration Tests'
-description: 'Runs all pytest integration scenarios using Docker Compose'
+name: 'Run Tests'
+description: 'Runs Go unit tests and pytest integration scenarios'
 
 runs:
   using: 'composite'
@@ -7,14 +7,22 @@ runs:
     - name: Set up Go Environment
       uses: ./.github/actions/setup-go-env
 
+    - name: Run Go Unit Tests
+      shell: bash
+      run: |
+        go test -race -count=1 -timeout=120s \
+          ./internal/engine/... \
+          ./internal/router/... \
+          ./internal/filters/jwt_auth/... \
+          ./internal/memory/...
+
     - name: Set up Python Environment
       uses: ./.github/actions/setup-python-env
 
     - name: Install Pipenv Dependencies
       shell: bash
       run: |
-        pipenv install --deploy
-
+        pipenv install --dev --skip-lock
 
     - name: Run API Key Integration Tests
       shell: bash

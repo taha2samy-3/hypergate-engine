@@ -1,0 +1,31 @@
+{{- if and .Values.serviceAccount.create (eq .Values.engine.configProvider "K8S") }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "hypergate-engine.fullname" . }}-config-reader
+  namespace: {{ include "hypergate-engine.namespace" . }}
+  labels:
+    {{- include "hypergate-engine.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: [{{ .Values.engine.configMapName | quote }}]
+    verbs: ["get", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "hypergate-engine.fullname" . }}-config-reader
+  namespace: {{ include "hypergate-engine.namespace" . }}
+  labels:
+    {{- include "hypergate-engine.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "hypergate-engine.fullname" . }}-config-reader
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "hypergate-engine.serviceAccountName" . }}
+    namespace: {{ include "hypergate-engine.namespace" . }}
+{{- end }}

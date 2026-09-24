@@ -1,0 +1,98 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Hyper Operator — Helm values
+# ─────────────────────────────────────────────────────────────────────────────
+
+replicaCount: 2  # HA default — leader election keeps only one active
+
+image:
+  repository: ghcr.io/taha2samy-3/hyper-operator
+  pullPolicy: IfNotPresent
+  # -- Defaults to the chart appVersion
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# ── Service Account ──────────────────────────────────────────────────────────
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# ── Operator Settings ─────────────────────────────────────────────────────────
+operator:
+  # -- Enable leader election (required when replicaCount > 1)
+  leaderElect: true
+  # -- Enable the validating webhook server
+  enableWebhooks: true
+  # -- Webhook server port
+  webhookPort: 9443
+  # -- Webhook TLS Secret name (created by cert-manager or manually)
+  webhookCertSecret: "webhook-server-cert"
+
+# ── cert-manager integration ──────────────────────────────────────────────────
+certManager:
+  # -- Set to true if cert-manager is installed; creates Certificate + Issuer
+  enabled: true
+  issuerName: "hyper-selfsigned-issuer"
+  certificateName: "hyper-operator-cert"
+  secretName: "webhook-server-cert"
+  duration: "8760h"   # 1 year
+  renewBefore: "360h" # 15 days
+
+# ── Service (webhook) ─────────────────────────────────────────────────────────
+service:
+  type: ClusterIP
+  port: 443
+  targetPort: 9443
+
+# ── Resources ────────────────────────────────────────────────────────────────
+resources:
+  requests:
+    cpu: 100m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# ── Probes ───────────────────────────────────────────────────────────────────
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8081
+  initialDelaySeconds: 15
+  periodSeconds: 20
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: 8081
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+# ── Security ─────────────────────────────────────────────────────────────────
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  fsGroup: 65532
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# ── Scheduling ───────────────────────────────────────────────────────────────
+nodeSelector: {}
+tolerations: []
+
+podAntiAffinity:
+  enabled: true
+  topologyKey: "kubernetes.io/hostname"
+
+podAnnotations: {}
+
+# -- CRD installation. Set to false to manage CRDs externally.
+installCRDs: true

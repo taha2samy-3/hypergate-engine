@@ -1,0 +1,79 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "hyper-operator.fullname" . }}-role
+  labels:
+    {{- include "hyper-operator.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["hyper.io"]
+    resources:
+      - hyperconfigs
+      - hyperredis
+      - hyperroutes
+      - hyperchains
+      - ratelimitfilters
+      - headermodifierfilters
+      - denyfilters
+      - correlationidfilters
+      - redismetadataenricherfilters
+      - apikeyfilters
+      - externalauthfilters
+      - firewallfilters
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["hyper.io"]
+    resources:
+      - hyperconfigs/status
+      - hyperredis/status
+      - hyperroutes/status
+      - hyperchains/status
+      - ratelimitfilters/status
+      - headermodifierfilters/status
+      - denyfilters/status
+      - correlationidfilters/status
+      - redismetadataenricherfilters/status
+      - apikeyfilters/status
+      - externalauthfilters/status
+      - firewallfilters/status
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["hyper.io"]
+    resources:
+      - hyperconfigs/finalizers
+      - hyperredis/finalizers
+      - hyperroutes/finalizers
+      - hyperchains/finalizers
+      - ratelimitfilters/finalizers
+      - headermodifierfilters/finalizers
+      - denyfilters/finalizers
+      - correlationidfilters/finalizers
+      - redismetadataenricherfilters/finalizers
+      - apikeyfilters/finalizers
+      - externalauthfilters/finalizers
+      - firewallfilters/finalizers
+    verbs: ["update"]
+  - apiGroups: [""]
+    resources: ["configmaps", "services", "serviceaccounts", "namespaces", "events"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["daemonsets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "hyper-operator.fullname" . }}-rolebinding
+  labels:
+    {{- include "hyper-operator.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "hyper-operator.fullname" . }}-role
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "hyper-operator.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}

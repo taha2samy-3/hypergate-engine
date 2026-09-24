@@ -35,6 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       code_changed: ${{ steps.filter.outputs.code_changed }}
+      chart_changed: ${{ steps.filter.outputs.chart_changed }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -43,14 +44,53 @@ jobs:
           filters: |
             code_changed:
               - '**/*.go'
-              - '**/*.py'
               - 'go.mod'
               - 'go.sum'
-              - 'Pipenv'
-              - 'Pipfile'
-              - 'Pipfile.lock'
               - 'Dockerfile'
               - 'hyper-operator/Dockerfile'
+            chart_changed:
+              - 'charts/**'
+
+  go-unit-tests:
+    name: Go Unit Tests & Vet
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.code_changed == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go Environment
+        uses: ./.github/actions/setup-go-env
+
+      - name: Run Go Vet
+        shell: bash
+        run: go vet ./...
+
+      - name: Run Go Unit Tests
+        shell: bash
+        run: |
+          go test -race -count=1 -timeout=120s \
+            ./internal/engine/... \
+            ./internal/router/... \
+            ./internal/filters/jwt_auth/... \
+            ./internal/memory/...
+
+  helm-lint:
+    name: Helm Chart Lint
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.chart_changed == 'true' || needs.detect-changes.outputs.code_changed == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Lint engine chart
+        run: helm lint charts/hypergate-engine
+
+      - name: Lint operator chart
+        run: helm lint charts/hyper-operator
 
   build-dry-run:
     name: Verify Multi-Platform Build (${{ matrix.target }})
