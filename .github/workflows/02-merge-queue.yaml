@@ -34,12 +34,7 @@ jobs:
       - name: Run Go Unit Tests
         if: matrix.target == 'engine'
         shell: bash
-        run: |
-          go test -race -count=1 -timeout=120s \
-            ./internal/engine/... \
-            ./internal/router/... \
-            ./internal/filters/jwt_auth/... \
-            ./internal/memory/...
+        run: task engine:test
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3

@@ -17,6 +17,11 @@ tasks:
     cmds:
       - go vet ./...
 
+  test:
+    desc: "Run Go unit tests"
+    cmds:
+      - go test -race -count=1 -timeout=120s ./...
+
   generate:
     desc: "Generate Protobuf and gRPC files using Buf tool"
     cmds:

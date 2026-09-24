@@ -9,37 +9,15 @@ runs:
 
     - name: Run Go Unit Tests
       shell: bash
-      run: |
-        go test -race -count=1 -timeout=120s \
-          ./internal/engine/... \
-          ./internal/router/... \
-          ./internal/filters/jwt_auth/... \
-          ./internal/memory/...
+      run: task engine:test
 
     - name: Set up Python Environment
       uses: ./.github/actions/setup-python-env
 
     - name: Install Pipenv Dependencies
       shell: bash
-      run: |
-        pipenv install --dev --skip-lock
+      run: pipenv install --dev --skip-lock
 
-    - name: Run API Key Integration Tests
+    - name: Run Integration Tests
       shell: bash
-      run: |
-        task tests:test-api-key
-
-    - name: Run Rate Limit Integration Tests
-      shell: bash
-      run: |
-        task tests:test-ratelimit
-
-    - name: Run Header Modification Integration Tests
-      shell: bash
-      run: |
-        task tests:modification-filter
-
-    - name: Run Metadata Enrichment Integration Tests
-      shell: bash
-      run: |
-        task tests:metadata-enrichment
+      run: task test:all

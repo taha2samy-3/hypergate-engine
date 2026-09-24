@@ -68,12 +68,7 @@ jobs:
 
       - name: Run Go Unit Tests
         shell: bash
-        run: |
-          go test -race -count=1 -timeout=120s \
-            ./internal/engine/... \
-            ./internal/router/... \
-            ./internal/filters/jwt_auth/... \
-            ./internal/memory/...
+        run: task engine:test
 
   helm-lint:
     name: Helm Chart Lint
