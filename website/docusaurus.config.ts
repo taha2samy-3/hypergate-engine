@@ -4,36 +4,38 @@ import type * as Preset from '@docusaurus/preset-classic';
 
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
-const config: Config = {
-  title: 'Hypergate Engine',
-  tagline: 'High-performance API Gateway built in Go',
-  favicon: 'img/favicon.ico',
+const repoUrl = 'https://github.com/taha2samy-3/hypergate-engine';
 
-  // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
+const config: Config = {
+  title: 'Hypergate',
+  tagline:
+    'A policy engine for Envoy: authentication, rate limiting and traffic rules, declared as Kubernetes resources and enforced over ext_proc.',
+  favicon: 'img/favicon.svg',
+
   future: {
-    v4: true, // Improve compatibility with the upcoming Docusaurus v4
+    v4: true,
   },
 
-  // Set the production url of your site here
   url: 'https://taha2samy-3.github.io',
-  // Set the /<baseUrl>/ pathname under which your site is served
-  // For GitHub pages deployment, it is often '/<projectName>/'
   baseUrl: '/hypergate-engine/',
-
-  // GitHub pages deployment config.
-  // If you aren't using GitHub pages, you don't need these.
-  organizationName: 'taha2samy-3', // Usually your GitHub org/user name.
-  projectName: 'hypergate-engine', // Usually your repo name.
+  organizationName: 'taha2samy-3',
+  projectName: 'hypergate-engine',
+  trailingSlash: false,
 
   onBrokenLinks: 'throw',
 
-  // Even if you don't use internationalization, you can use this field to set
-  // useful metadata like html lang. For example, if your site is Chinese, you
-  // may want to replace "en" with "zh-Hans".
   i18n: {
     defaultLocale: 'en',
     locales: ['en'],
   },
+
+  stylesheets: [
+    'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap',
+  ],
+
+  headTags: [
+    {tagName: 'meta', attributes: {name: 'theme-color', content: '#0b1026'}},
+  ],
 
   presets: [
     [
@@ -41,8 +43,7 @@ const config: Config = {
       {
         docs: {
           sidebarPath: './sidebars.ts',
-          editUrl:
-            'https://github.com/taha2samy-3/hypergate-engine/tree/main/website/',
+          editUrl: `${repoUrl}/tree/main/website/`,
         },
         blog: false,
         theme: {
@@ -53,28 +54,29 @@ const config: Config = {
   ],
 
   themeConfig: {
-    // Replace with your project's social card
-    image: 'img/docusaurus-social-card.jpg',
+    image: 'img/hypergate-social-card.png',
     colorMode: {
       defaultMode: 'dark',
       disableSwitch: false,
-      respectPrefersColorScheme: false,
+      respectPrefersColorScheme: true,
     },
     navbar: {
       title: 'Hypergate',
       logo: {
-        alt: 'Hypergate Logo',
+        alt: 'Hypergate logo',
         src: 'img/logo.svg',
       },
       items: [
         {
           type: 'docSidebar',
-          sidebarId: 'tutorialSidebar',
+          sidebarId: 'docsSidebar',
           position: 'left',
-          label: 'Documentation',
+          label: 'Docs',
         },
+        {to: '/docs/filters/rate-limiting', label: 'Filters', position: 'left'},
+        {to: '/docs/reference/engine-configuration', label: 'Reference', position: 'left'},
         {
-          href: 'https://github.com/taha2samy-3/hypergate-engine',
+          href: repoUrl,
           label: 'GitHub',
           position: 'right',
         },
@@ -82,35 +84,42 @@ const config: Config = {
     },
     footer: {
       style: 'dark',
+      logo: {
+        alt: 'Hypergate',
+        src: 'img/logo-wordmark.svg',
+        width: 180,
+      },
       links: [
         {
-          title: 'Docs',
+          title: 'Start',
           items: [
-            {
-              label: 'How To Use',
-              to: '/docs/how-to-use',
-            },
-            {
-              label: 'Architecture',
-              to: '/docs/architecture',
-            },
+            {label: 'Introduction', to: '/docs/intro'},
+            {label: 'Install the operator', to: '/docs/getting-started/installation'},
+            {label: 'Kubernetes quickstart', to: '/docs/getting-started/quickstart-kubernetes'},
           ],
         },
         {
-          title: 'More',
+          title: 'Concepts',
           items: [
-            {
-              label: 'GitHub',
-              href: 'https://github.com/taha2samy-3/hypergate-engine',
-            },
+            {label: 'Architecture', to: '/docs/concepts/architecture'},
+            {label: 'Routing', to: '/docs/concepts/routing'},
+            {label: 'Failure modes', to: '/docs/concepts/failure-modes'},
+          ],
+        },
+        {
+          title: 'Project',
+          items: [
+            {label: 'GitHub', href: repoUrl},
+            {label: 'Issues', href: `${repoUrl}/issues`},
           ],
         },
       ],
-      copyright: `Copyright © ${new Date().getFullYear()} Hypergate Engine. Built with Docusaurus.`,
+      copyright: `Copyright © ${new Date().getFullYear()} Hypergate contributors.`,
     },
     prism: {
       theme: prismThemes.github,
-      darkTheme: prismThemes.dracula,
+      darkTheme: prismThemes.oneDark,
+      additionalLanguages: ['bash', 'yaml', 'go'],
     },
   } satisfies Preset.ThemeConfig,
 };

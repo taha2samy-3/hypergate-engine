@@ -1,43 +1,24 @@
-# Website
+# Hypergate documentation site
 
-This website is built using [Docusaurus](https://docusaurus.io/), a modern static website generator.
-
-## Installation
+The documentation at <https://taha2samy-3.github.io/hypergate-engine/>, built with [Docusaurus 3](https://docusaurus.io/).
 
 ```bash
-npm install
+npm ci            # install dependencies
+npm start         # dev server with live reload on http://localhost:3000/hypergate-engine/
+npm run build     # production build into build/ (fails on broken links)
+npm run typecheck # TypeScript check of the site code
 ```
 
-**Note**: feel free to use the package manager of your choice.
+The same commands are available from the repository root as `task docs:dev`, `task docs:build` and `task docs:serve`.
+Pushing changes under `website/` to `main` deploys the site to GitHub Pages (`.github/workflows/deploy-docs.yaml`).
 
-## Local Development
+## Layout
 
-```bash
-npm run start
-```
-
-This command starts a local development server and opens up a browser window. Most changes are reflected live without having to restart the server.
-
-## Build
-
-```bash
-npm run build
-```
-
-This command generates static content into the `build` directory and can be served using any static contents hosting service.
-
-## Deployment
-
-Using SSH:
-
-```bash
-USE_SSH=true npm run deploy
-```
-
-Not using SSH:
-
-```bash
-GIT_USER=<Your GitHub username> npm run deploy
-```
-
-If you are using GitHub Pages for hosting, this command is a convenient way to build the website and push to the `gh-pages` branch.
+| Path | Content |
+| --- | --- |
+| `docs/` | Documentation pages. The sidebar is generated from this folder (`sidebar_position`, `_category_.json`). |
+| `static/img/diagrams/` | Explanatory SVG diagrams used by the docs. They draw their own background so they read in light and dark mode. |
+| `static/img/icons/` | 24px stroke icons (`currentColor`) for filters and concepts. |
+| `static/img/logo.svg`, `logo-wordmark.svg`, `favicon.svg` | Brand mark and wordmark. |
+| `src/pages/index.tsx`, `src/components/` | Landing page. |
+| `src/css/custom.css` | Theme (brand colours: indigo `#6366F1`, cyan `#22D3EE`, navy `#0B1026`). |
