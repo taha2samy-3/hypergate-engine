@@ -2,7 +2,6 @@ package router_test
 
 import (
 	"regexp"
-	"sync/atomic"
 	"testing"
 
 	"github.com/taha2samy/hypergate/internal/config"
