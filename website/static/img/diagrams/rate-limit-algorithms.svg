@@ -1,0 +1,158 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 740" role="img" aria-labelledby="t d">
+  <title id="t">Rate limiting algorithms</title>
+  <desc id="d">Five algorithms side by side. fixed_window counts requests per calendar window and resets at each boundary. sliding_window_counter weights the previous window by its overlap with the last unit. sliding_window_log keeps exact request timestamps. token_bucket refills max_tokens at fill_rate per second. leaky_bucket drains at leak_rate per unit and rejects when bucket_capacity is reached.</desc>
+  <defs>
+    <style>
+      text { font-family: Inter, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #E2E8F0; }
+      .t { font-size: 17px; font-weight: 700; font-family: 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace; }
+      .f { font-size: 13px; fill: #67E8F9; font-family: 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace; }
+      .b { font-size: 14px; }
+      .s { font-size: 13px; fill: #94A3B8; }
+      .xs { font-size: 12px; fill: #94A3B8; }
+      .panel { fill: #111A2E; stroke: #334155; stroke-width: 1.5; }
+      .axis { stroke: #475569; stroke-width: 1.5; }
+      .ok { fill: #22D3EE; }
+      .no { fill: #F43F5E; }
+      .lim { stroke: #F59E0B; stroke-width: 1.5; stroke-dasharray: 5 4; fill: none; }
+    </style>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#94A3B8"/></marker>
+    <marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#10B981"/></marker>
+    <marker id="ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#22D3EE"/></marker>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="740" rx="18" fill="#0F172A"/>
+  <rect x="0.75" y="0.75" width="1198.5" height="738.5" rx="18" fill="none" stroke="#1E293B" stroke-width="1.5"/>
+
+  <!-- 1 fixed_window -->
+  <g transform="translate(36 36)">
+    <rect width="360" height="320" rx="14" class="panel"/>
+    <text x="20" y="36" class="t">fixed_window</text>
+    <text x="20" y="60" class="f">limit, unit</text>
+    <path d="M30 210 H340" class="axis"/>
+    <path d="M30 118 V214 M130 118 V214 M230 118 V214 M330 118 V214" stroke="#334155" stroke-width="1.2" stroke-dasharray="3 4"/>
+    <text x="336" y="104" class="xs" text-anchor="end" style="fill:#FCD34D">limit: 5 per window</text>
+    <!-- window 1: 4 allowed -->
+    <rect x="44" y="180" width="10" height="30" rx="2" class="ok"/>
+    <rect x="62" y="180" width="10" height="30" rx="2" class="ok"/>
+    <rect x="84" y="180" width="10" height="30" rx="2" class="ok"/>
+    <rect x="108" y="180" width="10" height="30" rx="2" class="ok"/>
+    <!-- window 2: 5 allowed, 2 rejected -->
+    <rect x="138" y="180" width="10" height="30" rx="2" class="ok"/>
+    <rect x="151" y="180" width="10" height="30" rx="2" class="ok"/>
+    <rect x="164" y="180" width="10" height="30" rx="2" class="ok"/>
+    <rect x="177" y="180" width="10" height="30" rx="2" class="ok"/>
+    <rect x="190" y="180" width="10" height="30" rx="2" class="ok"/>
+    <rect x="203" y="180" width="10" height="30" rx="2" class="no"/>
+    <rect x="216" y="180" width="10" height="30" rx="2" class="no"/>
+    <!-- window 3 -->
+    <rect x="246" y="180" width="10" height="30" rx="2" class="ok"/>
+    <rect x="276" y="180" width="10" height="30" rx="2" class="ok"/>
+    <rect x="302" y="180" width="10" height="30" rx="2" class="ok"/>
+    <text x="80" y="232" class="xs" text-anchor="middle">window 1</text>
+    <text x="180" y="232" class="xs" text-anchor="middle">window 2</text>
+    <text x="280" y="232" class="xs" text-anchor="middle">window 3</text>
+    <text x="20" y="266" class="b">One counter per window; resets at</text>
+    <text x="20" y="288" class="b">each boundary. Cheapest option; a</text>
+    <text x="20" y="310" class="s">burst across a boundary can reach 2× limit.</text>
+  </g>
+
+  <!-- 2 sliding_window_counter -->
+  <g transform="translate(420 36)">
+    <rect width="360" height="320" rx="14" class="panel"/>
+    <text x="20" y="36" class="t">sliding_window_counter</text>
+    <text x="20" y="60" class="f">limit, unit</text>
+    <path d="M30 210 H340" class="axis"/>
+    <rect x="30" y="150" width="150" height="60" fill="#1E3A5F" stroke="#3B82F6" stroke-width="1"/>
+    <rect x="180" y="180" width="150" height="30" fill="#164E63" stroke="#22D3EE" stroke-width="1"/>
+    <text x="105" y="185" class="xs" text-anchor="middle" style="fill:#BFDBFE">previous: 6</text>
+    <text x="255" y="201" class="xs" text-anchor="middle" style="fill:#A5F3FC">current: 3</text>
+    <rect x="100" y="150" width="80" height="60" fill="#6366F1" fill-opacity="0.35"/>
+    <path d="M100 118 V128 H300 V118" stroke="#10B981" stroke-width="2" fill="none"/>
+    <text x="200" y="110" class="xs" text-anchor="middle" style="fill:#6EE7B7">last unit (sliding)</text>
+    <path d="M300 128 V214" stroke="#10B981" stroke-width="1.5" stroke-dasharray="3 3"/>
+    <text x="300" y="232" class="xs" text-anchor="middle" style="fill:#6EE7B7">now</text>
+    <text x="105" y="232" class="xs" text-anchor="middle">previous window</text>
+    <text x="20" y="266" class="b">estimate = previous × overlap</text>
+    <text x="20" y="288" class="b">+ current. Smooths window edges</text>
+    <text x="20" y="310" class="s">with two counters per key.</text>
+  </g>
+
+  <!-- 3 sliding_window_log -->
+  <g transform="translate(804 36)">
+    <rect width="360" height="320" rx="14" class="panel"/>
+    <text x="20" y="36" class="t">sliding_window_log</text>
+    <text x="20" y="60" class="f">limit, unit</text>
+    <path d="M30 190 H340" class="axis"/>
+    <rect x="130" y="150" width="190" height="60" rx="6" fill="#10B981" fill-opacity="0.12" stroke="#10B981" stroke-width="1.5"/>
+    <circle cx="48" cy="190" r="6" fill="#475569"/>
+    <circle cx="80" cy="190" r="6" fill="#475569"/>
+    <circle cx="108" cy="190" r="6" fill="#475569"/>
+    <circle cx="150" cy="190" r="6" class="ok"/>
+    <circle cx="186" cy="190" r="6" class="ok"/>
+    <circle cx="210" cy="190" r="6" class="ok"/>
+    <circle cx="262" cy="190" r="6" class="ok"/>
+    <circle cx="300" cy="190" r="6" class="ok"/>
+    <text x="225" y="138" class="xs" text-anchor="middle" style="fill:#6EE7B7">(now − unit, now]</text>
+    <text x="80" y="232" class="xs" text-anchor="middle">expired, removed</text>
+    <text x="225" y="232" class="xs" text-anchor="middle">counted: 5</text>
+    <text x="20" y="266" class="b">Stores every request timestamp in</text>
+    <text x="20" y="288" class="b">a sorted set: exact, most memory.</text>
+    <text x="20" y="310" class="s">dynamic_cost is not supported.</text>
+  </g>
+
+  <!-- 4 token_bucket -->
+  <g transform="translate(36 384)">
+    <rect width="360" height="320" rx="14" class="panel"/>
+    <text x="20" y="36" class="t">token_bucket</text>
+    <text x="20" y="60" class="f">max_tokens, fill_rate</text>
+    <path d="M130 100 V210 H250 V100" stroke="#94A3B8" stroke-width="2.5" fill="none" stroke-linejoin="round"/>
+    <path d="M122 100 H258" class="lim"/>
+    <text x="350" y="92" class="xs" text-anchor="end" style="fill:#FCD34D">max_tokens</text>
+    <circle cx="150" cy="196" r="8" class="ok"/><circle cx="170" cy="196" r="8" class="ok"/><circle cx="190" cy="196" r="8" class="ok"/><circle cx="210" cy="196" r="8" class="ok"/><circle cx="230" cy="196" r="8" class="ok"/>
+    <circle cx="160" cy="178" r="8" class="ok"/><circle cx="180" cy="178" r="8" class="ok"/><circle cx="200" cy="178" r="8" class="ok"/><circle cx="220" cy="178" r="8" class="ok"/>
+    <circle cx="170" cy="160" r="8" class="ok"/><circle cx="190" cy="160" r="8" class="ok"/>
+    <path d="M60 84 Q110 84 150 128" stroke="#10B981" stroke-width="2" fill="none" marker-end="url(#ag)"/>
+    <text x="24" y="104" class="xs" style="fill:#6EE7B7">+ fill_rate</text>
+    <text x="24" y="120" class="xs" style="fill:#6EE7B7">per second</text>
+    <path d="M252 180 Q300 180 320 214" stroke="#22D3EE" stroke-width="2" fill="none" marker-end="url(#ac)"/>
+    <text x="330" y="236" class="xs" text-anchor="end" style="fill:#A5F3FC">− cost per request</text>
+    <text x="20" y="266" class="b">Refills continuously up to</text>
+    <text x="20" y="288" class="b">max_tokens; allows bursts of that size.</text>
+    <text x="20" y="310" class="s">fill_rate is per second; unit is ignored.</text>
+  </g>
+
+  <!-- 5 leaky_bucket -->
+  <g transform="translate(420 384)">
+    <rect width="360" height="320" rx="14" class="panel"/>
+    <text x="20" y="36" class="t">leaky_bucket</text>
+    <text x="20" y="60" class="f">bucket_capacity, leak_rate, unit</text>
+    <rect x="132" y="150" width="116" height="58" fill="#6366F1" fill-opacity="0.55"/>
+    <path d="M130 100 V210 H180 M200 210 H250 V100" stroke="#94A3B8" stroke-width="2.5" fill="none" stroke-linejoin="round"/>
+    <path d="M122 100 H258" class="lim"/>
+    <text x="350" y="92" class="xs" text-anchor="end" style="fill:#FCD34D">bucket_capacity</text>
+    <path d="M60 84 Q110 84 150 128" stroke="#22D3EE" stroke-width="2" fill="none" marker-end="url(#ac)"/>
+    <text x="24" y="104" class="xs" style="fill:#A5F3FC">+ cost per</text>
+    <text x="24" y="120" class="xs" style="fill:#A5F3FC">request</text>
+    <path d="M190 212 V238" stroke="#10B981" stroke-width="2" fill="none" marker-end="url(#ag)"/>
+    <text x="204" y="236" class="xs" style="fill:#6EE7B7">leak_rate per unit</text>
+    <text x="20" y="266" class="b">Drains at a constant rate; a request</text>
+    <text x="20" y="288" class="b">that would overflow is rejected.</text>
+    <text x="20" y="310" class="s">Enforces a steady average rate.</text>
+  </g>
+
+  <!-- 6 shared -->
+  <g transform="translate(804 384)">
+    <rect width="360" height="320" rx="14" class="panel" style="stroke:#6366F1"/>
+    <text x="20" y="36" class="b" font-weight="700">Common to every algorithm</text>
+    <text x="20" y="68" class="f">descriptors[].entries</text>
+    <text x="20" y="88" class="s">key/value match; empty value = any</text>
+    <text x="20" y="118" class="f">header_mappings</text>
+    <text x="20" y="138" class="s">descriptor key → request header</text>
+    <text x="20" y="168" class="f">dynamic_cost</text>
+    <text x="20" y="188" class="s">cost from a header, fallback and cap</text>
+    <text x="20" y="218" class="f">shadow_mode, fail_open</text>
+    <text x="20" y="238" class="s">per descriptor: log only / allow on error</text>
+    <text x="20" y="268" class="f">response_headers</text>
+    <text x="20" y="288" class="s">RateLimit-Limit/-Remaining/-Reset</text>
+  </g>
+</svg>

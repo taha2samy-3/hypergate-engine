@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 580" role="img" aria-labelledby="t d">
+  <title id="t">Sidecars over Unix domain sockets</title>
+  <desc id="d">Inside the engine pod, the engine container and each injected sidecar mount the same emptyDir volume at /var/run/hypergate. Each sidecar listens on its own socket file, ext-auth-name.sock or fw-name.sock, and the engine connects to it directly.</desc>
+  <defs>
+    <style>
+      text { font-family: Inter, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #E2E8F0; }
+      .h { font-size: 16px; font-weight: 700; }
+      .b { font-size: 14px; }
+      .m { font-size: 13.5px; font-family: 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace; fill: #A5F3FC; }
+      .s { font-size: 13px; fill: #94A3B8; }
+      .cap { font-size: 12.5px; fill: #94A3B8; letter-spacing: 0.08em; }
+      .box { fill: #1E293B; stroke: #334155; stroke-width: 1.5; }
+      .acc { fill: #1E293B; stroke: #6366F1; stroke-width: 2; }
+      .chip { fill: #0F2A33; stroke: #22D3EE; stroke-width: 1.5; }
+      .lnc { stroke: #22D3EE; stroke-width: 2; fill: none; }
+    </style>
+    <marker id="ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#22D3EE"/></marker>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="580" rx="18" fill="#0F172A"/>
+  <rect x="0.75" y="0.75" width="1198.5" height="578.5" rx="18" fill="none" stroke="#1E293B" stroke-width="1.5"/>
+
+  <rect x="36" y="40" width="1128" height="400" rx="16" fill="none" stroke="#6366F1" stroke-width="1.8" stroke-dasharray="7 6"/>
+  <text x="58" y="68" class="cap">ENGINE POD · DAEMONSET hyper-engine</text>
+
+  <!-- engine -->
+  <rect x="64" y="90" width="310" height="320" rx="12" class="acc"/>
+  <text x="84" y="120" class="h">engine container</text>
+  <text x="84" y="150" class="b">external_auth filter</text>
+  <text x="84" y="170" class="s">socket_path set by the operator</text>
+  <text x="84" y="200" class="b">firewall filter</text>
+  <text x="84" y="220" class="s">socket_path set by the operator</text>
+  <text x="84" y="256" class="b">non-root (UID 10001),</text>
+  <text x="84" y="276" class="b">read-only root filesystem</text>
+  <text x="84" y="312" class="b">JwtAuthFilter Secrets</text>
+  <text x="84" y="332" class="s">mounted read-only under</text>
+  <text x="84" y="352" class="s">/etc/hypergate/secrets/</text>
+  <text x="84" y="372" class="s">jwt-&lt;filter&gt;/&lt;secret&gt;/</text>
+
+  <!-- shared volume -->
+  <rect x="424" y="90" width="330" height="320" rx="12" fill="#082F3A" stroke="#22D3EE" stroke-width="2"/>
+  <text x="444" y="120" class="h">emptyDir uds-sockets</text>
+  <text x="444" y="142" class="s">mounted in every container at</text>
+  <text x="444" y="162" class="m">/var/run/hypergate/</text>
+
+  <rect x="444" y="190" width="290" height="70" rx="10" class="chip"/>
+  <text x="589" y="220" class="m" text-anchor="middle">ext-auth-oidc.sock</text>
+  <text x="589" y="244" class="s" text-anchor="middle">HTTP, or gRPC ext_authz Check</text>
+
+  <rect x="444" y="300" width="290" height="70" rx="10" class="chip"/>
+  <text x="589" y="330" class="m" text-anchor="middle">fw-waf.sock</text>
+  <text x="589" y="354" class="s" text-anchor="middle">gRPC ext_proc, or HTTP</text>
+
+  <!-- sidecars -->
+  <rect x="804" y="90" width="332" height="150" rx="12" class="box"/>
+  <text x="824" y="120" class="h">ext-auth-oidc</text>
+  <text x="824" y="144" class="s">from ExternalAuthFilter "oidc"</text>
+  <text x="824" y="172" class="b">socket via socketEnvKey,</text>
+  <text x="824" y="192" class="b">OAUTH2_PROXY_HTTP_ADDRESS</text>
+  <text x="824" y="212" class="s">(oauth2-proxy images) or {socket_path}</text>
+
+  <rect x="804" y="260" width="332" height="150" rx="12" class="box"/>
+  <text x="824" y="290" class="h">fw-waf</text>
+  <text x="824" y="314" class="s">from FirewallFilter "waf"</text>
+  <text x="824" y="342" class="b">FIREWALL_SOCKET_PATH</text>
+  <text x="824" y="362" class="s">(or socketEnvKey), {socket_path} in args</text>
+  <text x="824" y="388" class="s">rules at /etc/firewall/rules/</text>
+
+  <!-- connections -->
+  <path d="M374 175 H400 V225 H436" class="lnc" stroke-linejoin="round" marker-end="url(#ac)"/>
+  <path d="M374 210 H390 V335 H436" class="lnc" stroke-linejoin="round" marker-end="url(#ac)"/>
+  <path d="M804 165 H776 V225 H742" class="lnc" stroke-linejoin="round" marker-end="url(#ac)"/>
+  <path d="M804 335 H742" class="lnc" marker-end="url(#ac)"/>
+  <text x="620" y="286" class="s" text-anchor="middle">engine dials, sidecar listens</text>
+
+  <text x="36" y="480" class="cap">WHAT THE SOCKET BUYS YOU</text>
+  <text x="36" y="508" class="b">No Service, DNS lookup, network hop or TLS between the engine and its sidecars; the socket never leaves the pod.</text>
+  <text x="36" y="534" class="b">Sidecars run in the engine pod on the same node, so every engine instance has its own copy and they scale with the DaemonSet.</text>
+  <text x="36" y="560" class="s">Every ExternalAuthFilter and FirewallFilter in the cluster is injected, whether or not a chain references it.</text>
+</svg>

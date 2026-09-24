@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" role="img" aria-labelledby="t d">
+  <title id="t">Operator reconciliation flow</title>
+  <desc id="d">Cluster-scoped hyper.io resources are compiled into one engine ConfigMap per HyperConfig target namespace. The HyperConfig controller creates the engine DaemonSet, Service and RBAC in that namespace and injects sidecars for ExternalAuthFilter and FirewallFilter objects. Admission webhooks validate references.</desc>
+  <defs>
+    <style>
+      text { font-family: Inter, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #E2E8F0; }
+      .h { font-size: 16px; font-weight: 700; }
+      .b { font-size: 14px; }
+      .s { font-size: 13px; fill: #94A3B8; }
+      .cap { font-size: 12.5px; fill: #94A3B8; letter-spacing: 0.08em; }
+      .box { fill: #1E293B; stroke: #334155; stroke-width: 1.5; }
+      .acc { fill: #1E293B; stroke: #6366F1; stroke-width: 2; }
+      .cy { fill: #1E293B; stroke: #22D3EE; stroke-width: 2; }
+      .ln { stroke: #94A3B8; stroke-width: 2; fill: none; }
+      .lni { stroke: #6366F1; stroke-width: 2; fill: none; }
+    </style>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#94A3B8"/></marker>
+    <marker id="ai" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#6366F1"/></marker>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="660" rx="18" fill="#0F172A"/>
+  <rect x="0.75" y="0.75" width="1198.5" height="658.5" rx="18" fill="none" stroke="#1E293B" stroke-width="1.5"/>
+
+  <text x="36" y="50" class="cap">HYPER.IO/V1ALPHA1 (CLUSTER-SCOPED)</text>
+
+  <rect x="36" y="66" width="280" height="52" rx="10" class="box"/>
+  <text x="54" y="98" class="b" font-weight="700">HyperRedis</text>
+  <rect x="36" y="130" width="280" height="74" rx="10" class="box"/>
+  <text x="54" y="160" class="b" font-weight="700">9 filter kinds</text>
+  <text x="54" y="184" class="s">RateLimitFilter, ApiKeyFilter, …</text>
+  <rect x="36" y="216" width="280" height="52" rx="10" class="box"/>
+  <text x="54" y="248" class="b" font-weight="700">HyperChain</text>
+  <rect x="36" y="280" width="280" height="52" rx="10" class="box"/>
+  <text x="54" y="312" class="b" font-weight="700">HyperRoute</text>
+  <rect x="36" y="344" width="280" height="74" rx="10" class="acc"/>
+  <text x="54" y="374" class="b" font-weight="700">HyperConfig</text>
+  <text x="54" y="398" class="s">one per targetNamespace</text>
+
+  <!-- collector to compiler -->
+  <path d="M316 92 H350 M316 167 H350 M316 242 H350 M316 306 H350 M316 381 H350" class="ln"/>
+  <path d="M350 92 V381" class="ln"/>
+  <path d="M350 165 H392" class="ln" marker-end="url(#a)"/>
+
+  <!-- compiler -->
+  <rect x="400" y="66" width="380" height="226" rx="12" class="acc"/>
+  <text x="420" y="96" class="h">Master compiler</text>
+  <text x="420" y="124" class="b">filter CRD spec → engine filter options</text>
+  <text x="420" y="150" class="b">HyperChain → chain; status Ready</text>
+  <text x="420" y="170" class="s">fails to compile → Degraded, deny 503</text>
+  <text x="420" y="196" class="b">HyperRoute → routes, by priority</text>
+  <text x="420" y="216" class="s">missing chain → deny 503 chain</text>
+  <text x="420" y="236" class="s">empty targetPolicy or bad regex → skipped</text>
+  <text x="420" y="264" class="b">unchanged output → no ConfigMap write</text>
+
+  <!-- configmaps -->
+  <text x="840" y="50" class="cap">PER TARGET NAMESPACE</text>
+  <rect x="840" y="66" width="324" height="96" rx="12" class="cy"/>
+  <text x="858" y="94" class="h">ConfigMap hyper-engine-config</text>
+  <text x="858" y="118" class="s">namespace: hyper-system</text>
+  <text x="858" y="140" class="s">key config.yaml (engine config v1)</text>
+  <rect x="840" y="178" width="324" height="96" rx="12" class="cy" stroke-dasharray="6 4"/>
+  <text x="858" y="206" class="h">ConfigMap hyper-engine-config</text>
+  <text x="858" y="230" class="s">namespace of a second HyperConfig</text>
+  <text x="858" y="252" class="s">same chains and routes, own server block</text>
+
+  <path d="M780 114 H832" class="ln" marker-end="url(#a)"/>
+  <path d="M780 226 H832" class="ln" marker-end="url(#a)"/>
+
+  <!-- HyperConfig controller -->
+  <path d="M176 418 V470 H392" class="lni" marker-end="url(#ai)"/>
+  <rect x="400" y="330" width="380" height="200" rx="12" class="acc"/>
+  <text x="420" y="360" class="h">HyperConfig controller</text>
+  <text x="420" y="388" class="b">oldest HyperConfig owns a namespace;</text>
+  <text x="420" y="408" class="s">later ones get status.state Conflict</text>
+  <text x="420" y="436" class="b">ServiceAccount, Role, RoleBinding,</text>
+  <text x="420" y="456" class="b">Service hyper-engine-svc :9001</text>
+  <text x="420" y="484" class="b">DaemonSet hyper-engine</text>
+  <text x="420" y="504" class="s">sidecars from ExternalAuth/Firewall filters,</text>
+  <text x="420" y="522" class="s">JwtAuthFilter Secrets mounted read-only</text>
+
+  <!-- DaemonSet -->
+  <rect x="840" y="330" width="324" height="200" rx="12" fill="none" stroke="#6366F1" stroke-width="1.8" stroke-dasharray="7 6"/>
+  <text x="858" y="358" class="h">Engine pod (each node)</text>
+  <rect x="858" y="372" width="288" height="52" rx="10" class="box"/>
+  <text x="876" y="396" class="b" font-weight="700">engine</text>
+  <text x="876" y="414" class="s">CONFIG_PROVIDER=K8S, probes on :9003</text>
+  <rect x="858" y="436" width="138" height="76" rx="10" class="box"/>
+  <text x="927" y="470" class="b" text-anchor="middle">ext-auth-&lt;name&gt;</text>
+  <text x="927" y="492" class="s" text-anchor="middle">sidecar, UDS</text>
+  <rect x="1008" y="436" width="138" height="76" rx="10" class="box"/>
+  <text x="1077" y="470" class="b" text-anchor="middle">fw-&lt;name&gt;</text>
+  <text x="1077" y="492" class="s" text-anchor="middle">sidecar, UDS</text>
+
+  <path d="M780 430 H832" class="lni" marker-end="url(#ai)"/>
+  <path d="M1002 274 V322" class="ln" stroke-dasharray="5 4" marker-end="url(#a)"/>
+  <text x="1014" y="304" class="s">watched and hot-reloaded</text>
+
+  <!-- webhooks -->
+  <rect x="36" y="560" width="1128" height="70" rx="12" class="box"/>
+  <text x="54" y="588" class="h">Admission webhooks</text>
+  <text x="54" y="612" class="s">HyperChain create/update: every referenced filter must exist · filter delete: rejected while a HyperChain references it · HyperChain delete: rejected while it is a defaultChain</text>
+</svg>
