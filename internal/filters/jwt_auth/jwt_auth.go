@@ -10,6 +10,7 @@ package jwt_auth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -81,8 +82,9 @@ type Config struct {
 	// IntrospectionTimeout is the timeout for the introspection HTTP call. Default: 2s.
 	IntrospectionTimeout time.Duration `yaml:"introspection_timeout"`
 
-	// FailOpen allows the request through when both JWT and introspection fail with a network error.
-	// Default: false (fail closed).
+	// FailOpen lets the request through (without claim headers) when the introspection
+	// endpoint cannot be reached or answers 5xx. Invalid or inactive tokens are always
+	// rejected. Default: false (fail closed).
 	FailOpen bool `yaml:"fail_open"`
 
 	// StripToken removes the Authorization header before forwarding to upstream.
@@ -229,33 +231,25 @@ func (f *Filter) Execute(ctx *engine.RequestContext) error {
 	if err != nil {
 		mylogger.Debug("jwt_auth: local JWT validation failed", zap.Error(err))
 
-		// If introspection is configured, try it as a fallback.
-		if f.cfg.IntrospectionEndpoint != "" {
-			introClaims, introErr := f.introspect(ctx.Ctx, rawToken)
-			if introErr != nil {
-				mylogger.Warn("jwt_auth: introspection fallback also failed", zap.Error(introErr))
-				if f.cfg.FailOpen {
-					mylogger.Warn("jwt_auth: fail_open=true, allowing request through")
-					return nil
-				}
-				ctx.Blocked = true
-				ctx.ResponseStatus = 401
-				ctx.ResponseBody = `{"error":"unauthorized","message":"token validation failed"}`
-				ctx.SetHeaderDownstream("content-type", "application/json")
-				return nil
-			}
-			claims = introClaims
-		} else {
-			if f.cfg.FailOpen {
-				mylogger.Warn("jwt_auth: fail_open=true, allowing request through despite JWT error")
-				return nil
-			}
-			ctx.Blocked = true
-			ctx.ResponseStatus = 401
-			ctx.ResponseBody = `{"error":"unauthorized","message":"invalid token"}`
-			ctx.SetHeaderDownstream("content-type", "application/json")
+		if f.cfg.IntrospectionEndpoint == "" {
+			// An invalid token is never let through, even with fail_open.
+			f.reject(ctx, "invalid token")
 			return nil
 		}
+
+		introClaims, introErr := f.introspect(ctx.Ctx, rawToken)
+		if introErr != nil {
+			var unavailable *introspectionUnavailableError
+			if f.cfg.FailOpen && errors.As(introErr, &unavailable) {
+				// fail_open only covers an unreachable/failing introspection endpoint.
+				mylogger.Warn("jwt_auth: introspection unavailable, fail_open=true, allowing request", zap.Error(introErr))
+				return nil
+			}
+			mylogger.Warn("jwt_auth: token rejected by introspection", zap.Error(introErr))
+			f.reject(ctx, "token validation failed")
+			return nil
+		}
+		claims = introClaims
 	}
 
 	// Inject mapped claims into upstream headers.
@@ -275,6 +269,18 @@ func (f *Filter) Execute(ctx *engine.RequestContext) error {
 	)
 	return nil
 }
+
+func (f *Filter) reject(ctx *engine.RequestContext, message string) {
+	ctx.Block(401, `{"error":"unauthorized","message":"`+message+`"}`)
+	ctx.SetHeaderDownstream("content-type", "application/json")
+}
+
+// introspectionUnavailableError marks failures to reach a verdict (network error,
+// timeout, 5xx), as opposed to the endpoint saying the token is not valid.
+type introspectionUnavailableError struct{ err error }
+
+func (e *introspectionUnavailableError) Error() string { return e.err.Error() }
+func (e *introspectionUnavailableError) Unwrap() error { return e.err }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Token extraction
@@ -363,10 +369,13 @@ func (f *Filter) introspect(ctx context.Context, token string) (map[string]inter
 
 	resp, err := f.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("introspection: HTTP call failed: %w", err)
+		return nil, &introspectionUnavailableError{fmt.Errorf("introspection: HTTP call failed: %w", err)}
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	if resp.StatusCode >= 500 {
+		return nil, &introspectionUnavailableError{fmt.Errorf("introspection: server returned HTTP %d", resp.StatusCode)}
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("introspection: server returned HTTP %d", resp.StatusCode)
 	}

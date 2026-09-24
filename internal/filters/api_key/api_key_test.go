@@ -46,3 +46,26 @@ func TestHideCredentialsStripsQueryKeyUpstream(t *testing.T) {
 		t.Fatalf("expected :path mutation without the key, got %q", path)
 	}
 }
+
+func TestHeaderKeyNameIsCaseInsensitive(t *testing.T) {
+	cfg := config.APIKeyFilterConfig{KeyNames: []string{"X-API-Key"}, HashAlgorithm: "none", ValueFormat: "plain"}
+	if err := cfg.ApplyDefaults(); err != nil {
+		t.Fatal(err)
+	}
+	client := redistest.New()
+	client.Set("apikey:k1", "acme")
+	f := NewAPIKeyFilter("api_key", cfg, client)
+
+	ctx := &engine.RequestContext{
+		Path:             "/",
+		Headers:          map[string]string{"x-api-key": "k1"},
+		UpstreamShadow:   map[string]string{},
+		DownstreamShadow: map[string]string{},
+	}
+	if err := f.Execute(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if ctx.Blocked {
+		t.Fatalf("mixed-case key_names must match the lower-cased header: %s", ctx.ResponseBody)
+	}
+}

@@ -41,8 +41,10 @@ spec:
                 type: string
               propagateToUpstream:
                 type: boolean
+                default: true
               propagateToDownstream:
                 type: boolean
+                default: true
               inputHeaderName:
                 type: string
               responseHeaderName:

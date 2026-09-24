@@ -47,7 +47,8 @@ func (f *APIKeyFilter) Execute(ctx *engine.RequestContext) error {
 	// Step A: Extract the API Key
 	for _, name := range f.config.KeyNames {
 		if f.config.KeyInHeader {
-			if val := ctx.GetHeader(name); val != "" {
+			// Header names are case-insensitive and stored lower-cased; query names are not.
+			if val := ctx.GetHeader(strings.ToLower(name)); val != "" {
 				apiKey = val
 				matchedKeyName = name
 				break

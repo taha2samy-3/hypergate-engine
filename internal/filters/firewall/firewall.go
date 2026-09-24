@@ -116,6 +116,9 @@ func (f *FirewallFilter) executeGRPC(ctx *engine.RequestContext) error {
 	if reqCtx == nil {
 		reqCtx = context.Background()
 	}
+	// The timeout applies to the whole sidecar exchange, as it does for HTTP.
+	reqCtx, cancel := context.WithTimeout(reqCtx, f.config.TimeoutDuration)
+	defer cancel()
 
 	stream, err := f.grpcClient.Process(reqCtx)
 	if err != nil {

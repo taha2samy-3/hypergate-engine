@@ -23,13 +23,17 @@ type CorrelationIdFilterSpec struct {
 	// +optional
 	Prefix string `json:"prefix,omitempty" yaml:"prefix,omitempty"`
 
-	// PropagateToUpstream whether to propagate the header to upstream.
+	// PropagateToUpstream sends the ID to the upstream service. Default true.
+	// The yaml tag has no omitempty so an explicit false reaches the engine
+	// (whose own default is true).
+	// +kubebuilder:default=true
 	// +optional
-	PropagateToUpstream bool `json:"propagateToUpstream,omitempty" yaml:"propagate_to_upstream,omitempty"`
+	PropagateToUpstream bool `json:"propagateToUpstream" yaml:"propagate_to_upstream"`
 
-	// PropagateToDownstream whether to propagate the header to downstream.
+	// PropagateToDownstream returns the ID to the client. Default true.
+	// +kubebuilder:default=true
 	// +optional
-	PropagateToDownstream bool `json:"propagateToDownstream,omitempty" yaml:"propagate_to_downstream,omitempty"`
+	PropagateToDownstream bool `json:"propagateToDownstream" yaml:"propagate_to_downstream"`
 
 	// InputHeaderName the input header name.
 	// +optional

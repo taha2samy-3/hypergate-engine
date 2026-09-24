@@ -1,0 +1,8 @@
+{
+  "label": "Filters",
+  "position": 4,
+  "link": {
+    "type": "generated-index",
+    "description": "One page per built-in filter, with the CRD, the equivalent engine YAML, an option reference and behaviour notes."
+  }
+}

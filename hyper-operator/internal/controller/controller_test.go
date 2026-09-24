@@ -204,3 +204,34 @@ func names(cs []corev1.Container) []string {
 	}
 	return out
 }
+
+func TestCompiler_CorrelationPropagateFalseReachesEngine(t *testing.T) {
+	scheme := testScheme(t)
+	hc := hyperConfig("main", "hyper-system", time.Now())
+	hc.Spec.DefaultChain = "c"
+	corr := &hyperv1alpha1.CorrelationIdFilter{
+		ObjectMeta: metav1.ObjectMeta{Name: "rid"},
+		Spec:       hyperv1alpha1.CorrelationIdFilterSpec{PropagateToUpstream: true, PropagateToDownstream: false},
+	}
+	chain := &hyperv1alpha1.HyperChain{
+		ObjectMeta: metav1.ObjectMeta{Name: "c"},
+		Spec:       hyperv1alpha1.HyperChainSpec{Filters: []hyperv1alpha1.FilterReference{{Kind: "CorrelationIdFilter", Name: "rid"}}},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&hc, corr, chain).
+		WithStatusSubresource(&hyperv1alpha1.HyperChain{}).Build()
+	r := &HyperChainMasterCompilerReconciler{Client: c, Scheme: scheme}
+	if _, err := r.Reconcile(context.Background(), ctrl.Request{}); err != nil {
+		t.Fatal(err)
+	}
+	var cm corev1.ConfigMap
+	if err := c.Get(context.Background(), client.ObjectKey{Namespace: "hyper-system", Name: engineConfigMapName}, &cm); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.ParseBytes([]byte(cm.Data["config.yaml"]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v, ok := cfg.Chains["c"][0].Options["propagate_to_downstream"]; !ok || v != false {
+		t.Fatalf("explicit false must be compiled, got %v (present=%v)", v, ok)
+	}
+}

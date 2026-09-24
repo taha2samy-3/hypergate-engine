@@ -89,6 +89,9 @@ func (f *ExternalAuthFilter) executeGRPC(ctx *engine.RequestContext) error {
 	if reqCtx == nil {
 		reqCtx = context.Background()
 	}
+	// The timeout applies to the whole sidecar exchange, as it does for HTTP.
+	reqCtx, cancel := context.WithTimeout(reqCtx, f.config.TimeoutDuration)
+	defer cancel()
 
 	headers := make(map[string]string, len(ctx.Headers))
 	forwardAll := len(f.config.ForwardHeaders) == 0
