@@ -292,6 +292,7 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 					"protocol":        f.Spec.Protocol,
 					"socket_path":     socketPath,
 					"timeout":         f.Spec.EngineRules.Timeout,
+					"path":            f.Spec.EngineRules.Path,
 					"forward_headers": f.Spec.EngineRules.ForwardHeaders,
 					"on_success": map[string]interface{}{
 						"upstream_headers_to_add":    f.Spec.EngineRules.OnSuccess.UpstreamHeadersToAdd,

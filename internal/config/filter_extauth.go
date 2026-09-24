@@ -25,13 +25,15 @@ type AuthFailureRules struct {
 
 // ExternalAuthConfig defines the options for the external_auth filter.
 type ExternalAuthConfig struct {
-	Protocol        string           `yaml:"protocol"`
-	SocketPath      string           `yaml:"socket_path"`
-	Timeout         string           `yaml:"timeout"`
-	TimeoutDuration time.Duration    `yaml:"-"`
-	ForwardHeaders  []string         `yaml:"forward_headers"`
-	OnSuccess       AuthSuccessRules `yaml:"on_success"`
-	OnFailure       AuthFailureRules `yaml:"on_failure"`
+	Protocol        string        `yaml:"protocol"`
+	SocketPath      string        `yaml:"socket_path"`
+	Timeout         string        `yaml:"timeout"`
+	TimeoutDuration time.Duration `yaml:"-"`
+	// Path is the request path used for HTTP checks (default "/"), e.g. "/oauth2/auth".
+	Path           string           `yaml:"path"`
+	ForwardHeaders []string         `yaml:"forward_headers"`
+	OnSuccess      AuthSuccessRules `yaml:"on_success"`
+	OnFailure      AuthFailureRules `yaml:"on_failure"`
 }
 
 // ParseExternalAuthConfig parses raw options into a typed ExternalAuthConfig.
@@ -56,6 +58,11 @@ func ParseExternalAuthConfig(raw interface{}) (*ExternalAuthConfig, error) {
 
 	if cfg.Timeout == "" {
 		cfg.Timeout = "2s"
+	}
+	if cfg.Path == "" {
+		cfg.Path = "/"
+	} else if !strings.HasPrefix(cfg.Path, "/") {
+		cfg.Path = "/" + cfg.Path
 	}
 
 	d, err := time.ParseDuration(cfg.Timeout)

@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"strings"
 
+	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	authv3 "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
-	_ "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -17,12 +17,18 @@ import (
 
 	"github.com/taha2samy/hypergate/internal/config"
 	"github.com/taha2samy/hypergate/internal/engine"
+	"github.com/taha2samy/hypergate/internal/filters/sidecar"
 	mylogger "github.com/taha2samy/hypergate/internal/logger"
 )
 
+// ExternalAuthFilter delegates the allow/deny decision to a sidecar reachable over a
+// Unix domain socket, speaking either plain HTTP (forward-auth style: any 2xx allows)
+// or Envoy's ext_authz gRPC API (envoy.service.auth.v3.Authorization/Check).
+// Every failure to get a verdict (dial error, timeout, protocol error) denies with 500.
 type ExternalAuthFilter struct {
 	config     *config.ExternalAuthConfig
 	client     *http.Client
+	transport  *http.Transport
 	grpcClient authv3.AuthorizationClient
 	grpcConn   *grpc.ClientConn
 }
@@ -54,23 +60,28 @@ func NewExternalAuthFilter(cfg *config.ExternalAuthConfig) (*ExternalAuthFilter,
 			var d net.Dialer
 			return d.DialContext(ctx, "unix", cfg.SocketPath)
 		},
-		DisableKeepAlives:   false,
 		MaxIdleConns:        1000,
 		MaxIdleConnsPerHost: 1000,
 	}
 
-	client := &http.Client{
-		Transport: transport,
-		Timeout:   cfg.TimeoutDuration,
-	}
-
 	return &ExternalAuthFilter{
-		config: cfg,
-		client: client,
+		config:    cfg,
+		transport: transport,
+		client: &http.Client{
+			Transport: transport,
+			Timeout:   cfg.TimeoutDuration,
+			// The sidecar's redirect (e.g. to a login page) is the answer to relay to
+			// the client, not something to follow.
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		},
 	}, nil
 }
 
+// Close releases the sidecar connections. Called when a reload retires the filter.
 func (f *ExternalAuthFilter) Close() error {
+	if f.transport != nil {
+		f.transport.CloseIdleConnections()
+	}
 	if f.grpcConn != nil {
 		return f.grpcConn.Close()
 	}
@@ -84,6 +95,11 @@ func (f *ExternalAuthFilter) Execute(ctx *engine.RequestContext) error {
 	return f.executeHTTP(ctx)
 }
 
+func sidecarFailure(ctx *engine.RequestContext, msg string, err error) {
+	mylogger.Error("external_auth: "+msg, zap.Error(err))
+	ctx.Block(http.StatusInternalServerError, "Internal Server Error")
+}
+
 func (f *ExternalAuthFilter) executeGRPC(ctx *engine.RequestContext) error {
 	reqCtx := ctx.Ctx
 	if reqCtx == nil {
@@ -93,102 +109,66 @@ func (f *ExternalAuthFilter) executeGRPC(ctx *engine.RequestContext) error {
 	reqCtx, cancel := context.WithTimeout(reqCtx, f.config.TimeoutDuration)
 	defer cancel()
 
-	headers := make(map[string]string, len(ctx.Headers))
-	forwardAll := len(f.config.ForwardHeaders) == 0
-	if !forwardAll {
-		for _, h := range f.config.ForwardHeaders {
-			lower := strings.ToLower(h)
-			if lower == "*" || lower == "all" {
-				forwardAll = true
-				break
-			}
-		}
+	host := ctx.Headers[":authority"]
+	if host == "" {
+		host = ctx.Headers["host"]
 	}
-
-	if forwardAll {
-		for k := range ctx.Headers {
-			if val := ctx.GetHeader(k); val != "" {
-				headers[k] = val
-			}
-		}
-	} else {
-		for _, k := range f.config.ForwardHeaders {
-			if val := ctx.GetHeader(k); val != "" {
-				headers[k] = val
-			}
-		}
-	}
-
-	checkReq := &authv3.CheckRequest{
-		Attributes: &authv3.AttributeContext{
-			Request: &authv3.AttributeContext_Request{
-				Http: &authv3.AttributeContext_HttpRequest{
-					Path:    ctx.Path,
-					Method:  ctx.Method,
-					Headers: headers,
-				},
+	attrs := &authv3.AttributeContext{
+		Request: &authv3.AttributeContext_Request{
+			Http: &authv3.AttributeContext_HttpRequest{
+				Id:       ctx.GetHeader("x-request-id"),
+				Method:   ctx.Method,
+				Path:     ctx.Path,
+				Host:     host,
+				Scheme:   ctx.Headers[":scheme"],
+				Protocol: "HTTP/2",
+				Headers:  sidecar.SelectHeaders(ctx, f.config.ForwardHeaders),
 			},
 		},
 	}
+	if ctx.ClientIP != "" {
+		attrs.Source = &authv3.AttributeContext_Peer{
+			Address: &corev3.Address{Address: &corev3.Address_SocketAddress{
+				SocketAddress: &corev3.SocketAddress{Address: ctx.ClientIP},
+			}},
+		}
+	}
 
-	resp, err := f.grpcClient.Check(reqCtx, checkReq)
+	resp, err := f.grpcClient.Check(reqCtx, &authv3.CheckRequest{Attributes: attrs})
 	if err != nil {
-		mylogger.Error("external_auth: gRPC UDS sidecar communication failed", zap.Error(err))
-		ctx.Blocked = true
-		ctx.ResponseStatus = http.StatusInternalServerError
-		ctx.ResponseBody = "Internal Server Error"
+		sidecarFailure(ctx, "gRPC UDS sidecar communication failed", err)
 		return nil
 	}
 
-	statusCode := resp.GetStatus().GetCode()
-
-	if statusCode == int32(codes.OK) {
+	if resp.GetStatus().GetCode() == int32(codes.OK) {
 		okHeaders := make(map[string]string)
 		if okResp := resp.GetOkResponse(); okResp != nil {
 			for _, hOption := range okResp.GetHeaders() {
-				if hOption != nil && hOption.GetHeader() != nil {
-					okHeaders[strings.ToLower(hOption.GetHeader().GetKey())] = hOption.GetHeader().GetValue()
+				if h := hOption.GetHeader(); h != nil {
+					okHeaders[strings.ToLower(h.GetKey())] = headerValue(h)
 				}
 			}
 		}
-
-		for _, k := range f.config.OnSuccess.UpstreamHeadersToAdd {
-			if val, ok := okHeaders[k]; ok {
-				ctx.SetHeaderUpstream(k, val)
-			}
-		}
-		for _, k := range f.config.OnSuccess.UpstreamHeadersToRemove {
-			ctx.RemoveHeaderUpstream(k)
-		}
+		f.applySuccess(ctx, func(k string) (string, bool) { v, ok := okHeaders[k]; return v, ok })
 		return nil
 	}
 
-	ctx.Blocked = true
 	deniedStatus := int32(http.StatusForbidden)
-	deniedResp := resp.GetDeniedResponse()
-	if deniedResp != nil {
-		if st := deniedResp.GetStatus(); st != nil && st.GetCode() != 0 {
-			deniedStatus = int32(st.GetCode())
-		}
-		ctx.ResponseBody = deniedResp.GetBody()
-	}
-	ctx.ResponseStatus = deniedStatus
-
+	body := ""
 	deniedHeaders := make(map[string]string)
-	if deniedResp != nil {
+	if deniedResp := resp.GetDeniedResponse(); deniedResp != nil {
+		if code := deniedResp.GetStatus().GetCode(); code != 0 {
+			deniedStatus = int32(code)
+		}
+		body = deniedResp.GetBody()
 		for _, hOption := range deniedResp.GetHeaders() {
-			if hOption != nil && hOption.GetHeader() != nil {
-				deniedHeaders[strings.ToLower(hOption.GetHeader().GetKey())] = hOption.GetHeader().GetValue()
+			if h := hOption.GetHeader(); h != nil {
+				deniedHeaders[strings.ToLower(h.GetKey())] = headerValue(h)
 			}
 		}
 	}
-
-	for _, k := range f.config.OnFailure.DownstreamPassThroughHeaders {
-		if val, ok := deniedHeaders[k]; ok {
-			ctx.SetHeaderDownstream(k, val)
-		}
-	}
-
+	ctx.Block(deniedStatus, body)
+	f.applyFailure(ctx, func(k string) (string, bool) { v, ok := deniedHeaders[k]; return v, ok })
 	return nil
 }
 
@@ -198,61 +178,68 @@ func (f *ExternalAuthFilter) executeHTTP(ctx *engine.RequestContext) error {
 		reqCtx = context.Background()
 	}
 
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, "http://localhost/", nil)
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, "http://localhost"+f.config.Path, nil)
 	if err != nil {
-		mylogger.Error("external_auth: failed to create GET request", zap.Error(err))
-		ctx.Blocked = true
-		ctx.ResponseStatus = http.StatusInternalServerError
-		ctx.ResponseBody = "Internal Server Error"
+		sidecarFailure(ctx, "failed to create request", err)
 		return nil
 	}
-
-	for _, k := range f.config.ForwardHeaders {
-		if val := ctx.GetHeader(k); val != "" {
-			req.Header.Set(k, val)
-		}
-	}
+	sidecar.SetHTTPHeaders(req, sidecar.SelectHeaders(ctx, f.config.ForwardHeaders))
+	sidecar.SetForwardedRequest(req, ctx)
 
 	resp, err := f.client.Do(req)
 	if err != nil {
-		mylogger.Error("external_auth: UDS sidecar communication failed", zap.Error(err))
-		ctx.Blocked = true
-		ctx.ResponseStatus = http.StatusInternalServerError
-		ctx.ResponseBody = "Internal Server Error"
+		sidecarFailure(ctx, "UDS sidecar communication failed", err)
 		return nil
 	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
+	defer sidecar.DrainAndClose(resp.Body)
+
+	lookup := func(k string) (string, bool) {
+		if vals, ok := resp.Header[http.CanonicalHeaderKey(k)]; ok && len(vals) > 0 {
+			return vals[0], true
+		}
+		return "", false
+	}
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		for _, k := range f.config.OnSuccess.UpstreamHeadersToAdd {
-			if vals, ok := resp.Header[http.CanonicalHeaderKey(k)]; ok && len(vals) > 0 {
-				ctx.SetHeaderUpstream(k, vals[0])
-			}
-		}
-		for _, k := range f.config.OnSuccess.UpstreamHeadersToRemove {
-			ctx.RemoveHeaderUpstream(k)
-		}
+		f.applySuccess(ctx, lookup)
 		return nil
 	}
 
-	ctx.Blocked = true
-	ctx.ResponseStatus = int32(resp.StatusCode)
-
-	limitReader := io.LimitReader(resp.Body, 16*1024)
-	bodyBytes, err := io.ReadAll(limitReader)
-	if err == nil {
-		ctx.ResponseBody = string(bodyBytes)
-	} else {
+	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, 16*1024))
+	if err != nil {
 		mylogger.Error("external_auth: failed to read response body", zap.Error(err))
 	}
+	ctx.Block(int32(resp.StatusCode), string(bodyBytes))
+	f.applyFailure(ctx, lookup)
+	return nil
+}
 
-	for _, k := range f.config.OnFailure.DownstreamPassThroughHeaders {
-		if vals, ok := resp.Header[http.CanonicalHeaderKey(k)]; ok && len(vals) > 0 {
-			ctx.SetHeaderDownstream(k, vals[0])
+// applySuccess copies the configured sidecar response headers upstream and removes
+// the configured request headers (e.g. the session cookie).
+func (f *ExternalAuthFilter) applySuccess(ctx *engine.RequestContext, lookup func(string) (string, bool)) {
+	for _, k := range f.config.OnSuccess.UpstreamHeadersToAdd {
+		if v, ok := lookup(k); ok {
+			ctx.SetHeaderUpstream(k, v)
 		}
 	}
+	for _, k := range f.config.OnSuccess.UpstreamHeadersToRemove {
+		ctx.RemoveHeaderUpstream(k)
+	}
+}
 
-	return nil
+// applyFailure relays the configured sidecar headers (e.g. Location, WWW-Authenticate,
+// Set-Cookie) to the client together with the sidecar's status and body.
+func (f *ExternalAuthFilter) applyFailure(ctx *engine.RequestContext, lookup func(string) (string, bool)) {
+	for _, k := range f.config.OnFailure.DownstreamPassThroughHeaders {
+		if v, ok := lookup(k); ok {
+			ctx.SetHeaderDownstream(k, v)
+		}
+	}
+}
+
+func headerValue(h *corev3.HeaderValue) string {
+	if len(h.GetRawValue()) > 0 {
+		return string(h.GetRawValue())
+	}
+	return h.GetValue()
 }

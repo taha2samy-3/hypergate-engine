@@ -97,6 +97,11 @@ type EngineRulesSpec struct {
 	// +optional
 	ForwardHeaders []string `json:"forwardHeaders,omitempty"`
 
+	// Path is the request path of HTTP checks, e.g. "/oauth2/auth" for oauth2-proxy.
+	// +kubebuilder:default="/"
+	// +optional
+	Path string `json:"path,omitempty"`
+
 	// OnSuccess defines header manipulation rules applied when auth succeeds (2xx).
 	// +optional
 	OnSuccess AuthSuccessRules `json:"onSuccess,omitempty"`

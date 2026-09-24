@@ -155,6 +155,10 @@ spec:
                   timeout:
                     type: string
                     default: "2s"
+                  path:
+                    type: string
+                    default: "/"
+                    description: "Request path of HTTP checks, e.g. /oauth2/auth for oauth2-proxy."
                   forwardHeaders:
                     type: array
                     items:
