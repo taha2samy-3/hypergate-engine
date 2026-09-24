@@ -14,7 +14,6 @@ import (
 type stubFilter struct {
 	callCount int
 	phases    []engine.Phase
-	blockOn   engine.Phase
 	returnErr error
 }
 
