@@ -11,8 +11,8 @@ import (
 	"unsafe"
 
 	"github.com/coocood/freecache"
-	mylogger "github.com/taha/myprog/internal/logger"
-	"github.com/taha/myprog/internal/redis"
+	mylogger "github.com/taha2samy/hypergate/internal/logger"
+	"github.com/taha2samy/hypergate/internal/redis"
 	"go.uber.org/zap"
 )
 

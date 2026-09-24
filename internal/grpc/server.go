@@ -2,21 +2,27 @@ package grpc
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
+	"fmt"
 	"io"
+	"os"
 	"time"
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 
 	extprocv3 "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 
-	"github.com/taha/myprog/internal/config"
-	"github.com/taha/myprog/internal/engine"
-	mylogger "github.com/taha/myprog/internal/logger"
-	"github.com/taha/myprog/internal/memory"
-	"github.com/taha/myprog/internal/router"
+	"github.com/taha2samy/hypergate/internal/config"
+	"github.com/taha2samy/hypergate/internal/engine"
+	mylogger "github.com/taha2samy/hypergate/internal/logger"
+	"github.com/taha2samy/hypergate/internal/memory"
+	"github.com/taha2samy/hypergate/internal/router"
 )
 
 type Server struct {
@@ -27,13 +33,14 @@ type Server struct {
 	extprocv3.UnimplementedExternalProcessorServer
 }
 
-// NewGRPCServer initializes the gRPC server with high-performance keepalive settings.
+// NewGRPCServer initializes the gRPC server with high-performance keepalive settings
+// and optional TLS/mTLS based on server configuration.
 func NewGRPCServer(
 	pool *memory.ContextPool,
 	routerInst *router.EngineRouter,
 	registry *engine.ChainRegistry,
 	executor *engine.ChainExecutor,
-) *grpc.Server {
+) (*grpc.Server, error) {
 	activeCfg := config.GlobalConfig.Load()
 
 	kaParams := keepalive.ServerParameters{
@@ -59,6 +66,24 @@ func NewGRPCServer(
 		opts = append(opts, grpc.MaxConcurrentStreams(10000))
 	}
 
+	// Configure TLS or mTLS credentials
+	if activeCfg != nil && activeCfg.Server.TLS.Enabled {
+		creds, err := buildTLSCredentials(&activeCfg.Server.TLS)
+		if err != nil {
+			return nil, fmt.Errorf("failed to build TLS credentials: %w", err)
+		}
+		opts = append(opts, grpc.Creds(creds))
+		if activeCfg.Server.TLS.MutualTLS {
+			mylogger.Info("gRPC server: mTLS enabled (client certificate verification required)")
+		} else {
+			mylogger.Info("gRPC server: TLS enabled (server-side only)")
+		}
+	} else {
+		// Insecure — Envoy handles the outer TLS when running inside the cluster mesh.
+		opts = append(opts, grpc.Creds(insecure.NewCredentials()))
+		mylogger.Info("gRPC server: running without TLS (insecure mode)")
+	}
+
 	grpcServer := grpc.NewServer(opts...)
 	authServer := &Server{
 		pool:     pool,
@@ -68,7 +93,41 @@ func NewGRPCServer(
 	}
 
 	extprocv3.RegisterExternalProcessorServer(grpcServer, authServer)
-	return grpcServer
+	return grpcServer, nil
+}
+
+// buildTLSCredentials constructs TLS server credentials from the provided config.
+// When MutualTLS is true, the server requires clients to present a certificate
+// signed by the configured CA (mutual authentication).
+func buildTLSCredentials(cfg *config.TLSConfig) (credentials.TransportCredentials, error) {
+	cert, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load server certificate/key pair (%s, %s): %w",
+			cfg.CertFile, cfg.KeyFile, err)
+	}
+
+	tlsCfg := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		MinVersion:   tls.VersionTLS13,
+	}
+
+	if cfg.MutualTLS {
+		if cfg.CAFile == "" {
+			return nil, fmt.Errorf("mutual_tls is true but ca_file is empty")
+		}
+		caPEM, err := os.ReadFile(cfg.CAFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read CA file %s: %w", cfg.CAFile, err)
+		}
+		caPool := x509.NewCertPool()
+		if !caPool.AppendCertsFromPEM(caPEM) {
+			return nil, fmt.Errorf("failed to parse CA certificate from %s", cfg.CAFile)
+		}
+		tlsCfg.ClientAuth = tls.RequireAndVerifyClientCert
+		tlsCfg.ClientCAs = caPool
+	}
+
+	return credentials.NewTLS(tlsCfg), nil
 }
 
 // Process is the main bidirectional stream handler for Envoy ext_proc.
@@ -100,7 +159,6 @@ func (s *Server) Process(stream extprocv3.ExternalProcessor_ProcessServer) error
 		}
 
 		// Dispatch to specific handlers based on the request type.
-		// These handlers are implemented in handlers.go
 		switch msg := req.Request.(type) {
 		case *extprocv3.ProcessingRequest_RequestHeaders:
 			targetChainName, err = s.handleRequestHeaders(stream, reqCtx, msg.RequestHeaders)

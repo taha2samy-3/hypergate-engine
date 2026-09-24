@@ -12,10 +12,10 @@ import (
 	"github.com/coocood/freecache"
 	"github.com/tidwall/gjson"
 
-	"github.com/taha/myprog/internal/config"
-	"github.com/taha/myprog/internal/engine"
-	mylogger "github.com/taha/myprog/internal/logger"
-	"github.com/taha/myprog/internal/redis"
+	"github.com/taha2samy/hypergate/internal/config"
+	"github.com/taha2samy/hypergate/internal/engine"
+	mylogger "github.com/taha2samy/hypergate/internal/logger"
+	"github.com/taha2samy/hypergate/internal/redis"
 )
 
 type APIKeyFilter struct {

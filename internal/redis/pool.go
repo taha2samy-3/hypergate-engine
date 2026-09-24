@@ -15,8 +15,8 @@ import (
 
 	"github.com/mediocregopher/radix/v4"
 
-	"github.com/taha/myprog/internal/config"
-	mylogger "github.com/taha/myprog/internal/logger"
+	"github.com/taha2samy/hypergate/internal/config"
+	mylogger "github.com/taha2samy/hypergate/internal/logger"
 	"go.uber.org/zap"
 )
 

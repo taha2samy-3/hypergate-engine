@@ -7,7 +7,7 @@ import (
 	extprocfilterv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/ext_proc/v3"
 	extprocv3 "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 
-	"github.com/taha/myprog/internal/engine"
+	"github.com/taha2samy/hypergate/internal/engine"
 )
 
 // buildHeaderMutation transforms internal Header additions and removals into Envoy's Protobuf format.

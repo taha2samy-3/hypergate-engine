@@ -12,9 +12,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	hyperv1alpha1 "github.com/taha/myprog/hyper-operator/api/v1alpha1"
-	"github.com/taha/myprog/internal/config"
-	"github.com/taha/myprog/internal/redis"
+	hyperv1alpha1 "github.com/taha2samy/hypergate/hyper-operator/api/v1alpha1"
+	"github.com/taha2samy/hypergate/internal/config"
+	"github.com/taha2samy/hypergate/internal/redis"
 )
 
 type HyperRedisReconciler struct {

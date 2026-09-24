@@ -3,17 +3,18 @@ package filters
 import (
 	"fmt"
 
-	"github.com/taha/myprog/internal/config"
-	"github.com/taha/myprog/internal/engine"
-	"github.com/taha/myprog/internal/filters/api_key"
-	"github.com/taha/myprog/internal/filters/correlation_id"
-	"github.com/taha/myprog/internal/filters/deny"
-	"github.com/taha/myprog/internal/filters/external_auth"
-	"github.com/taha/myprog/internal/filters/firewall"
-	"github.com/taha/myprog/internal/filters/header_modifier"
-	"github.com/taha/myprog/internal/filters/rate_limiter"
-	"github.com/taha/myprog/internal/filters/redis_metadata_enricher"
-	"github.com/taha/myprog/internal/redis"
+	"github.com/taha2samy/hypergate/internal/config"
+	"github.com/taha2samy/hypergate/internal/engine"
+	"github.com/taha2samy/hypergate/internal/filters/api_key"
+	"github.com/taha2samy/hypergate/internal/filters/correlation_id"
+	"github.com/taha2samy/hypergate/internal/filters/deny"
+	"github.com/taha2samy/hypergate/internal/filters/external_auth"
+	"github.com/taha2samy/hypergate/internal/filters/firewall"
+	"github.com/taha2samy/hypergate/internal/filters/header_modifier"
+	"github.com/taha2samy/hypergate/internal/filters/jwt_auth"
+	"github.com/taha2samy/hypergate/internal/filters/rate_limiter"
+	"github.com/taha2samy/hypergate/internal/filters/redis_metadata_enricher"
+	"github.com/taha2samy/hypergate/internal/redis"
 	"gopkg.in/yaml.v3"
 )
 
@@ -139,6 +140,13 @@ func CreateFilter(filterType string, rawOptions interface{}) (engine.Filter, err
 			return nil, fmt.Errorf("failed to parse config for firewall: %w", err)
 		}
 		return firewall.NewFirewallFilter(cfg)
+
+	case "jwt_auth":
+		var cfg jwt_auth.Config
+		if err := yaml.Unmarshal(optsBytes, &cfg); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal config for jwt_auth: %w", err)
+		}
+		return jwt_auth.NewFilter(cfg)
 
 	default:
 		return nil, fmt.Errorf("unknown filter type: %s", filterType)

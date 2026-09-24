@@ -19,9 +19,9 @@ import (
 
 	"strings"
 
-	hyperv1alpha1 "github.com/taha/myprog/hyper-operator/api/v1alpha1"
-	"github.com/taha/myprog/internal/config"
-	mylogger "github.com/taha/myprog/internal/logger"
+	hyperv1alpha1 "github.com/taha2samy/hypergate/hyper-operator/api/v1alpha1"
+	"github.com/taha2samy/hypergate/internal/config"
+	mylogger "github.com/taha2samy/hypergate/internal/logger"
 )
 
 // HyperChainMasterCompilerReconciler reconciles all state to build config.yaml

@@ -3,7 +3,7 @@ package header_modifier
 import (
 	"strings"
 
-	"github.com/taha/myprog/internal/engine"
+	"github.com/taha2samy/hypergate/internal/engine"
 )
 
 type HeaderOptions struct {

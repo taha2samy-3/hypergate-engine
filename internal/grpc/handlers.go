@@ -8,8 +8,8 @@ import (
 	extprocv3 "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	typev3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 
-	"github.com/taha/myprog/internal/engine"
-	mylogger "github.com/taha/myprog/internal/logger"
+	"github.com/taha2samy/hypergate/internal/engine"
+	mylogger "github.com/taha2samy/hypergate/internal/logger"
 )
 
 // handleRequestHeaders processes the initial metadata and headers of an incoming request.
@@ -48,7 +48,7 @@ func (s *Server) handleRequestHeaders(
 		if !exists {
 			mylogger.Warn("Target chain not found in registry", zap.String("chain", targetChainName))
 		} else {
-			if err := s.executor.Execute(reqCtx, chain); err != nil {
+			if err := s.executor.Execute(reqCtx, chain, engine.PhaseRequestHeaders); err != nil {
 				mylogger.Error("Error executing chain", zap.String("chain", targetChainName), zap.Error(err))
 			}
 		}
@@ -109,7 +109,7 @@ func (s *Server) handleRequestBody(
 	if targetChainName != "" {
 		chain, exists := s.registry.Get(targetChainName)
 		if exists {
-			if err := s.executor.Execute(reqCtx, chain); err != nil {
+			if err := s.executor.Execute(reqCtx, chain, engine.PhaseRequestBody); err != nil {
 				mylogger.Error("Error executing chain on body", zap.Error(err))
 			}
 		}
@@ -152,7 +152,7 @@ func (s *Server) handleRequestTrailers(
 	if targetChainName != "" {
 		chain, exists := s.registry.Get(targetChainName)
 		if exists {
-			if err := s.executor.Execute(reqCtx, chain); err != nil {
+			if err := s.executor.Execute(reqCtx, chain, engine.PhaseRequestTrailers); err != nil {
 				mylogger.Error("Error executing chain on request trailers", zap.Error(err))
 			}
 		}
@@ -189,6 +189,17 @@ func (s *Server) handleResponseHeaders(
 		}
 	}
 
+	// ResponseHeaders phase: run filters that declared interest in response headers.
+	targetChainName := s.router.Route(reqCtx)
+	if targetChainName != "" {
+		chain, exists := s.registry.Get(targetChainName)
+		if exists {
+			if err := s.executor.Execute(reqCtx, chain, engine.PhaseResponseHeaders); err != nil {
+				mylogger.Error("Error executing chain on response headers", zap.Error(err))
+			}
+		}
+	}
+
 	resp := &extprocv3.ProcessingResponse{
 		Response: &extprocv3.ProcessingResponse_ResponseHeaders{
 			ResponseHeaders: &extprocv3.HeadersResponse{
@@ -222,7 +233,7 @@ func (s *Server) handleResponseBody(
 	if targetChainName != "" {
 		chain, exists := s.registry.Get(targetChainName)
 		if exists {
-			if err := s.executor.Execute(reqCtx, chain); err != nil {
+			if err := s.executor.Execute(reqCtx, chain, engine.PhaseResponseBody); err != nil {
 				mylogger.Error("Error executing chain on response body", zap.Error(err))
 			}
 		}
@@ -265,7 +276,7 @@ func (s *Server) handleResponseTrailers(
 	if targetChainName != "" {
 		chain, exists := s.registry.Get(targetChainName)
 		if exists {
-			if err := s.executor.Execute(reqCtx, chain); err != nil {
+			if err := s.executor.Execute(reqCtx, chain, engine.PhaseResponseTrailers); err != nil {
 				mylogger.Error("Error executing chain on response trailers", zap.Error(err))
 			}
 		}

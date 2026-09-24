@@ -32,7 +32,7 @@ import (
 
 	"github.com/mediocregopher/radix/v4"
 
-	"github.com/taha/myprog/internal/config"
+	"github.com/taha2samy/hypergate/internal/config"
 )
 
 // ---------------------------------------------------------------------------

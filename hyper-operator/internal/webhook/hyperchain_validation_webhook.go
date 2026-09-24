@@ -9,7 +9,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	hyperv1alpha1 "github.com/taha/myprog/hyper-operator/api/v1alpha1"
+	hyperv1alpha1 "github.com/taha2samy/hypergate/hyper-operator/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/types"
 )
 

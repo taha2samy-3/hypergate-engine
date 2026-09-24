@@ -3,7 +3,7 @@ package memory_test
 import (
 	"testing"
 
-	"github.com/taha/myprog/internal/memory"
+	"github.com/taha2samy/hypergate/internal/memory"
 )
 
 func TestContextPool_PreallocBodyBuffer(t *testing.T) {

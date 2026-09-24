@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/coocood/freecache"
-	"github.com/taha/myprog/internal/redis"
+	"github.com/taha2samy/hypergate/internal/redis"
 )
 
 // DescriptorEntry represents a compiled key-value pair extracted at runtime from the request headers

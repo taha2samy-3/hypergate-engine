@@ -45,7 +45,7 @@ import (
 	"time"
 
 	"github.com/mediocregopher/radix/v4"
-	mylogger "github.com/taha/myprog/internal/logger"
+	mylogger "github.com/taha2samy/hypergate/internal/logger"
 	"go.uber.org/zap"
 )
 

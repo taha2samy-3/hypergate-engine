@@ -7,7 +7,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/rs/xid"
 
-	"github.com/taha/myprog/internal/engine"
+	"github.com/taha2samy/hypergate/internal/engine"
 )
 
 func init() {

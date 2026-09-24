@@ -14,9 +14,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	hyperv1alpha1 "github.com/taha/myprog/hyper-operator/api/v1alpha1"
-	"github.com/taha/myprog/hyper-operator/internal/controller"
-	"github.com/taha/myprog/hyper-operator/internal/webhook"
+	hyperv1alpha1 "github.com/taha2samy/hypergate/hyper-operator/api/v1alpha1"
+	"github.com/taha2samy/hypergate/hyper-operator/internal/controller"
+	"github.com/taha2samy/hypergate/hyper-operator/internal/webhook"
 )
 
 var (

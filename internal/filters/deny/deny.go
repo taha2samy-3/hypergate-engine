@@ -7,8 +7,8 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/taha/myprog/internal/engine"
-	mylogger "github.com/taha/myprog/internal/logger"
+	"github.com/taha2samy/hypergate/internal/engine"
+	mylogger "github.com/taha2samy/hypergate/internal/logger"
 )
 
 type DenyMatchConfig struct {

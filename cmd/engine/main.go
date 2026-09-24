@@ -14,14 +14,14 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/taha/myprog/internal/config"
-	"github.com/taha/myprog/internal/engine"
-	"github.com/taha/myprog/internal/filters"
-	mygrpc "github.com/taha/myprog/internal/grpc"
-	mylogger "github.com/taha/myprog/internal/logger"
-	"github.com/taha/myprog/internal/memory"
-	"github.com/taha/myprog/internal/redis"
-	"github.com/taha/myprog/internal/router"
+	"github.com/taha2samy/hypergate/internal/config"
+	"github.com/taha2samy/hypergate/internal/engine"
+	"github.com/taha2samy/hypergate/internal/filters"
+	mygrpc "github.com/taha2samy/hypergate/internal/grpc"
+	mylogger "github.com/taha2samy/hypergate/internal/logger"
+	"github.com/taha2samy/hypergate/internal/memory"
+	"github.com/taha2samy/hypergate/internal/redis"
+	"github.com/taha2samy/hypergate/internal/router"
 )
 
 type activeChecker struct {
@@ -196,7 +196,10 @@ func main() {
 	})
 
 	mylogger.Debug("Initializing gRPC Server wrapper")
-	grpcServer := mygrpc.NewGRPCServer(pool, routerInst, registry, executor)
+	grpcServer, err := mygrpc.NewGRPCServer(pool, routerInst, registry, executor)
+	if err != nil {
+		mylogger.Fatal("Failed to initialize gRPC server", zap.Error(err))
+	}
 
 	address := initialConfig.Server.Address
 	if address == "" {

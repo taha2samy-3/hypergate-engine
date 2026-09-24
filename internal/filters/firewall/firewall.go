@@ -16,9 +16,9 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/taha/myprog/internal/config"
-	"github.com/taha/myprog/internal/engine"
-	mylogger "github.com/taha/myprog/internal/logger"
+	"github.com/taha2samy/hypergate/internal/config"
+	"github.com/taha2samy/hypergate/internal/engine"
+	mylogger "github.com/taha2samy/hypergate/internal/logger"
 )
 
 type FirewallFilter struct {

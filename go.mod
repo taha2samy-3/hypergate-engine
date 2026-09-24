@@ -1,4 +1,4 @@
-module github.com/taha/myprog
+module github.com/taha2samy/hypergate
 
 go 1.26.4
 
