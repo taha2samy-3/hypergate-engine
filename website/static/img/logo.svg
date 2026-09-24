@@ -12,8 +12,8 @@
   </defs>
   <path d="M32 3 57.1 17.5v29L32 61 6.9 46.5v-29Z" fill="url(#hg-fill)"/>
   <path d="M32 3 57.1 17.5V32H6.9V17.5Z" fill="url(#hg-shine)"/>
-  <!-- the gate: two pillars -->
-  <path d="M20.5 19.5v25M43.5 19.5v25" stroke="#FFFFFF" stroke-width="5.5" stroke-linecap="round"/>
+  <!-- the gate -->
+  <path d="M20.5 45V24.5a4.5 4.5 0 0 1 4.5-4.5h14a4.5 4.5 0 0 1 4.5 4.5V45" fill="none" stroke="#FFFFFF" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
   <!-- traffic passing through the checkpoint -->
-  <path d="M28 24.5 35.5 32 28 39.5" fill="none" stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M28.5 29 34.5 35 28.5 41" fill="none" stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
