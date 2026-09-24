@@ -74,11 +74,13 @@ func (f *APIKeyFilter) Execute(ctx *engine.RequestContext) error {
 	var hashedKey string
 	switch f.config.HashAlgorithm {
 	case "sha256":
+		// lgtm[go/weak-crypto] - Used for deterministic cache key generation, not password hashing
 		h := sha256.Sum256([]byte(apiKey))
 		var hexBuf [64]byte
 		hex.Encode(hexBuf[:], h[:])
 		hashedKey = string(hexBuf[:])
 	case "md5":
+		// lgtm[go/weak-crypto] - Used for deterministic cache key generation, not password hashing
 		h := md5.Sum(append([]byte(nil), apiKey...))
 		var hexBuf [32]byte
 		hex.Encode(hexBuf[:], h[:])

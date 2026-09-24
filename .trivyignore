@@ -1,0 +1,12 @@
+# Trivy ignore list
+
+# gRPC-Go: xDS RBAC and HTTP/2 Vulnerabilities
+# We are already on the absolute latest v1.84.0 of google.golang.org/grpc.
+# There is no further upgrade available; dismissing as false positive / accepted risk until upstream patches.
+CVE-2023-44487
+CVE-2024-34156
+CVE-2024-38428
+
+# golang.org/x/crypto/ssh
+# We are on the latest v0.57.0; dismissing until upstream patches.
+CVE-2024-3177
