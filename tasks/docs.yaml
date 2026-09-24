@@ -1,0 +1,20 @@
+version: '3'
+
+tasks:
+  dev:
+    desc: "Start the Docusaurus documentation site in development mode"
+    dir: website
+    cmds:
+      - npm start
+
+  build:
+    desc: "Build the Docusaurus documentation site for production"
+    dir: website
+    cmds:
+      - npm run build
+
+  serve:
+    desc: "Serve the built Docusaurus documentation site locally"
+    dir: website
+    cmds:
+      - npm run serve

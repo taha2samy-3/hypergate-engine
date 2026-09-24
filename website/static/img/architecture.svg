@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 600" font-family="system-ui, -apple-system, sans-serif">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f172a" />
+      <stop offset="100%" style="stop-color:#1e293b" />
+    </linearGradient>
+
+    <!-- Glowing Effects -->
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="5" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+
+    <!-- Gradients -->
+    <linearGradient id="blueGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6" />
+      <stop offset="100%" style="stop-color:#2563eb" />
+    </linearGradient>
+    <linearGradient id="purpleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#8b5cf6" />
+      <stop offset="100%" style="stop-color:#6d28d9" />
+    </linearGradient>
+    <linearGradient id="pinkGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ec4899" />
+      <stop offset="100%" style="stop-color:#be185d" />
+    </linearGradient>
+    <linearGradient id="cyanGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#06b6d4" />
+      <stop offset="100%" style="stop-color:#0891b2" />
+    </linearGradient>
+
+    <!-- Arrow Marker -->
+    <marker id="arrowHead" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#94a3b8" />
+    </marker>
+    <marker id="arrowHeadPink" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#ec4899" />
+    </marker>
+    <marker id="arrowHeadCyan" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#06b6d4" />
+    </marker>
+  </defs>
+
+  <rect width="1000" height="600" fill="url(#bgGrad)" rx="16" />
+
+  <text x="500" y="50" fill="#f8fafc" font-size="28" font-weight="bold" text-anchor="middle" letter-spacing="2" filter="url(#glow)">TRUE HYPERGATE ARCHITECTURE</text>
+
+  <!-- ==================== ENVOY ==================== -->
+  <g transform="translate(50, 200)">
+    <rect width="140" height="200" rx="16" fill="url(#pinkGrad)" />
+    <text x="70" y="40" fill="white" font-size="18" font-weight="bold" text-anchor="middle">Envoy Proxy</text>
+    <rect x="15" y="70" width="110" height="100" rx="8" fill="rgba(0,0,0,0.2)" />
+    <text x="70" y="110" fill="#f8fafc" font-size="14" text-anchor="middle">ext_proc filter</text>
+  </g>
+
+  <!-- ==================== DAEMONSET POD ==================== -->
+  <g transform="translate(300, 100)">
+    <rect width="400" height="380" rx="16" fill="rgba(255,255,255,0.05)" stroke="#3b82f6" stroke-width="2" stroke-dasharray="10,5" />
+    <text x="200" y="30" fill="#3b82f6" font-size="16" font-weight="bold" text-anchor="middle">Kubernetes DaemonSet Pod</text>
+
+    <!-- ENGINE CONTAINER -->
+    <rect x="20" y="60" width="160" height="300" rx="12" fill="url(#purpleGrad)" />
+    <text x="100" y="90" fill="white" font-size="16" font-weight="bold" text-anchor="middle">Engine Container</text>
+    
+    <rect x="30" y="120" width="140" height="30" rx="4" fill="rgba(0,0,0,0.2)" />
+    <text x="100" y="140" fill="white" font-size="12" text-anchor="middle">API Key Auth</text>
+    
+    <rect x="30" y="160" width="140" height="30" rx="4" fill="rgba(0,0,0,0.2)" />
+    <text x="100" y="180" fill="white" font-size="12" text-anchor="middle">Redis Ratelimit</text>
+
+    <!-- SIDECAR CONTAINERS -->
+    <rect x="220" y="60" width="160" height="120" rx="12" fill="url(#cyanGrad)" />
+    <text x="300" y="90" fill="white" font-size="16" font-weight="bold" text-anchor="middle">ExtAuth Sidecar</text>
+    <text x="300" y="130" fill="#cffafe" font-size="12" text-anchor="middle">Custom Binary/Proxy</text>
+
+    <rect x="220" y="240" width="160" height="120" rx="12" fill="url(#cyanGrad)" />
+    <text x="300" y="270" fill="white" font-size="16" font-weight="bold" text-anchor="middle">Firewall Sidecar</text>
+    <text x="300" y="310" fill="#cffafe" font-size="12" text-anchor="middle">WAF Engine</text>
+
+    <!-- UNIX DOMAIN SOCKETS -->
+    <path d="M 180 120 L 220 120" stroke="#06b6d4" stroke-width="4" marker-end="url(#arrowHeadCyan)" />
+    <path d="M 220 140 L 180 140" stroke="#06b6d4" stroke-width="4" marker-end="url(#arrowHeadCyan)" />
+    <text x="200" y="105" fill="#06b6d4" font-size="10" font-weight="bold" text-anchor="middle">UDS</text>
+
+    <path d="M 180 300 L 220 300" stroke="#06b6d4" stroke-width="4" marker-end="url(#arrowHeadCyan)" />
+    <path d="M 220 320 L 180 320" stroke="#06b6d4" stroke-width="4" marker-end="url(#arrowHeadCyan)" />
+    <text x="200" y="285" fill="#06b6d4" font-size="10" font-weight="bold" text-anchor="middle">UDS</text>
+  </g>
+
+  <!-- ==================== ARROWS ==================== -->
+  
+  <!-- Envoy to Engine (gRPC) -->
+  <path d="M 190 280 L 320 280" fill="none" stroke="#ec4899" stroke-width="4" marker-end="url(#arrowHeadPink)" stroke-dasharray="6,4" />
+  <text x="255" y="270" fill="#ec4899" font-size="12" font-weight="bold" text-anchor="middle">gRPC (ext_proc)</text>
+</svg>

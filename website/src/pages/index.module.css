@@ -1,0 +1,60 @@
+/**
+ * CSS files with the .module.css suffix will be treated as CSS modules
+ * and scoped locally.
+ */
+
+.heroBanner {
+  padding: 8rem 0;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(-45deg, #0f172a, #1e1b4b, #312e81, #020617);
+  background-size: 400% 400%;
+  animation: gradientBG 15s ease infinite;
+  color: #fff;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+@keyframes gradientBG {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@media screen and (max-width: 996px) {
+  .heroBanner {
+    padding: 4rem 2rem;
+  }
+}
+
+.heroTitle {
+  font-size: 4rem;
+  font-weight: 800;
+  background: -webkit-linear-gradient(45deg, #38bdf8, #c084fc, #ec4899);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 1rem;
+}
+
+.heroLogo {
+  width: 280px;
+  height: 280px;
+  margin: 0 auto 1rem;
+  display: block;
+  filter: drop-shadow(0 20px 30px rgba(56, 189, 248, 0.4));
+  animation: float3D 6s ease-in-out infinite;
+  transform-style: preserve-3d;
+  perspective: 1000px;
+}
+
+@keyframes float3D {
+  0% { transform: translateY(0) rotateX(10deg) rotateY(-5deg); }
+  50% { transform: translateY(-20px) rotateX(-5deg) rotateY(15deg); filter: drop-shadow(0 30px 40px rgba(192, 132, 252, 0.6)); }
+  100% { transform: translateY(0) rotateX(10deg) rotateY(-5deg); }
+}
+
+.buttons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

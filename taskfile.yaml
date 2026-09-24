@@ -5,6 +5,7 @@ includes:
   operator: ./tasks/operator.yaml
   k8s: ./tasks/k8s.yaml
   test: ./tasks/tests.yaml
+  docs: ./tasks/docs.yaml
 
 tasks:
   default:
