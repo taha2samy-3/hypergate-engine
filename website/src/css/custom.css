@@ -1,52 +1,100 @@
 /**
- * Any CSS included here will be global. The classic template
- * bundles Infima by default. Infima is a CSS framework designed to
- * work well for content-centric websites.
+ * Hypergate theme.
+ * Brand: indigo #6366F1 (primary), cyan #22D3EE (accent), navy #0B1026 (surface).
  */
 
-/* You can override the default Infima variables here. */
 :root {
-  --ifm-color-primary: #2e8555;
-  --ifm-color-primary-dark: #29784c;
-  --ifm-color-primary-darker: #277148;
-  --ifm-color-primary-darkest: #205d3b;
-  --ifm-color-primary-light: #33925d;
-  --ifm-color-primary-lighter: #359962;
-  --ifm-color-primary-lightest: #3cad6e;
-  --ifm-code-font-size: 95%;
-  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
-  
-  /* Make the navbar and logo much larger */
-  --ifm-navbar-height: 5.5rem;
-  --ifm-navbar-padding-vertical: 1rem;
+  --ifm-color-primary: #4f46e5;
+  --ifm-color-primary-dark: #4338ca;
+  --ifm-color-primary-darker: #3f37c9;
+  --ifm-color-primary-darkest: #3730a3;
+  --ifm-color-primary-light: #6366f1;
+  --ifm-color-primary-lighter: #737bf3;
+  --ifm-color-primary-lightest: #818cf8;
+
+  --hg-cyan: #22d3ee;
+  --hg-indigo: #6366f1;
+  --hg-navy: #0b1026;
+  --hg-gradient: linear-gradient(135deg, #22d3ee 0%, #6366f1 100%);
+  --hg-card-bg: #ffffff;
+  --hg-card-border: #e2e8f0;
+  --hg-muted: #475569;
+
+  --ifm-font-family-base: 'Inter', system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --ifm-font-family-monospace: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --ifm-heading-font-weight: 700;
+  --ifm-code-font-size: 90%;
+  --ifm-navbar-height: 4rem;
+  --docusaurus-highlighted-code-line-bg: rgba(99, 102, 241, 0.12);
 }
 
-/* Custom styling for the navbar logo to ensure it scales up */
-.navbar__logo {
-  height: 3.5rem !important;
-  margin-right: 1.5rem;
-}
-
-/* Make navbar text a bit larger and more readable */
-.navbar__item {
-  font-size: 1.15rem;
-  font-weight: 500;
-}
-
-/* For readability concerns, you should choose a lighter palette in dark mode. */
 [data-theme='dark'] {
-  --ifm-color-primary: #25c2a0;
-  --ifm-color-primary-dark: #21af90;
-  --ifm-color-primary-darker: #1fa588;
-  --ifm-color-primary-darkest: #1a8870;
-  --ifm-color-primary-light: #29d5b0;
-  --ifm-color-primary-lighter: #32d8b4;
-  --ifm-color-primary-lightest: #4fddbf;
-  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+  --ifm-color-primary: #818cf8;
+  --ifm-color-primary-dark: #6c78f6;
+  --ifm-color-primary-darker: #6366f1;
+  --ifm-color-primary-darkest: #4f46e5;
+  --ifm-color-primary-light: #a5b4fc;
+  --ifm-color-primary-lighter: #b4c0fd;
+  --ifm-color-primary-lightest: #c7d2fe;
+
+  --ifm-background-color: #0b1026;
+  --ifm-background-surface-color: #0f172a;
+  --ifm-navbar-background-color: rgba(11, 16, 38, 0.85);
+  --ifm-footer-background-color: #070b1c;
+  --hg-card-bg: #111733;
+  --hg-card-border: #1e293b;
+  --hg-muted: #94a3b8;
+  --docusaurus-highlighted-code-line-bg: rgba(129, 140, 248, 0.18);
 }
 
-/* Global tweaks for advanced look */
 body {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.005em;
+}
+
+.navbar {
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--hg-card-border);
+  box-shadow: none;
+}
+
+.navbar__logo {
+  height: 2.1rem;
+}
+
+.navbar__title {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.footer--dark {
+  --ifm-footer-background-color: #070b1c;
+}
+
+/* Diagrams carry their own background panel; keep them crisp and centred. */
+.markdown img[src*='/img/diagrams/'] {
+  display: block;
+  margin: 1.5rem auto;
+  width: 100%;
+  border-radius: 14px;
+}
+
+/* Inline brand icons used in docs, e.g. <img className="hg-icon" src=... /> */
+.hg-icon {
+  width: 1.6em;
+  height: 1.6em;
+  vertical-align: -0.35em;
+  margin-right: 0.35em;
+}
+
+[data-theme='dark'] .hg-icon {
+  filter: invert(0.85);
+}
+
+.markdown table {
+  display: table;
+  width: 100%;
+}
+
+.markdown h1 {
+  letter-spacing: -0.03em;
 }

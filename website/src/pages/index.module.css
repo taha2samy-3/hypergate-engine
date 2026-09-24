@@ -1,60 +1,129 @@
-/**
- * CSS files with the .module.css suffix will be treated as CSS modules
- * and scoped locally.
- */
-
-.heroBanner {
-  padding: 8rem 0;
-  text-align: center;
+.hero {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(-45deg, #0f172a, #1e1b4b, #312e81, #020617);
-  background-size: 400% 400%;
-  animation: gradientBG 15s ease infinite;
-  color: #fff;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
+  padding: 6rem 0 5rem;
+  text-align: center;
+  color: #e2e8f0;
+  background:
+    radial-gradient(60rem 30rem at 15% -10%, rgba(34, 211, 238, 0.22), transparent 60%),
+    radial-gradient(50rem 30rem at 90% 10%, rgba(99, 102, 241, 0.35), transparent 60%),
+    #0b1026;
+  border-bottom: 1px solid #1e293b;
 }
 
-@keyframes gradientBG {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
-
-@media screen and (max-width: 996px) {
-  .heroBanner {
-    padding: 4rem 2rem;
-  }
-}
-
-.heroTitle {
-  font-size: 4rem;
-  font-weight: 800;
-  background: -webkit-linear-gradient(45deg, #38bdf8, #c084fc, #ec4899);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  margin-bottom: 1rem;
+.heroInner {
+  position: relative;
 }
 
 .heroLogo {
-  width: 280px;
-  height: 280px;
-  margin: 0 auto 1rem;
+  width: 112px;
+  height: 112px;
+  margin: 0 auto 1.25rem;
   display: block;
-  filter: drop-shadow(0 20px 30px rgba(56, 189, 248, 0.4));
-  animation: float3D 6s ease-in-out infinite;
-  transform-style: preserve-3d;
-  perspective: 1000px;
+  filter: drop-shadow(0 18px 36px rgba(99, 102, 241, 0.45));
 }
 
-@keyframes float3D {
-  0% { transform: translateY(0) rotateX(10deg) rotateY(-5deg); }
-  50% { transform: translateY(-20px) rotateX(-5deg) rotateY(15deg); filter: drop-shadow(0 30px 40px rgba(192, 132, 252, 0.6)); }
-  100% { transform: translateY(0) rotateX(10deg) rotateY(-5deg); }
+.heroTitle {
+  font-size: clamp(2.6rem, 6vw, 4.2rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  margin-bottom: 0.75rem;
+  color: #a5b4fc;
+}
+
+.heroTitle span {
+  color: #22d3ee;
+}
+
+.heroTagline {
+  max-width: 44rem;
+  margin: 0 auto 2rem;
+  font-size: 1.2rem;
+  line-height: 1.6;
+  color: #cbd5e1;
 }
 
 .buttons {
   display: flex;
-  align-items: center;
+  gap: 0.9rem;
+  flex-wrap: wrap;
   justify-content: center;
+}
+
+.primaryButton {
+  color: #0b1026;
+  border: none;
+  background: linear-gradient(135deg, #22d3ee 0%, #818cf8 100%);
+}
+
+.primaryButton:hover {
+  color: #0b1026;
+  filter: brightness(1.08);
+}
+
+.secondaryButton {
+  color: #e2e8f0;
+  background: transparent;
+  border: 1px solid #334155;
+}
+
+.secondaryButton:hover {
+  color: #ffffff;
+  border-color: #818cf8;
+}
+
+.steps {
+  padding: 3.5rem 0 1rem;
+}
+
+.stepGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1.5rem;
+}
+
+.step {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.step h3 {
+  margin: 0.15rem 0 0.35rem;
+  font-size: 1.1rem;
+}
+
+.step p {
+  margin: 0;
+  color: var(--hg-muted);
+  line-height: 1.55;
+}
+
+.stepBadge {
+  flex: 0 0 auto;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.9rem;
+  display: grid;
+  place-items: center;
+  background: var(--hg-gradient);
+  color: #ffffff;
+}
+
+.stepIcon {
+  width: 1.6rem;
+  height: 1.6rem;
+}
+
+.stepNumber {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--ifm-color-primary);
+}
+
+@media screen and (max-width: 996px) {
+  .hero {
+    padding: 4rem 1rem 3.5rem;
+  }
 }
