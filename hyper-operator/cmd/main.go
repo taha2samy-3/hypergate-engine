@@ -1,13 +1,16 @@
 package main
 
 import (
+	"context"
 	"flag"
+	"fmt"
 	"os"
 
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -53,6 +56,10 @@ func main() {
 		setupLog.Error(err, "invalid leader election flags")
 		os.Exit(1)
 	}
+	if err := identityCfg.Validate(); err != nil {
+		setupLog.Error(err, "invalid identity flags")
+		os.Exit(1)
+	}
 
 	mgrOpts := ctrl.Options{
 		Scheme:                 scheme,
@@ -89,6 +96,13 @@ func main() {
 			os.Exit(1)
 		}
 		setupLog.Info("Identity cache enabled on every replica", "trustDomain", identityCfg.TrustDomain)
+
+		if identityCfg.ServerEnabled {
+			if err := setupIdentityServer(mgr, &identityCfg, identityCache); err != nil {
+				setupLog.Error(err, "unable to set up the identity server")
+				os.Exit(1)
+			}
+		}
 	}
 
 	if err = (&controller.HyperRedisReconciler{
@@ -160,4 +174,57 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+// setupIdentityServer adds the leader-only identity stream server and the
+// publisher that points the identity Service at the leader.
+func setupIdentityServer(mgr ctrl.Manager, cfg *identity.Config, cache *identity.Cache) error {
+	clientset, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		return err
+	}
+	reader := mgr.GetClient()
+	auth := &identity.TokenReviewAuthenticator{
+		Client: clientset,
+		// Only engine ServiceAccounts in namespaces that run an engine may read identities.
+		Allowed: func(ctx context.Context, username string) bool {
+			namespaces, err := controller.EngineNamespaces(ctx, reader)
+			if err != nil {
+				return false
+			}
+			for ns := range namespaces {
+				if username == identity.ServiceAccountUsername(ns, controller.EngineServiceAccountName) {
+					return true
+				}
+			}
+			return false
+		},
+	}
+	server, err := identity.NewServer(cache.Index(), cfg.ServerOptions(auth))
+	if err != nil {
+		return err
+	}
+	port, err := cfg.ServerPort()
+	if err != nil {
+		return err
+	}
+	publisher := &identity.EndpointPublisher{
+		Client:      clientset,
+		Namespace:   os.Getenv("POD_NAMESPACE"),
+		ServiceName: cfg.ServiceName,
+		PodName:     os.Getenv("POD_NAME"),
+		PodIP:       os.Getenv("POD_IP"),
+		Port:        port,
+	}
+	if publisher.Namespace == "" || publisher.PodIP == "" {
+		return fmt.Errorf("POD_NAMESPACE and POD_IP must be set from the downward API")
+	}
+	if err := mgr.Add(server.Runnable()); err != nil {
+		return err
+	}
+	if err := mgr.Add(publisher.Runnable()); err != nil {
+		return err
+	}
+	setupLog.Info("Identity server enabled on the leader", "address", cfg.ServerAddress, "service", cfg.ServiceName, "tls", !cfg.ServerInsecure)
+	return nil
 }

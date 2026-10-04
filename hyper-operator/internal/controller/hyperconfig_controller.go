@@ -80,7 +80,7 @@ func (r *HyperConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		engineImage = defaultEngineImage()
 	}
 
-	saName := "hyper-engine-sa"
+	saName := EngineServiceAccountName
 	roleName := "hyper-engine-config-reader"
 	dsName := "hyper-engine"
 	svcName := "hyper-engine-svc"

@@ -1,11 +1,32 @@
 package controller
 
 import (
+	"context"
 	"os"
 	"sort"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	hyperv1alpha1 "github.com/taha2samy/hypergate/hyper-operator/api/v1alpha1"
 )
+
+// EngineServiceAccountName is the ServiceAccount of every engine DaemonSet.
+const EngineServiceAccountName = "hyper-engine-sa"
+
+// EngineNamespaces returns the namespaces that run an engine: the target
+// namespace of every HyperConfig that owns one.
+func EngineNamespaces(ctx context.Context, c client.Reader) (map[string]bool, error) {
+	var list hyperv1alpha1.HyperConfigList
+	if err := c.List(ctx, &list); err != nil {
+		return nil, err
+	}
+	winners, _ := activeHyperConfigs(list.Items)
+	out := make(map[string]bool, len(winners))
+	for ns := range winners {
+		out[ns] = true
+	}
+	return out, nil
+}
 
 const (
 	defaultTargetNamespace = "hyper-system"
