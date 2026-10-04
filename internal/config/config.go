@@ -14,7 +14,7 @@ type Config struct {
 	Telemetry TelemetryConfig  `yaml:"telemetry"`
 	Chains    map[string]Chain `yaml:"chains"`
 	Router    RouterConfig     `yaml:"router"`
-    
+
 	// Redis holds a named map of independent Redis service configurations.
 	// Each key becomes the service name used for O(1) lookup in the redis.Manager.
 	Redis map[string]RedisServiceConfig `yaml:"redis"`
