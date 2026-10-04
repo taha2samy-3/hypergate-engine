@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+// Workload identity resources streamed by the hyper-operator leader to engines
+// over delta xDS (docs/design/identity-distribution.md, sections 4 and 5).
+package hypergate.identity.v1;
+
+option go_package = "github.com/taha2samy/hypergate/internal/identityapi/v1;identityv1";
+
+// WorkloadKind says what an IP belongs to.
+enum WorkloadKind {
+  WORKLOAD_KIND_UNSPECIFIED = 0;
+  // A pod IP.
+  WORKLOAD_KIND_POD = 1;
+  // A node address. hostNetwork pods share it and are not told apart.
+  WORKLOAD_KIND_NODE = 2;
+}
+
+// Workload is the identity behind one IP. The xDS resource name is the IP.
+// Type URL: type.googleapis.com/hypergate.identity.v1.Workload
+message Workload {
+  // IP address (IPv4 or IPv6). One resource per IP, so dual-stack pods have two.
+  string ip = 1;
+  // Pod UID, which tells a reused IP apart.
+  string pod_uid = 2;
+  string namespace = 3;
+  string pod = 4;
+  string service_account = 5;
+  // spiffe://<trust-domain>/ns/<namespace>/sa/<service-account>
+  string spiffe_id = 6;
+  // Cilium numeric security identity, 0 without Cilium.
+  uint32 security_identity = 7;
+  // Pod labels on the operator's allow-list.
+  map<string, string> labels = 8;
+  // Services that have the pod as an endpoint, sorted.
+  repeated ServiceRef services = 9;
+  // Node name (for pods: where the pod runs).
+  string node = 10;
+  WorkloadKind kind = 11;
+  // Labels of the Cilium security identity, sorted.
+  repeated string cilium_labels = 12;
+}
+
+// ServiceRef names a Service.
+message ServiceRef {
+  string namespace = 1;
+  string name = 2;
+}
+
+// Service is a Service and its cluster IPs. The xDS resource name is
+// "<namespace>/<name>".
+// Type URL: type.googleapis.com/hypergate.identity.v1.Service
+message Service {
+  string name = 1;
+  string namespace = 2;
+  // Cluster IPs (none for headless Services).
+  repeated string cluster_ips = 3;
+  repeated uint32 ports = 4;
+}

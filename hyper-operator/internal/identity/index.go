@@ -168,6 +168,8 @@ type Index struct {
 	nodeIP map[netip.Addr]string
 
 	generation uint64
+	// changed receives a value after changes (coalesced, never blocks writers).
+	changed chan struct{}
 }
 
 // NewIndex returns an empty index.
@@ -197,6 +199,21 @@ func NewIndex(opts Options) *Index {
 		cilium:      map[nsName]CiliumEndpointRecord{},
 		nodes:       map[string]NodeRecord{},
 		nodeIP:      map[netip.Addr]string{},
+		changed:     make(chan struct{}, 1),
+	}
+}
+
+// Changed returns a channel that receives a value after the index changes.
+// Several changes may be coalesced into one notification. It is meant for a
+// single consumer.
+func (x *Index) Changed() <-chan struct{} { return x.changed }
+
+// bump records a change. Callers hold x.mu.
+func (x *Index) bump() {
+	x.generation++
+	select {
+	case x.changed <- struct{}{}:
+	default:
 	}
 }
 
@@ -220,7 +237,7 @@ func (x *Index) UpsertPod(p PodRecord) {
 	defer x.mu.Unlock()
 	x.removePodLocked(p.UID)
 	if p.HostNetwork || p.Finished || p.UID == "" {
-		x.generation++
+		x.bump()
 		return
 	}
 	rec := p
@@ -230,7 +247,7 @@ func (x *Index) UpsertPod(p PodRecord) {
 	for _, ip := range rec.IPs {
 		x.claims[ip] = append(x.claims[ip], p.UID)
 	}
-	x.generation++
+	x.bump()
 }
 
 // DeletePod removes a pod by UID. An IP is released only by the pod that
@@ -240,7 +257,7 @@ func (x *Index) DeletePod(uid string) {
 	x.mu.Lock()
 	defer x.mu.Unlock()
 	x.removePodLocked(uid)
-	x.generation++
+	x.bump()
 }
 
 func (x *Index) removePodLocked(uid string) {
@@ -282,7 +299,7 @@ func (x *Index) UpsertSlice(s SliceRecord) {
 	key := sliceKey{s.Namespace, s.Name}
 	x.removeSliceLocked(key)
 	if s.Service == "" {
-		x.generation++
+		x.bump()
 		return
 	}
 	svc := ServiceRef{Namespace: s.Namespace, Name: s.Service}
@@ -295,7 +312,7 @@ func (x *Index) UpsertSlice(s SliceRecord) {
 		addRef(x.ipServices, ip, svc)
 	}
 	x.slices[key] = rec
-	x.generation++
+	x.bump()
 }
 
 // DeleteSlice removes an EndpointSlice's contribution.
@@ -303,7 +320,7 @@ func (x *Index) DeleteSlice(namespace, name string) {
 	x.mu.Lock()
 	defer x.mu.Unlock()
 	x.removeSliceLocked(sliceKey{namespace, name})
-	x.generation++
+	x.bump()
 }
 
 func (x *Index) removeSliceLocked(key sliceKey) {
@@ -333,7 +350,7 @@ func (x *Index) UpsertService(s Service) {
 	for _, ip := range s.ClusterIPs {
 		x.byClusterIP[ip] = ref
 	}
-	x.generation++
+	x.bump()
 }
 
 // DeleteService removes a Service.
@@ -341,7 +358,7 @@ func (x *Index) DeleteService(namespace, name string) {
 	x.mu.Lock()
 	defer x.mu.Unlock()
 	x.removeServiceLocked(ServiceRef{Namespace: namespace, Name: name})
-	x.generation++
+	x.bump()
 }
 
 func (x *Index) removeServiceLocked(ref ServiceRef) {
@@ -364,7 +381,7 @@ func (x *Index) UpsertCiliumEndpoint(c CiliumEndpointRecord) {
 	c.Labels = slices.Clone(c.Labels)
 	sort.Strings(c.Labels)
 	x.cilium[nsName{c.Namespace, c.Name}] = c
-	x.generation++
+	x.bump()
 }
 
 // DeleteCiliumEndpoint forgets a CiliumEndpoint.
@@ -372,7 +389,7 @@ func (x *Index) DeleteCiliumEndpoint(namespace, name string) {
 	x.mu.Lock()
 	defer x.mu.Unlock()
 	delete(x.cilium, nsName{namespace, name})
-	x.generation++
+	x.bump()
 }
 
 // UpsertNode adds or replaces a node's addresses.
@@ -385,7 +402,7 @@ func (x *Index) UpsertNode(n NodeRecord) {
 	for _, ip := range n.IPs {
 		x.nodeIP[ip] = n.Name
 	}
-	x.generation++
+	x.bump()
 }
 
 // DeleteNode removes a node.
@@ -393,7 +410,7 @@ func (x *Index) DeleteNode(name string) {
 	x.mu.Lock()
 	defer x.mu.Unlock()
 	x.removeNodeLocked(name)
-	x.generation++
+	x.bump()
 }
 
 func (x *Index) removeNodeLocked(name string) {

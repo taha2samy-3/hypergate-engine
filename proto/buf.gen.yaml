@@ -1,0 +1,7 @@
+# Generate with: cd proto && buf generate
+version: v2
+plugins:
+  - local: protoc-gen-go
+    out: ..
+    opt:
+      - module=github.com/taha2samy/hypergate
