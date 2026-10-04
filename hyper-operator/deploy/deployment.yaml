@@ -18,7 +18,7 @@ spec:
       serviceAccountName: hyper-operator-sa
       containers:
         - name: manager
-          image: ghcr.io/taha2samy-3/hyper-operator:sha-a7fcf2f7
+          image: ghcr.io/taha2samy-3/hyper-operator:sha-5e787f33
           imagePullPolicy: IfNotPresent
           command:
             - /manager
