@@ -2,9 +2,12 @@ package engine
 
 import (
 	"context"
+	"net/netip"
 	"strings"
 
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
+
+	"github.com/taha2samy/hypergate/internal/selector"
 )
 
 type Header struct {
@@ -23,6 +26,19 @@ type RequestContext struct {
 	// It is derived from the Envoy peer address and trusted X-Forwarded-For hops,
 	// never from raw client-supplied headers alone.
 	ClientIP string
+	// ClientAddr is ClientIP parsed for selector matching (invalid when unknown).
+	ClientAddr netip.Addr
+	// DestinationAddress is the address the downstream connection was made to
+	// (Envoy's destination.address attribute, "ip:port"): the original destination
+	// of a transparently intercepted call, or the gateway's own listener address.
+	// Empty when Envoy is not configured to send it.
+	DestinationAddress string
+	// DestinationAddr is the IP of DestinationAddress (invalid when unknown).
+	DestinationAddr netip.Addr
+	// Host is the request :authority, lower-cased and without port.
+	Host string
+	// Traffic is the request class from the ext_proc stream metadata, or inferred.
+	Traffic selector.Traffic
 	// RequestEndOfStream is true when the request headers message carried
 	// end_of_stream, i.e. the request has no body or trailers.
 	RequestEndOfStream bool
@@ -67,6 +83,11 @@ func (ctx *RequestContext) Reset() {
 	ctx.Path = ""
 	ctx.Method = ""
 	ctx.ClientIP = ""
+	ctx.ClientAddr = netip.Addr{}
+	ctx.DestinationAddress = ""
+	ctx.DestinationAddr = netip.Addr{}
+	ctx.Host = ""
+	ctx.Traffic = selector.TrafficAny
 	ctx.RequestEndOfStream = false
 	clear(ctx.Headers)
 	clear(ctx.ResponseHeaders)

@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 520" role="img" aria-labelledby="t d">
+  <title id="t">Identity-aware routing decision flow</title>
+  <desc id="d">For each ext_proc stream the engine determines the traffic class from metadata or by inference, looks up the source workload, applies the unknown-source policy for east-west callers that are not in the identity map, matches HyperRoutes in priority order and otherwise falls back to the default chain of the traffic class, then the legacy default chain, then pass-through.</desc>
+  <defs>
+    <style>
+      text { font-family: Inter, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #E2E8F0; }
+      .h { font-size: 15px; font-weight: 700; }
+      .b { font-size: 13px; }
+      .s { font-size: 12px; fill: #94A3B8; }
+      .yes { font-size: 12px; font-weight: 700; fill: #6EE7B7; }
+      .no { font-size: 12px; font-weight: 700; fill: #FCA5A5; }
+      .box { fill: #1E293B; stroke: #334155; stroke-width: 1.5; }
+      .dec { fill: #1E293B; stroke: #6366F1; stroke-width: 2; }
+      .ok { fill: #052E2B; stroke: #10B981; stroke-width: 2; }
+      .bad { fill: #3F1D24; stroke: #F43F5E; stroke-width: 2; }
+      .ln { stroke: #94A3B8; stroke-width: 1.8; fill: none; }
+    </style>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#94A3B8"/></marker>
+  </defs>
+
+  <rect width="1200" height="520" rx="18" fill="#0F172A"/>
+  <rect x="0.75" y="0.75" width="1198.5" height="518.5" rx="18" fill="none" stroke="#1E293B" stroke-width="1.5"/>
+
+  <!-- start -->
+  <rect x="30" y="60" width="150" height="70" rx="12" class="box"/>
+  <text x="105" y="90" class="h" text-anchor="middle">ext_proc stream</text>
+  <text x="105" y="111" class="s" text-anchor="middle">request headers</text>
+
+  <!-- traffic class -->
+  <path d="M290 40 L380 95 L290 150 L200 95 Z" class="dec"/>
+  <text x="290" y="90" class="b" text-anchor="middle">x-hypergate-</text>
+  <text x="290" y="107" class="b" text-anchor="middle">traffic set?</text>
+  <path d="M180 95 H 198" class="ln" marker-end="url(#a)"/>
+
+  <rect x="420" y="30" width="190" height="56" rx="10" class="box"/>
+  <text x="515" y="54" class="b" text-anchor="middle">use the metadata</text>
+  <text x="515" y="72" class="s" text-anchor="middle">north-south / east-west</text>
+  <rect x="420" y="108" width="190" height="64" rx="10" class="box"/>
+  <text x="515" y="130" class="b" text-anchor="middle">infer</text>
+  <text x="515" y="148" class="s" text-anchor="middle">source in identity map →</text>
+  <text x="515" y="164" class="s" text-anchor="middle">east-west, else north-south</text>
+  <path d="M352 78 C 380 60, 395 58, 412 58" class="ln" marker-end="url(#a)"/>
+  <text x="362" y="56" class="yes">yes</text>
+  <path d="M352 112 C 380 130, 395 140, 412 140" class="ln" marker-end="url(#a)"/>
+  <text x="362" y="146" class="no">no</text>
+
+  <!-- unknown source -->
+  <path d="M760 40 L860 100 L760 160 L660 100 Z" class="dec"/>
+  <text x="760" y="88" class="b" text-anchor="middle">east-west and</text>
+  <text x="760" y="105" class="b" text-anchor="middle">source unknown?</text>
+  <path d="M610 58 C 640 58, 650 80, 664 92" class="ln" marker-end="url(#a)"/>
+  <path d="M610 140 C 640 140, 650 120, 664 108" class="ln" marker-end="url(#a)"/>
+
+  <rect x="910" y="30" width="250" height="56" rx="10" class="bad"/>
+  <text x="1035" y="54" class="b" text-anchor="middle">unknown_source: deny → 503</text>
+  <text x="1035" y="72" class="s" text-anchor="middle">logged with the source IP</text>
+  <path d="M836 86 C 870 60, 880 58, 902 58" class="ln" marker-end="url(#a)"/>
+  <text x="836" y="44" class="yes">yes, deny</text>
+
+  <text x="874" y="132" class="s">yes, default: only ip / cidr / any</text>
+  <text x="874" y="148" class="s">selectors can match the source</text>
+
+  <!-- match routes -->
+  <rect x="560" y="250" width="420" height="110" rx="12" class="dec"/>
+  <text x="770" y="278" class="h" text-anchor="middle">match HyperRoutes in priority order</text>
+  <text x="770" y="302" class="s" text-anchor="middle">all fields of one match entry hold:</text>
+  <text x="770" y="322" class="s" text-anchor="middle">traffic · sources (any of) · destinations (any of)</text>
+  <text x="770" y="342" class="s" text-anchor="middle">path prefix / regex · headers</text>
+  <path d="M760 160 V 242" class="ln" marker-end="url(#a)"/>
+  <text x="770" y="206" class="no">no</text>
+  <path d="M860 100 C 1000 120, 980 240, 940 250" class="ln" marker-end="url(#a)"/>
+
+  <rect x="1010" y="270" width="160" height="70" rx="10" class="ok"/>
+  <text x="1090" y="298" class="b" text-anchor="middle">run the route's</text>
+  <text x="1090" y="316" class="b" text-anchor="middle">chain</text>
+  <path d="M980 305 H 1002" class="ln" marker-end="url(#a)"/>
+  <text x="984" y="296" class="yes">match</text>
+
+  <!-- defaults -->
+  <rect x="560" y="410" width="200" height="70" rx="10" class="box"/>
+  <text x="660" y="438" class="b" text-anchor="middle">default_chains</text>
+  <text x="660" y="458" class="s" text-anchor="middle">[north_south | east_west]</text>
+  <path d="M660 360 V 402" class="ln" marker-end="url(#a)"/>
+  <text x="670" y="388" class="no">no match</text>
+
+  <rect x="320" y="410" width="200" height="70" rx="10" class="box"/>
+  <text x="420" y="438" class="b" text-anchor="middle">default_chain</text>
+  <text x="420" y="458" class="s" text-anchor="middle">(backward compatible)</text>
+  <path d="M560 445 H 528" class="ln" marker-end="url(#a)"/>
+  <text x="530" y="436" class="s">unset</text>
+
+  <rect x="80" y="410" width="200" height="70" rx="10" class="box"/>
+  <text x="180" y="438" class="b" text-anchor="middle">no chain</text>
+  <text x="180" y="458" class="s" text-anchor="middle">pass-through</text>
+  <path d="M320 445 H 288" class="ln" marker-end="url(#a)"/>
+  <text x="290" y="436" class="s">unset</text>
+
+  <path d="M760 445 H 1090 V 348" class="ln" marker-end="url(#a)"/>
+  <text x="780" y="436" class="s">set: run that chain</text>
+</svg>

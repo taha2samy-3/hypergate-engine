@@ -4,13 +4,24 @@ import (
 	"regexp"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/taha2samy/hypergate/internal/selector"
 )
 
-// RouterConfig holds the routing rules and the fallback chain name.
+// RouterConfig holds the routing rules and the fallback chain names.
 type RouterConfig struct {
-	Routes       []RouteConfig `yaml:"routes"`
-	DefaultChain string        `yaml:"default_chain"`
-	Other        string        `yaml:"other"`
+	Routes []RouteConfig `yaml:"routes"`
+	// DefaultChains picks the fallback chain by traffic class; DefaultChain is
+	// used when the class has none.
+	DefaultChains DefaultChainsConfig `yaml:"default_chains,omitempty"`
+	DefaultChain  string              `yaml:"default_chain"`
+	Other         string              `yaml:"other"`
+}
+
+// DefaultChainsConfig holds the fallback chain per traffic class.
+type DefaultChainsConfig struct {
+	NorthSouth string `yaml:"north_south,omitempty"`
+	EastWest   string `yaml:"east_west,omitempty"`
 }
 
 // RouteConfig defines routing rules to a target chain.
@@ -22,6 +33,16 @@ type RouteConfig struct {
 
 // MatchConfig holds conditions to evaluate an incoming request (AND logic).
 type MatchConfig struct {
+	// Traffic restricts the match to north_south or east_west requests (empty or any: both).
+	Traffic string `yaml:"traffic,omitempty"`
+	// Sources and Destinations are lists of `prefix:value` selectors (OR within a list).
+	Sources      []string `yaml:"sources,omitempty"`
+	Destinations []string `yaml:"destinations,omitempty"`
+
+	CompiledTraffic      selector.Traffic `yaml:"-"`
+	CompiledSources      *selector.Set    `yaml:"-"` // Compiled at startup
+	CompiledDestinations *selector.Set    `yaml:"-"` // Compiled at startup
+
 	PathPrefix        string                       `yaml:"path_prefix"`
 	PathRegexPattern  string                       `yaml:"path_regex_pattern"`
 	CompiledPathRegex *regexp.Regexp               `yaml:"-"` // Pre-compiled at startup
@@ -47,5 +68,24 @@ func (h *HeaderMatchConfig) UnmarshalYAML(value *yaml.Node) error {
 		return err
 	}
 	*h = HeaderMatchConfig(a)
+	return nil
+}
+
+// Compile parses the traffic class and selectors of the match. It must be called
+// before the match is used for routing; ParseBytes does it for loaded configs.
+func (m *MatchConfig) Compile() error {
+	t, err := selector.ParseTraffic(m.Traffic)
+	if err != nil {
+		return err
+	}
+	src, err := selector.Compile(m.Sources, selector.Source)
+	if err != nil {
+		return err
+	}
+	dst, err := selector.Compile(m.Destinations, selector.Destination)
+	if err != nil {
+		return err
+	}
+	m.CompiledTraffic, m.CompiledSources, m.CompiledDestinations = t, src, dst
 	return nil
 }

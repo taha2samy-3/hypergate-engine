@@ -1,6 +1,7 @@
 package grpc
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -9,11 +10,50 @@ import (
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extprocv3 "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	typev3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/taha2samy/hypergate/internal/clientip"
 	"github.com/taha2samy/hypergate/internal/engine"
 	mylogger "github.com/taha2samy/hypergate/internal/logger"
+	"github.com/taha2samy/hypergate/internal/selector"
 )
+
+// destinationAddressAttribute is the ext_proc attribute carrying the local address
+// of the downstream connection (the original destination of an intercepted call).
+// Configure it with `request_attributes: ["destination.address"]`.
+const destinationAddressAttribute = "destination.address"
+
+// stringAttribute returns a string attribute from the ext_proc attributes map.
+// Envoy keys the map by filter namespace, so every entry is searched.
+func stringAttribute(attrs map[string]*structpb.Struct, key string) string {
+	for _, s := range attrs {
+		if v, ok := s.GetFields()[key]; ok {
+			if str := v.GetStringValue(); str != "" {
+				return str
+			}
+		}
+	}
+	return ""
+}
+
+// trafficFromContext returns the traffic class sent by Envoy in the
+// x-hypergate-traffic stream metadata (configured by the operator on the ext_proc
+// filter, so clients cannot set it). Without it the class is inferred: until the
+// engine receives the workload identity map every caller counts as north-south.
+func trafficFromContext(ctx context.Context) selector.Traffic {
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		if vals := md.Get(selector.TrafficMetadataKey); len(vals) > 0 {
+			t, err := selector.ParseTraffic(vals[0])
+			if err == nil && t != selector.TrafficAny {
+				return t
+			}
+			mylogger.Debug("Ignoring invalid traffic metadata, inferring the class",
+				zap.String("key", selector.TrafficMetadataKey), zap.String("value", vals[0]))
+		}
+	}
+	return selector.TrafficNorthSouth
+}
 
 // streamState is the per-stream routing decision. It is made once, against the
 // snapshot the stream acquired when it opened, and reused for every phase.
@@ -104,11 +144,22 @@ func (s *Server) handleRequestHeaders(
 		hops = st.snap.Config.Server.ClientIP.TrustedProxyHops
 	}
 	reqCtx.ClientIP = clientip.Resolve(reqCtx.Headers["x-forwarded-for"], clientip.PeerFromAttributes(req.GetAttributes()), hops)
+	reqCtx.ClientAddr = selector.ParseAddr(reqCtx.ClientIP)
+	reqCtx.DestinationAddress = stringAttribute(req.GetAttributes(), destinationAddressAttribute)
+	reqCtx.DestinationAddr = selector.ParseAddr(reqCtx.DestinationAddress)
+	authority := reqCtx.Headers[":authority"]
+	if authority == "" {
+		authority = reqCtx.Headers["host"]
+	}
+	reqCtx.Host = selector.NormalizeHost(authority)
 
 	mylogger.Debug("Parsed RequestHeaders attributes",
 		zap.String("path", reqCtx.Path),
 		zap.String("method", reqCtx.Method),
 		zap.String("client_ip", reqCtx.ClientIP),
+		zap.String("destination", reqCtx.DestinationAddress),
+		zap.String("host", reqCtx.Host),
+		zap.Stringer("traffic", reqCtx.Traffic),
 	)
 
 	s.resolve(st, reqCtx)

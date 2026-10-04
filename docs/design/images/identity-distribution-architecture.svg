@@ -1,0 +1,150 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-labelledby="t d">
+  <title id="t">Workload identity distribution architecture</title>
+  <desc id="d">Two hyper-operator replicas share one Lease. Both watch the Kubernetes API and keep a warm identity cache. Only the leader runs the reconcilers, the identity stream server and the EndpointSlice publisher, which points the selector-less Service hyper-operator-identity at the leader. Engines on every node connect to that Service and receive the IP to workload map over delta xDS.</desc>
+  <defs>
+    <style>
+      text { font-family: Inter, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #E2E8F0; }
+      .h { font-size: 17px; font-weight: 700; }
+      .hs { font-size: 15px; font-weight: 700; }
+      .b { font-size: 14px; }
+      .s { font-size: 12.5px; fill: #94A3B8; }
+      .tag { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; }
+      .box { fill: #1E293B; stroke: #334155; stroke-width: 1.5; }
+      .acc { fill: #1E293B; stroke: #6366F1; stroke-width: 2; }
+      .cy { fill: #1E293B; stroke: #22D3EE; stroke-width: 2; }
+      .inner { fill: #0F172A; stroke: #334155; stroke-width: 1.2; }
+      .lead { fill: #0F172A; stroke: #6366F1; stroke-width: 1.4; }
+      .off { fill: #0F172A; stroke: #334155; stroke-width: 1.2; stroke-dasharray: 5 4; }
+      .ln { stroke: #94A3B8; stroke-width: 1.8; fill: none; }
+      .lnd { stroke: #94A3B8; stroke-width: 1.8; fill: none; stroke-dasharray: 6 5; }
+      .lnc { stroke: #22D3EE; stroke-width: 2.2; fill: none; }
+      .lni { stroke: #6366F1; stroke-width: 2; fill: none; }
+    </style>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#94A3B8"/></marker>
+    <marker id="ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#22D3EE"/></marker>
+    <marker id="ai" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6366F1"/></marker>
+  </defs>
+
+  <rect width="1200" height="800" rx="18" fill="#0F172A"/>
+  <rect x="0.75" y="0.75" width="1198.5" height="798.5" rx="18" fill="none" stroke="#1E293B" stroke-width="1.5"/>
+
+  <!-- Kubernetes API -->
+  <text x="40" y="50" class="s" style="letter-spacing:0.08em">CONTROL PLANE</text>
+  <rect x="40" y="70" width="230" height="170" rx="12" class="box"/>
+  <text x="155" y="100" class="h" text-anchor="middle">kube-apiserver</text>
+  <text x="60" y="130" class="b">Pods · Services</text>
+  <text x="60" y="152" class="b">EndpointSlices</text>
+  <text x="60" y="174" class="b">CiliumEndpoints*</text>
+  <text x="60" y="196" class="b">CiliumIdentities*</text>
+  <text x="60" y="222" class="s">* only when Cilium CRDs exist</text>
+
+  <rect x="40" y="280" width="230" height="86" rx="12" class="acc"/>
+  <text x="155" y="310" class="hs" text-anchor="middle">Lease</text>
+  <text x="155" y="332" class="s" text-anchor="middle">coordination.k8s.io/v1</text>
+  <text x="155" y="352" class="s" text-anchor="middle">hyper-operator.hyper.io</text>
+
+  <!-- Operator deployment -->
+  <rect x="320" y="40" width="560" height="460" rx="16" fill="none" stroke="#334155" stroke-width="1.5" stroke-dasharray="7 5"/>
+  <text x="340" y="68" class="s" style="letter-spacing:0.08em">HYPER-OPERATOR DEPLOYMENT · ONE LEASE</text>
+
+  <!-- Replica A: leader -->
+  <rect x="340" y="86" width="250" height="396" rx="12" class="acc"/>
+  <text x="465" y="114" class="h" text-anchor="middle">Replica A</text>
+  <rect x="405" y="124" width="120" height="22" rx="11" fill="#312E81"/>
+  <text x="465" y="140" class="tag" text-anchor="middle" fill="#C7D2FE">LEADER</text>
+
+  <text x="356" y="172" class="s" style="letter-spacing:0.06em">EVERY REPLICA</text>
+  <rect x="356" y="180" width="218" height="56" rx="9" class="inner"/>
+  <text x="370" y="204" class="b">IdentityCache</text>
+  <text x="370" y="224" class="s">informers · IP index (warm)</text>
+  <rect x="356" y="244" width="218" height="40" rx="9" class="inner"/>
+  <text x="370" y="270" class="b">Admission webhooks</text>
+
+  <text x="356" y="310" class="s" style="letter-spacing:0.06em">LEADER ONLY</text>
+  <rect x="356" y="318" width="218" height="40" rx="9" class="lead"/>
+  <text x="370" y="344" class="b">Reconcilers</text>
+  <rect x="356" y="366" width="218" height="46" rx="9" class="lead"/>
+  <text x="370" y="388" class="b">IdentityServer</text>
+  <text x="370" y="405" class="s">delta xDS · :9444</text>
+  <rect x="356" y="420" width="218" height="46" rx="9" class="lead"/>
+  <text x="370" y="442" class="b">EndpointPublisher</text>
+  <text x="370" y="459" class="s">writes the EndpointSlice</text>
+
+  <!-- Replica B: standby -->
+  <rect x="610" y="86" width="250" height="396" rx="12" class="box"/>
+  <text x="735" y="114" class="h" text-anchor="middle">Replica B</text>
+  <rect x="665" y="124" width="140" height="22" rx="11" fill="#1E293B" stroke="#475569"/>
+  <text x="735" y="140" class="tag" text-anchor="middle" fill="#CBD5E1">WARM STANDBY</text>
+
+  <text x="626" y="172" class="s" style="letter-spacing:0.06em">EVERY REPLICA</text>
+  <rect x="626" y="180" width="218" height="56" rx="9" class="inner"/>
+  <text x="640" y="204" class="b">IdentityCache</text>
+  <text x="640" y="224" class="s">informers · IP index (warm)</text>
+  <rect x="626" y="244" width="218" height="40" rx="9" class="inner"/>
+  <text x="640" y="270" class="b">Admission webhooks</text>
+
+  <text x="626" y="310" class="s" style="letter-spacing:0.06em">LEADER ONLY · NOT STARTED</text>
+  <rect x="626" y="318" width="218" height="40" rx="9" class="off"/>
+  <text x="640" y="344" class="b" fill="#64748B">Reconcilers</text>
+  <rect x="626" y="366" width="218" height="46" rx="9" class="off"/>
+  <text x="640" y="394" class="b" fill="#64748B">IdentityServer</text>
+  <rect x="626" y="420" width="218" height="46" rx="9" class="off"/>
+  <text x="640" y="448" class="b" fill="#64748B">EndpointPublisher</text>
+
+  <!-- watch arrows from API server to both caches -->
+  <path d="M270 150 C 310 150, 320 208, 350 208" class="ln" marker-end="url(#a)"/>
+  <path d="M270 110 C 300 30, 330 26, 400 26 H 600 V 208 H 618" class="ln" marker-end="url(#a)"/>
+  <text x="410" y="20" class="s">watch (read only) on every replica</text>
+
+  <!-- lease arrows -->
+  <path d="M270 322 C 300 322, 310 340, 350 340" class="lni" marker-end="url(#ai)"/>
+  <text x="44" y="388" class="s">leader holds &amp; renews it</text>
+  <path d="M210 366 C 210 540, 700 545, 735 490" class="lnd" marker-end="url(#a)"/>
+  <text x="300" y="582" class="s">standby retries to acquire every retryPeriod</text>
+
+  <!-- Service and EndpointSlice -->
+  <text x="920" y="50" class="s" style="letter-spacing:0.08em">ROUTING TO THE LEADER</text>
+  <rect x="920" y="70" width="240" height="90" rx="12" class="cy"/>
+  <text x="1040" y="100" class="hs" text-anchor="middle">Service</text>
+  <text x="1040" y="122" class="b" text-anchor="middle">hyper-operator-identity</text>
+  <text x="1040" y="144" class="s" text-anchor="middle">no pod selector · port 9444</text>
+
+  <rect x="920" y="200" width="240" height="90" rx="12" class="box"/>
+  <text x="1040" y="230" class="hs" text-anchor="middle">EndpointSlice</text>
+  <text x="1040" y="252" class="b" text-anchor="middle">1 endpoint:</text>
+  <text x="1040" y="274" class="s" text-anchor="middle">leader pod IP only</text>
+  <path d="M1040 200 V168" class="ln" marker-end="url(#a)"/>
+
+  <path d="M574 443 H 600 V 492 H 896 V 245 H 912" class="lni" marker-end="url(#ai)"/>
+  <text x="904" y="332" class="s">leader writes /</text>
+  <text x="904" y="350" class="s">overwrites</text>
+
+  <!-- Engines -->
+  <text x="625" y="600" class="s" style="letter-spacing:0.08em">ENGINE DAEMONSET · ONE PER NODE</text>
+  <rect x="40" y="620" width="340" height="140" rx="12" class="box"/>
+  <text x="210" y="652" class="h" text-anchor="middle">Engine · node 1</text>
+  <rect x="60" y="668" width="300" height="74" rx="9" class="inner"/>
+  <text x="76" y="694" class="b">local IP → workload index</text>
+  <text x="76" y="716" class="s">O(1) lookups · keeps last snapshot</text>
+  <text x="76" y="734" class="s">if the stream drops</text>
+
+  <rect x="430" y="620" width="340" height="140" rx="12" class="box"/>
+  <text x="600" y="652" class="h" text-anchor="middle">Engine · node 2</text>
+  <rect x="450" y="668" width="300" height="74" rx="9" class="inner"/>
+  <text x="466" y="694" class="b">local IP → workload index</text>
+  <text x="466" y="716" class="s">O(1) lookups · keeps last snapshot</text>
+
+  <rect x="820" y="620" width="340" height="140" rx="12" class="box"/>
+  <text x="990" y="652" class="h" text-anchor="middle">Engine · node N</text>
+  <rect x="840" y="668" width="300" height="74" rx="9" class="inner"/>
+  <text x="856" y="694" class="b">local IP → workload index</text>
+  <text x="856" y="716" class="s">O(1) lookups · keeps last snapshot</text>
+
+  <!-- stream from Service to engines -->
+  <path d="M1040 290 V 560 H 210 V 612" class="lnc" marker-end="url(#ac)"/>
+  <path d="M600 560 V 612" class="lnc" marker-end="url(#ac)"/>
+  <path d="M990 560 V 612" class="lnc" marker-end="url(#ac)"/>
+  <rect x="1012" y="410" width="160" height="60" rx="8" fill="#0F172A"/>
+  <text x="1092" y="434" class="s" text-anchor="middle" fill="#67E8F9">delta xDS stream</text>
+  <text x="1092" y="454" class="s" text-anchor="middle">TLS + SA token</text>
+</svg>

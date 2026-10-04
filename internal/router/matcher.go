@@ -8,6 +8,7 @@ import (
 	"github.com/taha2samy/hypergate/internal/config"
 	"github.com/taha2samy/hypergate/internal/engine"
 	mylogger "github.com/taha2samy/hypergate/internal/logger"
+	"github.com/taha2samy/hypergate/internal/selector"
 )
 
 type EngineRouter struct{}
@@ -32,69 +33,90 @@ func (r *EngineRouter) RouteWith(rc *config.RouterConfig, ctx *engine.RequestCon
 
 	for i := 0; i < len(rc.Routes); i++ {
 		route := &rc.Routes[i]
-
 		for j := 0; j < len(route.Matches); j++ {
-			match := &route.Matches[j]
-			matchFailed := false
-
-			if match.PathPrefix != "" {
-				if !strings.HasPrefix(ctx.Path, match.PathPrefix) {
-					matchFailed = true
-				}
+			if matches(&route.Matches[j], ctx) {
+				mylogger.Debug("Request matched route rule",
+					zap.String("rule_name", route.Name),
+					zap.String("target_chain", route.TargetChain),
+					zap.Stringer("traffic", ctx.Traffic),
+					zap.String("client_ip", ctx.ClientIP),
+					zap.String("destination", ctx.DestinationAddress),
+					zap.String("host", ctx.Host),
+				)
+				return route.TargetChain
 			}
-			if !matchFailed && match.CompiledPathRegex != nil {
-				if !match.CompiledPathRegex.MatchString(ctx.Path) {
-					matchFailed = true
-				}
-			}
-
-			if matchFailed {
-				continue
-			}
-
-			if len(match.Headers) > 0 {
-				for headerKey, ruleHeader := range match.Headers {
-					headerVal, exists := ctx.Headers[headerKey]
-
-					if !exists {
-						matchFailed = true
-						break
-					}
-
-					if ruleHeader.Exact == "*" {
-						continue
-					}
-
-					if ruleHeader.Exact != "" && ruleHeader.Exact != "*" {
-						if headerVal != ruleHeader.Exact {
-							matchFailed = true
-							break
-						}
-					}
-
-					if ruleHeader.CompiledRegex != nil {
-						if !ruleHeader.CompiledRegex.MatchString(headerVal) {
-							matchFailed = true
-							break
-						}
-					}
-				}
-			}
-
-			if matchFailed {
-				continue
-			}
-
-			mylogger.Debug("Request matched route rule", zap.String("rule_name", route.Name), zap.String("target_chain", route.TargetChain))
-			return route.TargetChain
 		}
 	}
 
-	fallbackChain := rc.DefaultChain
-	if fallbackChain == "" {
-		fallbackChain = rc.Other
+	fallbackChain := defaultChain(rc, ctx.Traffic)
+	mylogger.Debug("No route rule matched, using the default chain",
+		zap.Stringer("traffic", ctx.Traffic), zap.String("default_chain", fallbackChain))
+	return fallbackChain
+}
+
+// defaultChain returns the fallback for the traffic class, then default_chain, then other.
+func defaultChain(rc *config.RouterConfig, traffic selector.Traffic) string {
+	switch traffic {
+	case selector.TrafficNorthSouth:
+		if rc.DefaultChains.NorthSouth != "" {
+			return rc.DefaultChains.NorthSouth
+		}
+	case selector.TrafficEastWest:
+		if rc.DefaultChains.EastWest != "" {
+			return rc.DefaultChains.EastWest
+		}
+	}
+	if rc.DefaultChain != "" {
+		return rc.DefaultChain
+	}
+	return rc.Other
+}
+
+// matches reports whether every condition of one match entry holds.
+func matches(match *config.MatchConfig, ctx *engine.RequestContext) bool {
+	if !trafficMatches(match, ctx.Traffic) {
+		return false
+	}
+	if match.PathPrefix != "" && !strings.HasPrefix(ctx.Path, match.PathPrefix) {
+		return false
+	}
+	if match.CompiledPathRegex != nil && !match.CompiledPathRegex.MatchString(ctx.Path) {
+		return false
+	}
+	// Selectors that were never compiled must not widen the match.
+	if len(match.Sources) > 0 && match.CompiledSources == nil ||
+		len(match.Destinations) > 0 && match.CompiledDestinations == nil {
+		return false
+	}
+	if !match.CompiledSources.Match(ctx.ClientAddr, "") {
+		return false
+	}
+	if !match.CompiledDestinations.Match(ctx.DestinationAddr, ctx.Host) {
+		return false
 	}
 
-	mylogger.Debug("No route rule matched, falling back to 'default_chain'", zap.String("default_chain", fallbackChain))
-	return fallbackChain
+	for headerKey, ruleHeader := range match.Headers {
+		headerVal, exists := ctx.Headers[headerKey]
+		if !exists {
+			return false
+		}
+		if ruleHeader.Exact == "*" {
+			continue
+		}
+		if ruleHeader.Exact != "" && headerVal != ruleHeader.Exact {
+			return false
+		}
+		if ruleHeader.CompiledRegex != nil && !ruleHeader.CompiledRegex.MatchString(headerVal) {
+			return false
+		}
+	}
+	return true
+}
+
+func trafficMatches(match *config.MatchConfig, traffic selector.Traffic) bool {
+	if match.CompiledTraffic != selector.TrafficAny {
+		return match.CompiledTraffic == traffic
+	}
+	// A traffic value that was never compiled must not widen the match.
+	return match.Traffic == "" || strings.EqualFold(match.Traffic, "any")
 }

@@ -161,6 +161,9 @@ func ParseBytes(data []byte) (*Config, error) {
 
 	for i, route := range cfg.Router.Routes {
 		for j, match := range route.Matches {
+			if err := cfg.Router.Routes[i].Matches[j].Compile(); err != nil {
+				return nil, fmt.Errorf("route %q match index %d: %w", route.Name, j, err)
+			}
 			if match.PathRegexPattern != "" {
 				re, err := regexp.Compile(match.PathRegexPattern)
 				if err != nil {
@@ -238,7 +241,12 @@ func validateChainReferences(cfg *Config) error {
 			return fmt.Errorf("route %q targets undefined chain %q", route.Name, route.TargetChain)
 		}
 	}
-	for field, name := range map[string]string{"default_chain": cfg.Router.DefaultChain, "other": cfg.Router.Other} {
+	for field, name := range map[string]string{
+		"default_chain":              cfg.Router.DefaultChain,
+		"other":                      cfg.Router.Other,
+		"default_chains.north_south": cfg.Router.DefaultChains.NorthSouth,
+		"default_chains.east_west":   cfg.Router.DefaultChains.EastWest,
+	} {
 		if name == "" {
 			continue
 		}

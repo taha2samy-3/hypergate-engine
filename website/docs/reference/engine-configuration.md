@@ -207,7 +207,9 @@ Filters run in list order. An empty chain (`[]`) is valid and lets requests thro
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
 | `routes` | list of [route](#routerroutes) | empty | Evaluated in order; the first match wins. |
-| `default_chain` | string | empty | Chain for requests that match no route. Empty means such requests pass without policy. Must name a defined chain. |
+| `default_chains.north_south` | string | empty | Chain for unmatched north-south requests (see [traffic class](../concepts/routing.md#traffic-class)). Falls back to `default_chain` when empty. Must name a defined chain. |
+| `default_chains.east_west` | string | empty | Chain for unmatched east-west requests. Falls back to `default_chain` when empty. Must name a defined chain. |
+| `default_chain` | string | empty | Chain for requests that match no route and have no `default_chains` entry for their class. Empty means such requests pass without policy. Must name a defined chain. |
 | `other` | string | empty | Legacy alias of `default_chain`, used only when `default_chain` is empty. Must name a defined chain. |
 
 ### router.routes[]
@@ -224,6 +226,9 @@ All fields that are set must match (AND).
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
+| `traffic` | string | `any` | `north_south`, `east_west` or `any`. See [traffic class](../concepts/routing.md#traffic-class). |
+| `sources` | list of [selectors](#selectors) | empty | Alternatives for the caller. Empty means any caller. |
+| `destinations` | list of [selectors](#selectors) | empty | Alternatives for the target. Empty means any target. |
 | `path_prefix` | string | empty | Prefix of the raw `:path`, including the query string. |
 | `path_regex_pattern` | string | empty | RE2 expression matched against the raw `:path` (unanchored). Must compile. |
 | `headers` | map of header name to [header match](#header-match) | empty | Every listed header must be present and satisfy its condition. Header names are case-insensitive. |
@@ -237,6 +242,19 @@ All fields that are set must match (AND).
 
 A scalar is shorthand for `exact`: `x-tenant: acme` equals `x-tenant: {exact: acme}`. When both `exact` and `regex_pattern` are set, both must hold. When neither is set, the header only has to be present.
 
+### Selectors
+
+Each entry of `sources` and `destinations` is a string `prefix:value`.
+
+| Selector | Source | Destination | Matches |
+| --- | :---: | :---: | --- |
+| `ip:<address>` | ✓ | ✓ | Source: the resolved [client IP](../concepts/client-ip.md). Destination: the `destination.address` attribute. IPv4 or IPv6. |
+| `cidr:<prefix>` | ✓ | ✓ | As `ip:`, by prefix, for example `cidr:10.0.0.0/8`. Host bits must be zero. |
+| `host:<name>` | | ✓ | The request `:authority` (or `Host`) without port, case-insensitive. `*.example.com` matches one or more labels in front of `example.com`, not `example.com` itself. |
+| `any` | ✓ | ✓ | Every request. |
+
+The workload selectors `service:`, `namespace:`, `sa:`, `spiffe:`, `labels:` and `external` are reserved. They need the workload identity map, which the engine does not receive yet, so a configuration that uses them is rejected. See the [design](https://github.com/taha2samy-3/hypergate-engine/blob/main/docs/design/identity-aware-routing.md).
+
 See [Routing](../concepts/routing.md) for the full semantics.
 
 ## Validation rules
@@ -246,7 +264,8 @@ A configuration is rejected, at start-up (the engine exits) or on reload (the pr
 - `version` is not `v1`,
 - `server.client_ip.trusted_proxy_hops` is negative,
 - a Redis service has an invalid `type`, `socket_type`, `on_empty_behavior` or duration,
-- a route has no `target_chain`, or a `target_chain`, `default_chain` or `other` names an undefined chain,
+- a route has no `target_chain`, or a `target_chain`, `default_chain`, `default_chains` entry or `other` names an undefined chain,
+- a match has an invalid `traffic`, or a selector with an unknown prefix, a malformed value, a prefix not allowed on that side, or a workload prefix,
 - a route `path_regex_pattern` or header `regex_pattern` does not compile,
 - any filter fails to compile: unknown `type`, invalid options, an undefined `redis_service`, a Redis service that cannot be reached within `startup_max_elapsed_time`, a failed JWKS fetch, an unreadable secret file.
 

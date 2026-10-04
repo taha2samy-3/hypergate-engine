@@ -22,6 +22,7 @@ Hypergate is called by Envoy's external processing filter, `envoy.filters.http.e
     message_timeout: 2.5s
     request_attributes:
       - source.address
+      - destination.address
     processing_mode:
       request_header_mode: SEND
       response_header_mode: SEND
@@ -46,13 +47,29 @@ Place it before `envoy.filters.http.router` and after any filter whose effect Hy
 | `processing_mode.request_trailer_mode`, `response_trailer_mode` | `SKIP` | No built-in filter uses trailers. |
 | `allow_mode_override` | `true` | Lets the engine switch `request_body_mode` to `BUFFERED` for a single request, which a `firewall` filter with `inspect_body` needs. Without it (and without a static `BUFFERED`), such requests reach the upstream uninspected and the engine replaces the response with `500`. |
 | `allowed_override_modes` | unset | If you restrict overrides, allow the mode the engine sends: headers `SEND`, request body `BUFFERED`, response body `NONE`, trailers `SKIP`. |
-| `request_attributes` | `["source.address"]` | Sends Envoy's downstream peer address. The engine uses it to resolve the client IP instead of trusting `X-Forwarded-For`. See [Client IP](../concepts/client-ip.md). |
+| `request_attributes` | `["source.address", "destination.address"]` | `source.address` is Envoy's downstream peer. The engine uses it to resolve the client IP instead of trusting `X-Forwarded-For`; see [Client IP](../concepts/client-ip.md). `destination.address` is the address the connection was made to, used by destination `ip:` and `cidr:` [selectors](../concepts/routing.md#sources-and-destinations). |
+| `grpc_service.initial_metadata` | `x-hypergate-traffic` | Tells the engine the [traffic class](#traffic-class-metadata) of the requests this filter handles. |
 | `message_timeout` | above the slowest filter | Deadline for each ext_proc message. Envoy's default is 200 ms. The sidecar filters default to a `2s` timeout and JWT introspection to `2s`, and a new Redis connection can take up to its dial `timeout`. Either lower those timeouts or raise `message_timeout`. |
 | `mutation_rules` | unset | By default Envoy lets an external processor change any header except `host`, `:authority`, `:scheme`, `:method` and `x-envoy-*`. The API key filter (`hide_credentials`) and the JWT filter (`strip_token` with `source: query`) rewrite `:path` to strip a credential from the query string, so do not set `disallow_system: true` if you rely on that. |
 
 A buffered request body is subject to Envoy's buffer limits; bodies above them are rejected by Envoy before the engine sees them.
 
 Header mutations from the engine do not make Envoy re-select the route, because route selection has already happened when ext_proc runs.
+
+## Traffic class metadata
+
+Envoy can attach fixed gRPC metadata to every ext_proc stream. Hypergate reads `x-hypergate-traffic` from it to tell north-south from east-west traffic (see [Routing](../concepts/routing.md#traffic-class)):
+
+```yaml
+grpc_service:
+  envoy_grpc:
+    cluster_name: hyper_engine
+  initial_metadata:
+    - key: x-hypergate-traffic
+      value: north-south    # or east-west on a filter that handles calls between workloads
+```
+
+Clients cannot set this value: it is part of the filter configuration, not of the request. Without it, requests count as north-south.
 
 ## Complete standalone example
 
@@ -86,6 +103,7 @@ static_resources:
                       message_timeout: 2.5s
                       request_attributes:
                         - source.address
+                        - destination.address
                       processing_mode:
                         request_header_mode: SEND
                         response_header_mode: SEND
@@ -169,3 +187,7 @@ Requests on such routes never reach the engine, so no chain, not even the defaul
 ## Cilium Gateway API
 
 With Cilium, the filter is added through a `CiliumEnvoyConfig` attached to the gateway's service, as shown in the [Kubernetes quickstart](../getting-started/quickstart-kubernetes.md#8-connect-envoy) and in `k8s/demo/06-extproc-config.yaml`. The same settings apply.
+
+:::note East-west traffic on Cilium
+Applying Hypergate to service-to-service calls (Gateway API GAMMA routes) needs a typed way to attach ext_proc to an `HTTPRoute`. Cilium is adding one, `CiliumEnvoyExtProcFilter`, in [cilium/cilium#46479](https://github.com/cilium/cilium/pull/46479) (draft; proposal [cilium/cilium#45951](https://github.com/cilium/cilium/issues/45951)). Hypergate waits for it rather than relying on `CiliumEnvoyConfig` for GAMMA traffic. The plan and progress are in the [identity-aware routing design](https://github.com/taha2samy-3/hypergate-engine/blob/main/docs/design/identity-aware-routing.md).
+:::

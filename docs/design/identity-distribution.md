@@ -32,6 +32,10 @@ Research and a Phase 0 spike established:
 
 ## 3. Architecture
 
+![Identity distribution architecture: operator replicas sharing one Lease, warm caches on every replica, leader-only server and EndpointSlice publisher, engines on every node](./images/identity-distribution-architecture.svg)
+
+Text version:
+
 ```
                          hyper-operator Deployment (N replicas, one Lease)
    ┌───────────────────────────────────────────────────────────────────────────────┐
@@ -170,7 +174,7 @@ Possible future use: the operator generates CiliumNetworkPolicies from Hypergate
 | **4. Engine client** | xDS client, local index, readiness gating, debug endpoint, metrics; operator passes connection settings to the DaemonSet | Engine unit tests; end-to-end test against an in-process operator server |
 | **5. Failover and scale** | Kill leader, rolling upgrade, 10k simulated pods; measure failover, delta latency, memory | Rolling upgrade < 5 s, crash < 30 s, memory documented |
 | **6. Documentation** | Concept page, failover diagram, operations runbook | Site builds |
-| Next | Identity-aware routing (source/destination matches, per-traffic-class default chains) | Separate design |
+| Next | Identity-aware routing (source/destination selectors, GAMMA wiring, per-traffic-class default chains) | [Separate design](./identity-aware-routing.md) |
 
 ### Progress
 
@@ -179,7 +183,35 @@ Possible future use: the operator generates CiliumNetworkPolicies from Hypergate
 | 1 | **Done** | `hyper-operator/internal/leader`: `ElectionConfig` (flags `--leader-elect-lease-duration`, `--leader-elect-renew-deadline`, `--leader-elect-retry-period`, `--leader-elect-release-on-cancel`, `--leader-elect-lease-name`, `--leader-elect-namespace`, validated `retry < renew < lease`), `LeaderOnly` / `AllReplicas` runnable helpers, `hypergate_operator_is_leader` metric with transition logs. Chart values `operator.leaderElection.*`, metrics port exposed. Tests include a two-replica election through real controller-runtime managers sharing a Lease (fake clientset): the standby never runs leader-only work, warm-standby work runs everywhere, and a graceful stop hands over in well under the lease duration. |
 | 2–6 | Not started | |
 
-## 11. Risks
+## 11. Upstream dependencies and references
+
+This design itself depends only on released components. The **consumer** of the identity map, east-west routing on Cilium, waits for an upstream pull request:
+
+> **Waiting on upstream:** [cilium/cilium#46479](https://github.com/cilium/cilium/pull/46479) (`CiliumEnvoyExtProcFilter`, draft) and its CFP [cilium/cilium#45951](https://github.com/cilium/cilium/issues/45951). Until they land, the identity map can be built and distributed (Phases 2–5), and it is used by north-south routing through Envoy Gateway. See [identity-aware routing §2.1](./identity-aware-routing.md#21-upstream-pull-requests-we-are-waiting-for).
+
+| Reference | Used for |
+| --- | --- |
+| [controller-runtime manager options](https://pkg.go.dev/sigs.k8s.io/controller-runtime) (`LeaderElection*`, `LeaseDuration`, `RenewDeadline`, `RetryPeriod`, `LeaderElectionReleaseOnCancel`) | Phase 1 |
+| [client-go `resourcelock.LeaseLock`](https://pkg.go.dev/k8s.io/client-go/tools/leaderelection/resourcelock) | Lease-based election (and the Phase 1 two-replica test) |
+| [Kubernetes Services without selectors](https://kubernetes.io/docs/concepts/services-networking/service/#services-without-selectors), [EndpointSlices](https://kubernetes.io/docs/concepts/services-networking/endpoint-slices/) | Routing engines to the leader (Phase 3) |
+| [go-control-plane cache (delta xDS, custom resources)](https://pkg.go.dev/github.com/envoyproxy/go-control-plane/pkg/cache/v3) | Distribution protocol (Phase 3) |
+| [TokenReview API](https://kubernetes.io/docs/reference/kubernetes-api/authentication-resources/token-review-v1/) | Engine authentication (Phase 3) |
+| [cilium/proxy `bpf_metadata.cc`](https://github.com/cilium/proxy/blob/main/cilium/bpf_metadata.cc), [`filter_state_cilium_policy.h`](https://github.com/cilium/proxy/blob/main/cilium/filter_state_cilium_policy.h), [extensions build config](https://github.com/cilium/proxy/blob/main/envoy_build_config/extensions_build_config.bzl) | Why the source identity cannot come from Cilium's Envoy today (possible future upstream contribution) |
+
+## 12. Repository map
+
+| Area | Where |
+| --- | --- |
+| Leader election config and runnable helpers (Phase 1) | [`hyper-operator/internal/leader/election.go`](../../hyper-operator/internal/leader/election.go), [`runnable.go`](../../hyper-operator/internal/leader/runnable.go), [tests](../../hyper-operator/internal/leader/election_test.go) |
+| Operator entry point (flags, manager) | [`hyper-operator/cmd/main.go`](../../hyper-operator/cmd/main.go) |
+| Helm values (`operator.leaderElection.*`, `operator.metricsPort`) | [`charts/hyper-operator/values.yaml`](../../charts/hyper-operator/values.yaml), [`templates/deployment.yaml`](../../charts/hyper-operator/templates/deployment.yaml) |
+| Static manifests | [`hyper-operator/deploy/deployment.yaml`](../../hyper-operator/deploy/deployment.yaml), [`rbac.yaml`](../../hyper-operator/deploy/rbac.yaml) |
+| Engine client IP resolution (consumer side) | [`internal/clientip/clientip.go`](../../internal/clientip/clientip.go) |
+| Engine request context (gains identity fields in Phase 4) | [`internal/engine/context.go`](../../internal/engine/context.go) |
+| Operator HA operations guide | [`website/docs/reference/operations.md`](../../website/docs/reference/operations.md) |
+| Routing design (consumer of the map) | [`identity-aware-routing.md`](./identity-aware-routing.md) |
+
+## 13. Risks
 
 - **IP identity is only as strong as the network.** It is trustworthy where the CNI prevents spoofing (Cilium does). mTLS identity would be stronger and is out of scope here.
 - **Every replica watches Pods cluster-wide** (warm standby). This is the price of fast failover. Watches are read-only, and with 2–3 replicas the API server load is small.

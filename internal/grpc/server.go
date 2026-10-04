@@ -146,6 +146,7 @@ func (s *Server) Process(stream extprocv3.ExternalProcessor_ProcessServer) error
 
 	reqCtx := s.pool.Acquire()
 	reqCtx.Ctx = stream.Context()
+	reqCtx.Traffic = trafficFromContext(stream.Context())
 	defer func() {
 		mylogger.Debug("ext_proc stream closing, releasing context", zap.Duration("duration", time.Since(startTime)))
 		s.pool.Release(reqCtx)

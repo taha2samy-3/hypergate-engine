@@ -21,11 +21,17 @@ import (
 // fakeStream replays a fixed sequence of ext_proc messages and records responses.
 type fakeStream struct {
 	grpc.ServerStream
+	ctx context.Context
 	in  []*extprocv3.ProcessingRequest
 	out []*extprocv3.ProcessingResponse
 }
 
-func (f *fakeStream) Context() context.Context { return context.Background() }
+func (f *fakeStream) Context() context.Context {
+	if f.ctx != nil {
+		return f.ctx
+	}
+	return context.Background()
+}
 
 func (f *fakeStream) Recv() (*extprocv3.ProcessingRequest, error) {
 	if len(f.in) == 0 {

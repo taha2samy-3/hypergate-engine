@@ -59,9 +59,49 @@ matches:
 
 HyperRoute `matches[].headers` only supports exact values (and `"*"`). Use the engine configuration directly if you need header regexes.
 
+## Traffic class
+
+Every request is either **north-south** (it entered the cluster through a gateway) or **east-west** (one workload calling another). The engine reads the class from the `x-hypergate-traffic` gRPC metadata that Envoy sends on the ext_proc stream (`north-south` or `east-west`). The metadata is part of the Envoy filter configuration, not of the request, so clients cannot set it. See [Envoy configuration](../reference/envoy-configuration.md#traffic-class-metadata).
+
+Without the metadata, or with an invalid value, the request counts as north-south.
+
+A match entry with `traffic: north_south` or `traffic: east_west` applies only to that class; `any` (the default) applies to both.
+
+## Sources and destinations
+
+`sources` and `destinations` restrict a match entry by who calls and what is called. Each is a list of alternatives in the form `prefix:value`:
+
+```yaml
+router:
+  routes:
+    - name: partner-api
+      target_chain: partner
+      matches:
+        - traffic: north_south
+          sources: ["cidr:203.0.113.0/24", "ip:192.0.2.7"]
+          destinations: ["host:api.example.com"]
+    - name: internal-ledger
+      target_chain: internal-strict
+      matches:
+        - traffic: east_west
+          sources: ["cidr:10.244.0.0/16"]
+          destinations: ["ip:10.96.0.20"]
+          path_prefix: /v1/charges
+  default_chains:
+    north_south: public
+    east_west: internal
+```
+
+- `ip:` and `cidr:` on the source side match the resolved [client IP](./client-ip.md).
+- `ip:` and `cidr:` on the destination side match Envoy's `destination.address` attribute: the address the connection was made to. For a call Envoy intercepts transparently, that is the original destination, such as a Service ClusterIP. On a gateway it is the gateway's own listener address. Add `destination.address` to the filter's `request_attributes`; without it, destination `ip:`/`cidr:` selectors never match.
+- `host:` matches the `:authority` header without port. The client chooses this value, so use it to select a virtual host, not as an identity.
+- `any` always matches. An omitted list puts no constraint on that side.
+
+The full selector list is in the [engine configuration reference](../reference/engine-configuration.md#selectors). Selectors by workload (`service:`, `sa:`, `spiffe:` and others) are planned and rejected for now.
+
 ## Default chain
 
-When no route matches, the engine runs `router.default_chain` (`HyperConfig.spec.defaultChain` with the operator). The legacy key `router.other` is still accepted and used when `default_chain` is empty.
+When no route matches, the engine runs the chain for the request's [traffic class](#traffic-class) from `router.default_chains` (`north_south` or `east_west`). If that is not set it runs `router.default_chain` (`HyperConfig.spec.defaultChain` with the operator). The legacy key `router.other` is still accepted and used when `default_chain` is empty.
 
 When no route matches **and** no default chain is configured, the request passes through without policy. Set a default chain if every request must be subject to some policy, even an empty chain `[]` combined with explicit routes for everything else.
 
@@ -70,8 +110,9 @@ When no route matches **and** no default chain is configured, the request passes
 The engine rejects a configuration, at start-up or on reload, when:
 
 - a route has no `target_chain`,
-- a route's `target_chain`, `default_chain` or `other` names a chain that is not defined under `chains`,
-- a `path_regex_pattern` or header `regex_pattern` does not compile.
+- a route's `target_chain`, `default_chain`, a `default_chains` entry or `other` names a chain that is not defined under `chains`,
+- a `path_regex_pattern` or header `regex_pattern` does not compile,
+- a `traffic` value is invalid, or a selector has an unknown prefix, a malformed value, or a prefix that is not allowed on its side (for example `host:` in `sources`).
 
 A rejected reload leaves the previous policy in place. See [Hot reload](./hot-reload.md).
 
@@ -81,6 +122,7 @@ A rejected reload leaves the previous policy in place. See [Hot reload](./hot-re
 | --- | --- |
 | A route matches and its chain is loaded | The chain runs. |
 | A route matches but its chain is not in the loaded snapshot | `503 Service Unavailable` |
+| No route matches, a `default_chains` entry for the class is set | That chain runs. |
 | No route matches, `default_chain` is set and loaded | The default chain runs. |
 | No route matches, `default_chain` is set but not loaded | `503 Service Unavailable` |
 | No route matches and no default chain is set | The request passes through without policy. |

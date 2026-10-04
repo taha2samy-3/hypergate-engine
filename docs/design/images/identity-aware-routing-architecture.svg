@@ -1,0 +1,182 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" role="img" aria-labelledby="t d">
+  <title id="t">Identity-aware routing architecture</title>
+  <desc id="d">Developers write Gateway API HTTPRoutes and HyperRoutes. The operator generates the ext_proc filter objects (CiliumEnvoyExtProcFilter, pending upstream; EnvoyExtensionPolicy for Envoy Gateway), a ReferenceGrant and the engine config, and streams the identity map. East-west traffic passes Cilium's per-node Envoy via a GAMMA route, north-south traffic passes a Gateway Envoy. Both call the Hypergate engine over ext_proc, which classifies the traffic, resolves source and destination, matches HyperRoutes and runs the chain.</desc>
+  <defs>
+    <style>
+      text { font-family: Inter, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #E2E8F0; }
+      .h { font-size: 17px; font-weight: 700; }
+      .hs { font-size: 15px; font-weight: 700; }
+      .b { font-size: 13.5px; }
+      .s { font-size: 12.5px; fill: #94A3B8; }
+      .m { font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; font-size: 12px; fill: #CBD5E1; }
+      .tag { font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; }
+      .box { fill: #1E293B; stroke: #334155; stroke-width: 1.5; }
+      .acc { fill: #1E293B; stroke: #6366F1; stroke-width: 2; }
+      .cy { fill: #1E293B; stroke: #22D3EE; stroke-width: 2; }
+      .pend { fill: #1E293B; stroke: #F59E0B; stroke-width: 2; stroke-dasharray: 7 5; }
+      .inner { fill: #0F172A; stroke: #334155; stroke-width: 1.2; }
+      .ln { stroke: #94A3B8; stroke-width: 1.8; fill: none; }
+      .lnc { stroke: #22D3EE; stroke-width: 2.2; fill: none; }
+      .lni { stroke: #6366F1; stroke-width: 2; fill: none; }
+      .lnp { stroke: #F59E0B; stroke-width: 2; fill: none; stroke-dasharray: 7 5; }
+    </style>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#94A3B8"/></marker>
+    <marker id="ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#22D3EE"/></marker>
+    <marker id="ai" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6366F1"/></marker>
+    <marker id="ap" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#F59E0B"/></marker>
+  </defs>
+
+  <rect width="1200" height="900" rx="18" fill="#0F172A"/>
+  <rect x="0.75" y="0.75" width="1198.5" height="898.5" rx="18" fill="none" stroke="#1E293B" stroke-width="1.5"/>
+
+  <!-- 1. Developer resources -->
+  <text x="40" y="44" class="s" style="letter-spacing:0.08em">1 · THE DEVELOPER WRITES</text>
+  <rect x="40" y="58" width="260" height="128" rx="12" class="box"/>
+  <text x="56" y="84" class="hs">HTTPRoute (GAMMA)</text>
+  <text x="56" y="106" class="m">parentRefs: Service ledger</text>
+  <text x="56" y="126" class="m">ExtensionRef →</text>
+  <text x="56" y="146" class="m">  CiliumEnvoyExtProcFilter</text>
+  <text x="56" y="166" class="m">  "hypergate"</text>
+
+  <rect x="320" y="58" width="260" height="128" rx="12" class="box"/>
+  <text x="336" y="84" class="hs">HTTPRoute (Gateway)</text>
+  <text x="336" y="106" class="m">parentRefs: Gateway edge</text>
+  <text x="336" y="126" class="m">Cilium: ExtensionRef →</text>
+  <text x="336" y="146" class="m">  "hypergate-gateway"</text>
+  <text x="336" y="166" class="s">Envoy Gateway: policy attached</text>
+
+  <rect x="600" y="58" width="270" height="128" rx="12" class="acc"/>
+  <text x="616" y="84" class="hs">HyperRoute</text>
+  <text x="616" y="106" class="m">traffic: EastWest</text>
+  <text x="616" y="126" class="m">sources: [service:shop/checkout]</text>
+  <text x="616" y="146" class="m">destinations:</text>
+  <text x="616" y="166" class="m">  [service:payments/ledger]</text>
+
+  <rect x="890" y="58" width="270" height="128" rx="12" class="acc"/>
+  <text x="906" y="84" class="hs">HyperConfig</text>
+  <text x="906" y="106" class="m">defaultChains: {northSouth,</text>
+  <text x="906" y="126" class="m">                eastWest}</text>
+  <text x="906" y="146" class="m">unknownSource: Deny</text>
+  <text x="906" y="166" class="m">extProc.namespaceSelector</text>
+
+  <!-- 2. Operator -->
+    <rect x="40" y="246" width="1120" height="200" rx="14" class="acc"/>
+  <text x="60" y="272" class="s" style="letter-spacing:0.08em">2 · HYPER-OPERATOR (LEADER) GENERATES AND VALIDATES</text>
+
+  <rect x="60" y="290" width="260" height="138" rx="10" class="pend"/>
+  <text x="76" y="314" class="hs">CiliumEnvoyExtProcFilter</text>
+  <text x="76" y="336" class="m">hypergate          east-west</text>
+  <text x="76" y="356" class="m">hypergate-gateway  north-south</text>
+  <text x="76" y="378" class="s">per opted-in namespace;</text>
+  <text x="76" y="396" class="s">created only when the CRD exists</text>
+  <rect x="76" y="404" width="200" height="18" rx="9" fill="#451A03"/>
+  <text x="176" y="417" class="tag" text-anchor="middle" fill="#FCD34D">WAITING FOR CILIUM PR #46479</text>
+
+  <rect x="336" y="290" width="230" height="138" rx="10" class="inner"/>
+  <text x="352" y="314" class="hs">EnvoyExtensionPolicy</text>
+  <text x="352" y="336" class="s">Envoy Gateway, north-south</text>
+  <text x="352" y="356" class="s">targets the Gateway / HTTPRoute,</text>
+  <text x="352" y="374" class="s">ext_proc to the engine Service</text>
+  <rect x="352" y="404" width="120" height="18" rx="9" fill="#064E3B"/>
+  <text x="412" y="417" class="tag" text-anchor="middle" fill="#6EE7B7">AVAILABLE NOW</text>
+
+  <rect x="582" y="290" width="270" height="138" rx="10" class="inner"/>
+  <text x="598" y="314" class="hs">ReferenceGrant + validation</text>
+  <text x="598" y="336" class="s">filters may reference the engine</text>
+  <text x="598" y="356" class="s">Service; HTTPRoutes checked:</text>
+  <text x="598" y="374" class="s">parent kind ↔ filter, namespace,</text>
+  <text x="598" y="392" class="s">results in status + Events</text>
+
+  <rect x="868" y="290" width="272" height="138" rx="10" class="inner"/>
+  <text x="884" y="314" class="hs">Engine config + identity</text>
+  <text x="884" y="336" class="s">HyperRoutes compiled into the</text>
+  <text x="884" y="356" class="s">ConfigMap (selectors validated);</text>
+  <text x="884" y="374" class="s">identity map streamed to every</text>
+  <text x="884" y="392" class="s">engine (delta xDS)</text>
+
+  <!-- developer -> operator arrows -->
+  <path d="M170 186 V 238" class="ln" marker-end="url(#a)"/>
+  <path d="M450 186 V 238" class="ln" marker-end="url(#a)"/>
+  <path d="M735 186 V 238" class="ln" marker-end="url(#a)"/>
+  <path d="M1025 186 V 238" class="ln" marker-end="url(#a)"/>
+
+  <!-- 3. Data plane -->
+  <text x="40" y="470" class="s" style="letter-spacing:0.08em">3 · DATA PLANE</text>
+
+  <!-- East-west lane -->
+  <rect x="40" y="484" width="540" height="190" rx="14" fill="none" stroke="#334155" stroke-width="1.4" stroke-dasharray="6 5"/>
+  <text x="60" y="508" class="hs">East-west (inside the cluster)</text>
+  <rect x="60" y="524" width="130" height="64" rx="10" class="box"/>
+  <text x="125" y="551" class="b" text-anchor="middle">shop/checkout</text>
+  <text x="125" y="571" class="s" text-anchor="middle">caller pod</text>
+  <rect x="226" y="516" width="170" height="80" rx="10" class="pend"/>
+  <text x="311" y="544" class="b" text-anchor="middle">Cilium per-node Envoy</text>
+  <text x="311" y="564" class="s" text-anchor="middle">GAMMA route +</text>
+  <text x="311" y="582" class="s" text-anchor="middle">ext_proc filter (pending)</text>
+  <rect x="430" y="524" width="130" height="64" rx="10" class="box"/>
+  <text x="495" y="551" class="b" text-anchor="middle">payments/ledger</text>
+  <text x="495" y="571" class="s" text-anchor="middle">destination</text>
+  <path d="M190 556 H 218" class="ln" marker-end="url(#a)"/>
+  <path d="M396 556 H 422" class="ln" marker-end="url(#a)"/>
+  <text x="60" y="626" class="s">x-hypergate-traffic: east-west</text>
+  <text x="60" y="646" class="s">source.address = caller pod IP</text>
+
+  <!-- North-south lane -->
+  <rect x="620" y="484" width="540" height="190" rx="14" fill="none" stroke="#334155" stroke-width="1.4" stroke-dasharray="6 5"/>
+  <text x="640" y="508" class="hs">North-south (from outside)</text>
+  <rect x="640" y="524" width="130" height="64" rx="10" class="box"/>
+  <text x="705" y="551" class="b" text-anchor="middle">client</text>
+  <text x="705" y="571" class="s" text-anchor="middle">internet</text>
+  <rect x="806" y="516" width="170" height="80" rx="10" class="cy"/>
+  <text x="891" y="544" class="b" text-anchor="middle">Gateway Envoy</text>
+  <text x="891" y="564" class="s" text-anchor="middle">Envoy Gateway (now)</text>
+  <text x="891" y="582" class="s" text-anchor="middle">Cilium Gateway (pending)</text>
+  <rect x="1010" y="524" width="130" height="64" rx="10" class="box"/>
+  <text x="1075" y="551" class="b" text-anchor="middle">service</text>
+  <text x="1075" y="571" class="s" text-anchor="middle">destination</text>
+  <path d="M770 556 H 798" class="ln" marker-end="url(#a)"/>
+  <path d="M976 556 H 1002" class="ln" marker-end="url(#a)"/>
+  <text x="640" y="626" class="s">x-hypergate-traffic: north-south</text>
+  <text x="640" y="646" class="s">client IP via trusted proxy hops</text>
+
+  <!-- operator -> filter objects in the data plane -->
+  <path d="M190 428 C 190 465, 311 478, 311 508" class="lnp" marker-end="url(#ap)"/>
+  <path d="M451 428 C 451 470, 891 474, 891 508" class="lni" marker-end="url(#ai)"/>
+
+  <!-- ext_proc to the engine -->
+  <path d="M311 596 C 311 690, 470 720, 512 748" class="lnc" marker-end="url(#ac)"/>
+  <path d="M891 596 C 891 690, 730 720, 688 748" class="lnc" marker-end="url(#ac)"/>
+  <text x="246" y="704" class="s" fill="#67E8F9">ext_proc (gRPC)</text>
+  <text x="880" y="704" class="s" fill="#67E8F9">ext_proc (gRPC)</text>
+
+  <!-- engine -->
+  <rect x="300" y="752" width="600" height="122" rx="14" class="cy"/>
+  <text x="600" y="780" class="h" text-anchor="middle">Hypergate engine (DaemonSet)</text>
+  <rect x="318" y="794" width="130" height="62" rx="9" class="inner"/>
+  <text x="383" y="818" class="b" text-anchor="middle">1 · traffic</text>
+  <text x="383" y="838" class="s" text-anchor="middle">metadata / inferred</text>
+  <rect x="462" y="794" width="130" height="62" rx="9" class="inner"/>
+  <text x="527" y="818" class="b" text-anchor="middle">2 · resolve</text>
+  <text x="527" y="838" class="s" text-anchor="middle">source + destination</text>
+  <rect x="606" y="794" width="130" height="62" rx="9" class="inner"/>
+  <text x="671" y="818" class="b" text-anchor="middle">3 · match</text>
+  <text x="671" y="838" class="s" text-anchor="middle">HyperRoutes</text>
+  <rect x="750" y="794" width="130" height="62" rx="9" class="inner"/>
+  <text x="815" y="818" class="b" text-anchor="middle">4 · run chain</text>
+  <text x="815" y="838" class="s" text-anchor="middle">or default / deny</text>
+  <path d="M448 825 H 456" class="ln"/>
+  <path d="M592 825 H 600" class="ln"/>
+  <path d="M736 825 H 744" class="ln"/>
+
+  <!-- config + identity into the engine -->
+  <path d="M1140 359 H 1180 V 812 H 908" class="lni" marker-end="url(#ai)"/>
+  <text x="930" y="800" class="s">config + identity map</text>
+
+  <!-- legend -->
+  <rect x="40" y="740" width="230" height="134" rx="10" class="inner"/>
+  <text x="56" y="764" class="s" style="letter-spacing:0.06em">LEGEND</text>
+  <path d="M56 788 H 96" class="lnc"/><text x="106" y="792" class="s">ext_proc stream</text>
+  <path d="M56 812 H 96" class="lni"/><text x="106" y="816" class="s">generated by the operator</text>
+  <path d="M56 836 H 96" class="lnp"/><text x="106" y="840" class="s">waiting for upstream</text>
+  <path d="M56 860 H 96" class="ln"/><text x="106" y="864" class="s">traffic / input</text>
+</svg>
