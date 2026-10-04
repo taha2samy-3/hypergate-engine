@@ -100,6 +100,40 @@ spec:
                     eastWest:
                       type: string
                       description: "Unmatched calls between workloads."
+                extProc:
+                  type: object
+                  description: "Where the operator attaches this engine to Envoy. Nothing is attached unless listed. HTTPRoutes are never created or edited."
+                  properties:
+                    gateways:
+                      type: array
+                      maxItems: 64
+                      description: "Envoy Gateway Gateways that get an EnvoyExtensionPolicy pointing at this engine."
+                      items:
+                        type: object
+                        required: ["namespace", "name"]
+                        properties:
+                          namespace:
+                            type: string
+                            pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+                          name:
+                            type: string
+                            minLength: 1
+                            maxLength: 253
+                    namespaces:
+                      type: array
+                      maxItems: 256
+                      description: "Namespaces that get the CiliumEnvoyExtProcFilter \"hypergate\" (inactive until Cilium ships the CRD)."
+                      items:
+                        type: string
+                        pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+                    failureMode:
+                      type: string
+                      enum: ["FailClosed", "FailOpen"]
+                      default: FailClosed
+                    messageTimeout:
+                      type: string
+                      description: "Deadline for each ext_proc message (Gateway API duration). Default 2500ms."
+                      pattern: '^([0-9]{1,5}(h|m|s|ms)){1,4}$'
                 poolPrewarmSize:
                   type: integer
                   default: 5000
@@ -116,3 +150,27 @@ spec:
                   type: string
                 message:
                   type: string
+                conditions:
+                  type: array
+                  description: "ext_proc attachment: EnvoyGatewayPolicies, CiliumFilters, HTTPRoutes."
+                  x-kubernetes-list-type: map
+                  x-kubernetes-list-map-keys: ["type"]
+                  items:
+                    type: object
+                    required: ["type", "status", "lastTransitionTime", "reason", "message"]
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                        enum: ["True", "False", "Unknown"]
+                      observedGeneration:
+                        type: integer
+                        format: int64
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                      reason:
+                        type: string
+                      message:
+                        type: string

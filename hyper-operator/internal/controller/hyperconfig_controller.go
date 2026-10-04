@@ -222,9 +222,11 @@ func (r *HyperConfigReconciler) setStatus(ctx context.Context, hc *hyperv1alpha1
 	if hc.Status.State == state && hc.Status.Message == message {
 		return nil
 	}
+	// Patch only these fields: the ext_proc controller writes status.conditions.
+	patch := client.MergeFrom(hc.DeepCopy())
 	hc.Status.State = state
 	hc.Status.Message = message
-	return r.Status().Update(ctx, hc)
+	return r.Status().Patch(ctx, hc, patch)
 }
 
 // buildEnginePodSpec renders the engine container, the injected sidecars and the

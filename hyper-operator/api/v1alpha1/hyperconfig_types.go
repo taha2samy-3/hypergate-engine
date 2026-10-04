@@ -64,6 +64,12 @@ type HyperConfigSpec struct {
 	// +optional
 	DefaultChains *DefaultChains `json:"defaultChains,omitempty"`
 
+	// ExtProc attaches this engine to Envoy through typed filter objects the
+	// operator generates. Nothing is attached unless it is listed here. The
+	// operator never creates or edits Gateway API HTTPRoutes.
+	// +optional
+	ExtProc *ExtProcSpec `json:"extProc,omitempty"`
+
 	// PoolPrewarmSize specifies the number of RequestContext objects to pre-allocate at boot.
 	// +optional
 	// +kubebuilder:default=5000
@@ -78,6 +84,54 @@ type HyperConfigSpec struct {
 	// +optional
 	// +kubebuilder:default=65536
 	PreallocBodyBufferBytes int32 `json:"preallocBodyBufferBytes,omitempty" yaml:"prealloc_body_buffer_bytes,omitempty"`
+}
+
+// ExtProcFailureMode says what Envoy does when the engine cannot be reached.
+// +kubebuilder:validation:Enum=FailClosed;FailOpen
+type ExtProcFailureMode string
+
+const (
+	ExtProcFailClosed ExtProcFailureMode = "FailClosed"
+	ExtProcFailOpen   ExtProcFailureMode = "FailOpen"
+)
+
+// ExtProcSpec selects where the operator attaches the engine.
+// +kubebuilder:object:generate=true
+type ExtProcSpec struct {
+	// Gateways lists the Envoy Gateway Gateways that get an EnvoyExtensionPolicy
+	// pointing at this engine. Requires Envoy Gateway's CRDs.
+	// +kubebuilder:validation:MaxItems=64
+	// +optional
+	Gateways []GatewayRef `json:"gateways,omitempty"`
+
+	// Namespaces lists the namespaces that get a CiliumEnvoyExtProcFilter named
+	// "hypergate", for HTTPRoutes (GAMMA or Gateway) to reference through an
+	// ExtensionRef. Inactive until Cilium ships the CRD (cilium/cilium#46479).
+	// +kubebuilder:validation:MaxItems=256
+	// +optional
+	Namespaces []string `json:"namespaces,omitempty"`
+
+	// FailureMode is FailClosed (default: requests fail when the engine is
+	// unreachable) or FailOpen (requests pass without policy).
+	// +kubebuilder:default=FailClosed
+	// +optional
+	FailureMode ExtProcFailureMode `json:"failureMode,omitempty"`
+
+	// MessageTimeout is Envoy's deadline for each ext_proc message, as a Gateway
+	// API duration. Default 2500ms.
+	// +kubebuilder:validation:Pattern=`^([0-9]{1,5}(h|m|s|ms)){1,4}$`
+	// +optional
+	MessageTimeout string `json:"messageTimeout,omitempty"`
+}
+
+// GatewayRef names a Gateway.
+// +kubebuilder:object:generate=true
+type GatewayRef struct {
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+	Namespace string `json:"namespace"`
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	Name string `json:"name"`
 }
 
 // DefaultChains holds the fallback HyperChain per traffic class.
@@ -101,6 +155,12 @@ type HyperConfigStatus struct {
 	// Message explains State.
 	// +optional
 	Message string `json:"message,omitempty"`
+	// Conditions report the ext_proc attachment: EnvoyGatewayPolicies,
+	// CiliumFilters and HTTPRoutes.
+	// +listType=map
+	// +listMapKey=type
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true

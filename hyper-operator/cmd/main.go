@@ -116,6 +116,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err = (&controller.ExtProcReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorder("hypergate-extproc"),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ExtProc")
+		os.Exit(1)
+	}
+
 	enableWebhooks := os.Getenv("ENABLE_WEBHOOKS")
 	if enableWebhooks == "false" {
 		setupLog.Info("Webhooks are explicitly disabled via ENABLE_WEBHOOKS env var, skipping webhook registration.")

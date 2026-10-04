@@ -27,6 +27,23 @@ rules:
   - apiGroups: ["coordination.k8s.io"]
     resources: ["leases"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # ext_proc attachment: generated filter objects and ReferenceGrant; HTTPRoutes
+  # and Gateways are only read.
+  - apiGroups: ["gateway.envoyproxy.io"]
+    resources: ["envoyextensionpolicies"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["cilium.io"]
+    resources: ["ciliumenvoyextprocfilters"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["referencegrants"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["httproutes", "gateways"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["events.k8s.io"]
+    resources: ["events"]
+    verbs: ["create", "patch"]
   # Identity cache (read only), used when the operator runs with --identity-cache.
   - apiGroups: [""]
     resources: ["pods", "nodes"]
