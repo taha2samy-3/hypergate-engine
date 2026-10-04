@@ -16,7 +16,17 @@ type RouterConfig struct {
 	DefaultChains DefaultChainsConfig `yaml:"default_chains,omitempty"`
 	DefaultChain  string              `yaml:"default_chain"`
 	Other         string              `yaml:"other"`
+	// UnknownSource decides what happens to east-west requests whose caller is
+	// not in the identity map: "deny" (default, 503) or "default" (continue; only
+	// network selectors can match). It applies only when identity is enabled.
+	UnknownSource string `yaml:"unknown_source,omitempty"`
 }
+
+// Values of RouterConfig.UnknownSource.
+const (
+	UnknownSourceDeny    = "deny"
+	UnknownSourceDefault = "default"
+)
 
 // DefaultChainsConfig holds the fallback chain per traffic class.
 type DefaultChainsConfig struct {
@@ -73,16 +83,17 @@ func (h *HeaderMatchConfig) UnmarshalYAML(value *yaml.Node) error {
 
 // Compile parses the traffic class and selectors of the match. It must be called
 // before the match is used for routing; ParseBytes does it for loaded configs.
-func (m *MatchConfig) Compile() error {
+// Workload selectors are accepted only when allowWorkloads is true (identity enabled).
+func (m *MatchConfig) Compile(allowWorkloads bool) error {
 	t, err := selector.ParseTraffic(m.Traffic)
 	if err != nil {
 		return err
 	}
-	src, err := selector.Compile(m.Sources, selector.Source)
+	src, err := selector.Compile(m.Sources, selector.Source, allowWorkloads)
 	if err != nil {
 		return err
 	}
-	dst, err := selector.Compile(m.Destinations, selector.Destination)
+	dst, err := selector.Compile(m.Destinations, selector.Destination, allowWorkloads)
 	if err != nil {
 		return err
 	}

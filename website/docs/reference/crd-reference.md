@@ -64,6 +64,7 @@ spec:
 | `defaultChain` | string | empty | `router.default_chain` | HyperChain for unmatched requests without a `defaultChains` entry for their traffic class. If it names a missing HyperChain, a `503` deny chain is compiled under that name. |
 | `defaultChains.northSouth` | string | empty | `router.default_chains.north_south` | HyperChain for unmatched north-south requests. A missing HyperChain compiles to a `503` deny chain. |
 | `defaultChains.eastWest` | string | empty | `router.default_chains.east_west` | HyperChain for unmatched east-west requests. A missing HyperChain compiles to a `503` deny chain. |
+| `unknownSource` | enum `Deny`, `Default` | `Deny` | `router.unknown_source` | East-west requests whose caller is not in the identity map. Applies only when the operator runs the identity server. |
 | `extProc.gateways` | list of `{namespace, name}`, at most 64 | empty | | Envoy Gateway Gateways that get an `EnvoyExtensionPolicy` pointing at this engine. See [Envoy configuration](./envoy-configuration.md#envoy-gateway). |
 | `extProc.namespaces` | list of strings, at most 256 | empty | | Namespaces that get a `CiliumEnvoyExtProcFilter` named `hypergate`. Inactive until Cilium ships that CRD. |
 | `extProc.failureMode` | enum `FailClosed`, `FailOpen` | `FailClosed` | | What Envoy does when the engine cannot be reached. |
@@ -207,15 +208,15 @@ spec:
 | `targetPolicy` | string, **required** | | `target_chain` | HyperChain name. An empty value skips the route; a missing HyperChain compiles to a `503` deny chain. |
 | `matches` | list, **required**, at least one entry | | `matches` | Alternatives (OR). |
 | `matches[].traffic` | enum `NorthSouth`, `EastWest`, `Any` | `Any` | `traffic` | Restricts the entry to one [traffic class](../concepts/routing.md#traffic-class). |
-| `matches[].sources` | list of strings, at most 64 | empty | `sources` | Caller [selectors](./engine-configuration.md#selectors) (`ip:`, `cidr:`, `any`). Any entry may match. |
-| `matches[].destinations` | list of strings, at most 64 | empty | `destinations` | Target selectors (`ip:`, `cidr:`, `host:`, `any`). Any entry may match. |
+| `matches[].sources` | list of strings, at most 64 | empty | `sources` | Caller [selectors](./engine-configuration.md#selectors): `ip:`, `cidr:`, `any`, and with the identity server `service:`, `namespace:`, `sa:`, `spiffe:`, `labels:`, `external`. Any entry may match. |
+| `matches[].destinations` | list of strings, at most 64 | empty | `destinations` | Target selectors: `ip:`, `cidr:`, `host:`, `any`, and with the identity server `service:`, `namespace:`. Any entry may match. |
 | `matches[].pathPrefix` | string | empty | `path_prefix` | Prefix of the raw path (including the query string). |
 | `matches[].pathRegexPattern` | string | empty | `path_regex_pattern` | RE2 expression. An invalid expression skips the whole route. |
 | `matches[].headers` | map of string to string | empty | `headers.<name>.exact` | Exact values; `"*"` means present. Names are lower-cased by the compiler. |
 
 The route's `metadata.name` becomes the engine route `name`. Printer columns: `Priority`, `Target Policy`, `State`.
 
-The schema checks each selector's shape. With webhooks enabled, creating or updating a HyperRoute also fails when a selector is used on the wrong side (for example `host:` in `sources`), uses a workload prefix (`service:`, `namespace:`, `sa:`, `spiffe:`, `labels:`, `external`; reserved until the engine receives workload identity), or when `targetPolicy` is empty or a regex is invalid. A missing target HyperChain is only a warning.
+The schema checks each selector's shape. With webhooks enabled, creating or updating a HyperRoute also fails when a selector is used on the wrong side (for example `host:` in `sources`), uses a workload prefix (`service:`, `namespace:`, `sa:`, `spiffe:`, `labels:`, `external`) while the operator does not run the identity server, or when `targetPolicy` is empty or a regex is invalid. A missing target HyperChain is only a warning.
 
 A HyperRoute does not create or change any Gateway API `HTTPRoute`. HTTPRoutes are written by the application developer; the operator only reads them.
 

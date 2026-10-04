@@ -20,6 +20,8 @@ var hyperRouteLog = logf.Log.WithName("hyperroute-validation-webhook")
 // let their traffic fall through to weaker policy, so they are stopped at admission.
 type HyperRouteValidator struct {
 	Client client.Client
+	// Routes says what engines can evaluate (workload selectors need identity).
+	Routes routes.Options
 }
 
 var _ admission.Validator[*hyperv1alpha1.HyperRoute] = &HyperRouteValidator{}
@@ -39,7 +41,7 @@ func (v *HyperRouteValidator) ValidateDelete(context.Context, *hyperv1alpha1.Hyp
 }
 
 func (v *HyperRouteValidator) validate(ctx context.Context, hr *hyperv1alpha1.HyperRoute) (admission.Warnings, error) {
-	if err := routes.Validate(&hr.Spec); err != nil {
+	if err := routes.Validate(&hr.Spec, v.Routes); err != nil {
 		return nil, fmt.Errorf("HyperRoute '%s' is invalid: %w", hr.Name, err)
 	}
 
@@ -59,8 +61,8 @@ func (v *HyperRouteValidator) validate(ctx context.Context, hr *hyperv1alpha1.Hy
 }
 
 // SetupHyperRouteWebhookWithManager registers the HyperRoute validating webhook.
-func SetupHyperRouteWebhookWithManager(mgr ctrl.Manager) error {
+func SetupHyperRouteWebhookWithManager(mgr ctrl.Manager, opts routes.Options) error {
 	return ctrl.NewWebhookManagedBy(mgr, &hyperv1alpha1.HyperRoute{}).
-		WithValidator(&HyperRouteValidator{Client: mgr.GetClient()}).
+		WithValidator(&HyperRouteValidator{Client: mgr.GetClient(), Routes: opts}).
 		Complete()
 }

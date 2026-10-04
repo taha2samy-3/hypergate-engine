@@ -7,6 +7,7 @@ import (
 
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 
+	"github.com/taha2samy/hypergate/internal/identity"
 	"github.com/taha2samy/hypergate/internal/selector"
 )
 
@@ -38,7 +39,14 @@ type RequestContext struct {
 	// Host is the request :authority, lower-cased and without port.
 	Host string
 	// Traffic is the request class from the ext_proc stream metadata, or inferred.
+	// It is TrafficAny until the request headers have been resolved.
 	Traffic selector.Traffic
+	// SourceWorkload is the caller from the identity map (nil when unknown or
+	// when identity is disabled).
+	SourceWorkload *identity.Workload
+	// DestinationServices are the target Services ("<ns>/<name>") resolved from
+	// the destination address or a cluster-local :authority.
+	DestinationServices []string
 	// RequestEndOfStream is true when the request headers message carried
 	// end_of_stream, i.e. the request has no body or trailers.
 	RequestEndOfStream bool
@@ -88,6 +96,8 @@ func (ctx *RequestContext) Reset() {
 	ctx.DestinationAddr = netip.Addr{}
 	ctx.Host = ""
 	ctx.Traffic = selector.TrafficAny
+	ctx.SourceWorkload = nil
+	ctx.DestinationServices = ctx.DestinationServices[:0]
 	ctx.RequestEndOfStream = false
 	clear(ctx.Headers)
 	clear(ctx.ResponseHeaders)

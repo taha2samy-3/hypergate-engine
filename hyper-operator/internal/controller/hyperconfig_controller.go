@@ -30,6 +30,8 @@ import (
 type HyperConfigReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+	// Identity describes the operator's identity server, if any.
+	Identity IdentitySettings
 }
 
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch;create;update;patch
@@ -166,7 +168,7 @@ func (r *HyperConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
 		}
 
-		podSpec := buildEnginePodSpec(&hyperConfig, engineImage, namespace, externalAuthList.Items, firewallList.Items, jwtList.Items)
+		podSpec := buildEnginePodSpec(&hyperConfig, engineImage, namespace, externalAuthList.Items, firewallList.Items, jwtList.Items, r.Identity)
 		ds.Spec.Template.Spec.Containers = podSpec.Containers
 		ds.Spec.Template.Spec.Volumes = podSpec.Volumes
 		ds.Spec.Template.Spec.ImagePullSecrets = podSpec.ImagePullSecrets
@@ -198,7 +200,16 @@ func (r *HyperConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{}, r.setStatus(ctx, &hyperConfig, hyperConfigStateReady, "Engine resources reconciled in namespace "+namespace)
+	if err := r.reconcileIdentityCA(ctx, &hyperConfig, namespace); err != nil {
+		logger.Error(err, "failed to copy the identity CA certificate")
+		return ctrl.Result{}, err
+	}
+
+	result := ctrl.Result{}
+	if r.Identity.Enabled {
+		result.RequeueAfter = identityCARefresh
+	}
+	return result, r.setStatus(ctx, &hyperConfig, hyperConfigStateReady, "Engine resources reconciled in namespace "+namespace)
 }
 
 func (r *HyperConfigReconciler) ensureNamespace(ctx context.Context, name string) error {
@@ -237,6 +248,7 @@ func buildEnginePodSpec(
 	externalAuths []hyperv1alpha1.ExternalAuthFilter,
 	firewalls []hyperv1alpha1.FirewallFilter,
 	jwts []hyperv1alpha1.JwtAuthFilter,
+	identity IdentitySettings,
 ) corev1.PodSpec {
 	engine := corev1.Container{
 		Name:  "engine",
@@ -249,6 +261,8 @@ func buildEnginePodSpec(
 			{Name: "CONFIG_PROVIDER", Value: "K8S"},
 			{Name: "CONFIG_K8S_NAME", Value: engineConfigMapName},
 			{Name: "CONFIG_K8S_NAMESPACE", Value: namespace},
+			// Identifies this engine on the identity stream.
+			{Name: "NODE_NAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"}}},
 		},
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler:     corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: "/readyz", Port: intstr.FromInt(engineHealthPort)}},
@@ -272,7 +286,8 @@ func buildEnginePodSpec(
 		},
 	}
 
-	var volumes []corev1.Volume
+	volumes, identityMounts := identityVolumes(identity)
+	engine.VolumeMounts = append(engine.VolumeMounts, identityMounts...)
 	var sidecars []corev1.Container
 	pullSecretSet := make(map[string]struct{})
 
@@ -468,6 +483,7 @@ func (r *HyperConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.ServiceAccount{}).
 		Owns(&rbacv1.Role{}).
 		Owns(&rbacv1.RoleBinding{}).
+		Owns(&corev1.ConfigMap{}).
 		Watches(&hyperv1alpha1.HyperConfig{}, allConfigs).
 		Watches(&hyperv1alpha1.ExternalAuthFilter{}, allConfigs).
 		Watches(&hyperv1alpha1.FirewallFilter{}, allConfigs).

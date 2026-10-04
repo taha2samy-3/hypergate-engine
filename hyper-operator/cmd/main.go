@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/taha2samy/hypergate/hyper-operator/internal/controller"
 	"github.com/taha2samy/hypergate/hyper-operator/internal/identity"
 	"github.com/taha2samy/hypergate/hyper-operator/internal/leader"
+	"github.com/taha2samy/hypergate/hyper-operator/internal/routes"
 	"github.com/taha2samy/hypergate/hyper-operator/internal/webhook"
 )
 
@@ -86,6 +88,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	identitySettings := engineIdentitySettings(&identityCfg)
 	if identityCfg.Enabled {
 		identityCache, err := identity.NewCacheForConfig(mgr.GetConfig(), identityCfg.Options())
 		if err == nil {
@@ -115,16 +118,18 @@ func main() {
 	}
 
 	if err = (&controller.HyperConfigReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Identity: identitySettings,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "HyperConfig")
 		os.Exit(1)
 	}
 
 	if err = (&controller.HyperChainMasterCompilerReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Identity: identitySettings,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "HyperChainMasterCompiler")
 		os.Exit(1)
@@ -151,7 +156,7 @@ func main() {
 			setupLog.Error(err, "unable to create webhooks", "webhook", "HyperChainValidation")
 			os.Exit(1)
 		}
-		if err = webhook.SetupHyperRouteWebhookWithManager(mgr); err != nil {
+		if err = webhook.SetupHyperRouteWebhookWithManager(mgr, routes.Options{Workloads: identitySettings.Enabled}); err != nil {
 			setupLog.Error(err, "unable to create webhooks", "webhook", "HyperRouteValidation")
 			os.Exit(1)
 		}
@@ -227,4 +232,24 @@ func setupIdentityServer(mgr ctrl.Manager, cfg *identity.Config, cache *identity
 	}
 	setupLog.Info("Identity server enabled on the leader", "address", cfg.ServerAddress, "service", cfg.ServiceName, "tls", !cfg.ServerInsecure)
 	return nil
+}
+
+// engineIdentitySettings tells the engine controllers how engines reach the
+// identity server, when this operator runs one.
+func engineIdentitySettings(cfg *identity.Config) controller.IdentitySettings {
+	if !cfg.Enabled || !cfg.ServerEnabled {
+		return controller.IdentitySettings{}
+	}
+	port, _ := cfg.ServerPort() // validated in setupIdentityServer
+	host := fmt.Sprintf("%s.%s.svc", cfg.ServiceName, os.Getenv("POD_NAMESPACE"))
+	settings := controller.IdentitySettings{
+		Enabled:    true,
+		Address:    fmt.Sprintf("%s:%d", host, port),
+		ServerName: host,
+		Insecure:   cfg.ServerInsecure,
+	}
+	if cfg.ServerCertDir != "" {
+		settings.CAFile = filepath.Join(cfg.ServerCertDir, "ca.crt")
+	}
+	return settings
 }

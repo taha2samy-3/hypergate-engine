@@ -27,6 +27,9 @@ import (
 type HyperChainMasterCompilerReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+	// Identity describes the operator's identity server, if any. With it,
+	// engines receive the identity map and workload selectors are allowed.
+	Identity IdentitySettings
 }
 
 // +kubebuilder:rbac:groups=hyper.io,resources=hyperconfigs,verbs=get;list;watch
@@ -415,7 +418,7 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 		hr := &sortedRoutes[i]
 		// The engine rejects a whole config containing an invalid route, which would
 		// freeze every later update; drop the broken route and report it instead.
-		matchConfigs, err := routes.Compile(&hr.Spec)
+		matchConfigs, err := routes.Compile(&hr.Spec, routes.Options{Workloads: r.Identity.Enabled})
 		if err != nil {
 			reqLogger.Error(err, "HyperRoute is invalid, skipping", "route", hr.Name)
 			if err := r.setRouteStatus(ctx, hr, hyperv1alpha1.HyperRouteStateInvalid, err.Error()); err != nil {
@@ -479,7 +482,9 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 				Routes:        routeConfigs,
 				DefaultChains: routes.DefaultChains(&hc.Spec),
 				DefaultChain:  hc.Spec.DefaultChain,
+				UnknownSource: routes.UnknownSource(&hc.Spec),
 			},
+			Identity: r.Identity.engineConfig(),
 		}
 		if engineConfig.Router.Routes == nil {
 			engineConfig.Router.Routes = []config.RouteConfig{}

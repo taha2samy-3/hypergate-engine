@@ -28,7 +28,7 @@ func TestCompile_MapsFieldsToEngineConfig(t *testing.T) {
 			Traffic: hyperv1alpha1.TrafficAny,
 		}},
 	}
-	got, err := Compile(spec)
+	got, err := Compile(spec, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func TestCompile_MapsFieldsToEngineConfig(t *testing.T) {
 
 	// The compiled entries must be accepted by the engine as they are.
 	for i := range got {
-		if err := got[i].Compile(); err != nil {
+		if err := got[i].Compile(false); err != nil {
 			t.Fatalf("engine rejects compiled match %d: %v", i, err)
 		}
 	}
@@ -60,7 +60,7 @@ func TestCompile_ReportsEveryProblem(t *testing.T) {
 			{PathRegexPattern: "("},
 		},
 	}
-	_, err := Compile(spec)
+	_, err := Compile(spec, Options{})
 	if err == nil {
 		t.Fatal("expected an error")
 	}
@@ -79,7 +79,7 @@ func TestCompile_ReportsEveryProblem(t *testing.T) {
 		}
 	}
 
-	if err := Validate(&hyperv1alpha1.HyperRouteSpec{TargetPolicy: "x"}); err == nil || !strings.Contains(err.Error(), "at least one entry") {
+	if err := Validate(&hyperv1alpha1.HyperRouteSpec{TargetPolicy: "x"}, Options{}); err == nil || !strings.Contains(err.Error(), "at least one entry") {
 		t.Fatalf("empty matches must be rejected, got %v", err)
 	}
 }
@@ -175,4 +175,24 @@ func crdPatterns(t *testing.T, path string) (src, dst string) {
 	}
 	match := crd.Spec.Versions[0].Schema.OpenAPIV3Schema.Properties["spec"].Properties["matches"].Items.Properties
 	return match["sources"].Items.Pattern, match["destinations"].Items.Pattern
+}
+
+func TestCompile_WorkloadSelectorsNeedIdentity(t *testing.T) {
+	spec := &hyperv1alpha1.HyperRouteSpec{TargetPolicy: "c", Matches: []hyperv1alpha1.MatchRule{{
+		Sources: []string{"sa:shop/checkout", "labels:app=web"}, Destinations: []string{"service:payments/ledger"},
+	}}}
+	if err := Validate(spec, Options{}); err == nil || !strings.Contains(err.Error(), "identity map") {
+		t.Fatalf("expected rejection without identity, got %v", err)
+	}
+	got, err := Compile(spec, Options{Workloads: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := got[0].Compile(true); err != nil {
+		t.Fatalf("engine rejects compiled workload selectors: %v", err)
+	}
+	if UnknownSource(&hyperv1alpha1.HyperConfigSpec{}) != "deny" ||
+		UnknownSource(&hyperv1alpha1.HyperConfigSpec{UnknownSource: hyperv1alpha1.UnknownSourceDefault}) != "default" {
+		t.Fatal("UnknownSource mapping")
+	}
 }

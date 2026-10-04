@@ -18,4 +18,23 @@ type Config struct {
 	// Redis holds a named map of independent Redis service configurations.
 	// Each key becomes the service name used for O(1) lookup in the redis.Manager.
 	Redis map[string]RedisServiceConfig `yaml:"redis"`
+
+	// Identity connects the engine to the operator's workload identity stream.
+	Identity IdentityConfig `yaml:"identity,omitempty"`
+}
+
+// IdentityConfig configures the workload identity client. It is read at start-up;
+// changing it requires a restart.
+type IdentityConfig struct {
+	Enabled bool `yaml:"enabled"`
+	// Address of the operator's identity Service, host:port.
+	Address string `yaml:"address,omitempty"`
+	// CAFile verifies the operator's certificate.
+	CAFile string `yaml:"ca_file,omitempty"`
+	// ServerName overrides the certificate name checked (default: host of Address).
+	ServerName string `yaml:"server_name,omitempty"`
+	// TokenFile is the projected ServiceAccount token (audience hypergate-identity).
+	TokenFile string `yaml:"token_file,omitempty"`
+	// Insecure dials without TLS (development only).
+	Insecure bool `yaml:"insecure,omitempty"`
 }

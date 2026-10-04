@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 560" role="img" aria-labelledby="t d">
+  <title id="t">Routing with workload identity</title>
+  <desc id="d">For each request the engine looks up the client IP in the identity map to find the caller workload, resolves the destination Service from the destination address (a cluster IP, or a backend pod's Services) or a cluster-local authority, settles the traffic class from metadata or by inference, applies unknown_source to east-west callers that are not in the map, and then matches routes whose source and destination selectors use those values. The map is streamed from the hyper-operator leader.</desc>
+  <defs>
+    <style>
+      text { font-family: Inter, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #E2E8F0; }
+      .h { font-size: 15px; font-weight: 700; }
+      .b { font-size: 14px; }
+      .s { font-size: 12.5px; fill: #94A3B8; }
+      .cap { font-size: 12.5px; fill: #94A3B8; letter-spacing: 0.08em; }
+      .box { fill: #1E293B; stroke: #334155; stroke-width: 1.5; }
+      .cy { fill: #1E293B; stroke: #22D3EE; stroke-width: 2; }
+      .acc { fill: #1E293B; stroke: #6366F1; stroke-width: 2; }
+      .ok { fill: #0B2A22; stroke: #10B981; stroke-width: 2; }
+      .bad { fill: #3B0D1A; stroke: #F43F5E; stroke-width: 2; }
+      .ln { stroke: #94A3B8; stroke-width: 1.8; fill: none; }
+      .lnc { stroke: #22D3EE; stroke-width: 1.8; fill: none; stroke-dasharray: 6 4; }
+    </style>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#94A3B8"/></marker>
+    <marker id="ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#22D3EE"/></marker>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="560" rx="18" fill="#0F172A"/>
+  <rect x="0.75" y="0.75" width="1198.5" height="558.5" rx="18" fill="none" stroke="#1E293B" stroke-width="1.5"/>
+
+  <text x="30" y="46" class="cap">PER REQUEST, ON THE REQUEST HEADERS</text>
+
+  <!-- identity map -->
+  <rect x="30" y="66" width="260" height="150" rx="12" class="cy"/>
+  <text x="48" y="94" class="h">Identity map (local)</text>
+  <text x="48" y="118" class="s">pod IP → namespace, pod,</text>
+  <text x="48" y="138" class="s">ServiceAccount, SPIFFE ID,</text>
+  <text x="48" y="158" class="s">labels, Services</text>
+  <text x="48" y="182" class="s">cluster IP → Service</text>
+  <text x="48" y="202" class="s">node IP → node</text>
+
+  <rect x="30" y="246" width="260" height="96" rx="12" class="box"/>
+  <text x="48" y="274" class="h">hyper-operator leader</text>
+  <text x="48" y="298" class="s">delta xDS stream, TLS +</text>
+  <text x="48" y="318" class="s">ServiceAccount token</text>
+  <path d="M160 246 V 224" class="lnc" marker-end="url(#ac)"/>
+
+  <!-- request inputs -->
+  <rect x="340" y="66" width="250" height="70" rx="12" class="box"/>
+  <text x="358" y="94" class="b">client IP</text>
+  <text x="358" y="116" class="s">source.address (+ trusted XFF)</text>
+
+  <rect x="340" y="156" width="250" height="70" rx="12" class="box"/>
+  <text x="358" y="184" class="b">destination.address</text>
+  <text x="358" y="206" class="s">and :authority</text>
+
+  <rect x="340" y="246" width="250" height="70" rx="12" class="box"/>
+  <text x="358" y="274" class="b">x-hypergate-traffic</text>
+  <text x="358" y="296" class="s">stream metadata, if set</text>
+
+  <!-- resolution -->
+  <rect x="640" y="66" width="250" height="70" rx="12" class="acc"/>
+  <text x="658" y="94" class="h">caller workload</text>
+  <text x="658" y="116" class="s">or unknown</text>
+
+  <rect x="640" y="156" width="250" height="70" rx="12" class="acc"/>
+  <text x="658" y="184" class="h">destination Services</text>
+  <text x="658" y="206" class="s">cluster IP · backend pod · name</text>
+
+  <rect x="640" y="246" width="250" height="70" rx="12" class="acc"/>
+  <text x="658" y="274" class="h">traffic class</text>
+  <text x="658" y="296" class="s">metadata, else pod caller = east-west</text>
+
+  <path d="M590 101 H 632" class="ln" marker-end="url(#a)"/>
+  <path d="M590 191 H 632" class="ln" marker-end="url(#a)"/>
+  <path d="M590 281 H 632" class="ln" marker-end="url(#a)"/>
+  <path d="M290 120 C 315 120, 315 40, 640 40 H 765 V 58" class="lnc" marker-end="url(#ac)"/>
+  <path d="M290 190 C 310 190, 310 145, 905 145 V 175 H 898" class="lnc" marker-end="url(#ac)"/>
+
+  <!-- decision -->
+  <rect x="940" y="66" width="230" height="110" rx="12" class="bad"/>
+  <text x="958" y="94" class="h" fill="#FECDD3">east-west + unknown</text>
+  <text x="958" y="118" class="s" fill="#FDA4AF">unknown_source: deny → 503</text>
+  <text x="958" y="140" class="s" fill="#FDA4AF">default → only ip / cidr / any</text>
+  <text x="958" y="160" class="s" fill="#FDA4AF">can match the caller</text>
+
+  <rect x="940" y="206" width="230" height="110" rx="12" class="ok"/>
+  <text x="958" y="234" class="h">match routes</text>
+  <text x="958" y="258" class="s">sources: service · namespace ·</text>
+  <text x="958" y="278" class="s">sa · spiffe · labels · external</text>
+  <text x="958" y="298" class="s">destinations: service · namespace</text>
+
+  <path d="M890 101 H 932" class="ln" marker-end="url(#a)"/>
+  <path d="M890 281 H 932" class="ln" marker-end="url(#a)"/>
+  <path d="M1055 176 V 198" class="ln" marker-end="url(#a)"/>
+  <text x="1063" y="194" class="s">known</text>
+
+  <!-- footer -->
+  <rect x="30" y="372" width="1140" height="160" rx="12" class="box"/>
+  <text x="50" y="402" class="h">Notes</text>
+  <text x="50" y="428" class="s">· Workload selectors trust the source address: use them where the CNI prevents spoofing and nothing SNATs inside the cluster (Cilium).</text>
+  <text x="50" y="452" class="s">· external = not in the map, and never an east-west caller that is merely missing from it. Node addresses are known but are not pods.</text>
+  <text x="50" y="476" class="s">· labels: only sees labels on the operator's allow-list. host: is client-controlled; use service: for east-west.</text>
+  <text x="50" y="500" class="s">· /readyz waits for the first full map; while the stream is down the last map keeps serving.</text>
+</svg>

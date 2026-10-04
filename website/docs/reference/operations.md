@@ -98,7 +98,7 @@ Each replica also exports `hypergate_operator_is_leader` (1 on the leader, 0 on 
 
 ### Workload identity cache
 
-The operator can keep a map from IP address to workload (pod, namespace, service account, SPIFFE ID, Services, Cilium security identity) on **every** replica, so a new leader has it ready immediately. It is the foundation for routing by caller identity, and nothing uses it yet, so it is off by default.
+The operator can keep a map from IP address to workload (pod, namespace, service account, SPIFFE ID, Services, Cilium security identity) on **every** replica, so a new leader has it ready immediately. It powers [workload selectors](../concepts/routing.md#workload-selectors) (`service:`, `sa:`, `spiffe:` …). It is off by default.
 
 | Helm value | Flag | Default | Meaning |
 | --- | --- | --- | --- |
@@ -108,7 +108,7 @@ The operator can keep a map from IP address to workload (pod, namespace, service
 
 With Cilium installed, the operator also reads each pod's security identity from its `CiliumEndpoint`. It detects the CRD at start-up and every five minutes after.
 
-The leader can also stream the map to engines (engines consume it from the next release):
+To use workload selectors, also let the leader stream the map to engines:
 
 | Helm value | Flag | Default | Meaning |
 | --- | --- | --- | --- |
@@ -119,9 +119,16 @@ The leader can also stream the map to engines (engines consume it from the next 
 
 Engines authenticate with a projected ServiceAccount token (audience `hypergate-identity`); the operator checks it with the TokenReview API and accepts only the engine ServiceAccount of a namespace that runs an engine. On a leader change, the new leader publishes its address within one retry period of winning the Lease, and engines reconnect and receive only what changed.
 
+With the server enabled, the operator configures every engine automatically: the `identity` block in the engine configuration, a projected ServiceAccount token (audience `hypergate-identity`) and the CA certificate in a ConfigMap `hyper-identity-ca` in the engine namespace (re-copied every 10 minutes). The chart issues the server certificate from a 10-year CA, so renewing the server certificate does not change what engines trust. HyperRoutes with workload selectors are accepted only while the server is enabled.
+
 ```bash
 kubectl -n <operator-namespace> get endpointslice hyper-operator-identity -o wide   # the leader's pod IP
+kubectl -n hyper-system port-forward ds/hyper-engine 9003 &
+curl -s localhost:9003/debug/identity                 # engine stream status
+curl -s 'localhost:9003/debug/identity?ip=10.244.1.5'  # who is behind an IP
 ```
+
+An engine's `/readyz` stays `503` until it has received the first full identity map.
 
 Metrics on each replica: `hypergate_identity_cache_synced` (1 once the initial state is indexed) and `hypergate_identity_cache_entries{kind="pod_ip"|"node_ip"|"service"}`. The design is in [workload identity distribution](https://github.com/taha2samy-3/hypergate-engine/blob/main/docs/design/identity-distribution.md).
 

@@ -63,7 +63,7 @@ HyperRoute `matches[].headers` only supports exact values (and `"*"`). Use the e
 
 Every request is either **north-south** (it entered the cluster through a gateway) or **east-west** (one workload calling another). The engine reads the class from the `x-hypergate-traffic` gRPC metadata that Envoy sends on the ext_proc stream (`north-south` or `east-west`). The metadata is part of the Envoy filter configuration, not of the request, so clients cannot set it. See [Envoy configuration](../reference/envoy-configuration.md#traffic-class-metadata).
 
-Without the metadata, or with an invalid value, the request counts as north-south.
+Without the metadata, or with an invalid value, the engine infers the class: with [workload identity](#workload-selectors) enabled, a caller that is a pod in the identity map is east-west and anything else north-south; without identity every such request counts as north-south.
 
 A match entry with `traffic: north_south` or `traffic: east_west` applies only to that class; `any` (the default) applies to both.
 
@@ -97,7 +97,59 @@ router:
 - `host:` matches the `:authority` header without port. The client chooses this value, so use it to select a virtual host, not as an identity.
 - `any` always matches. An omitted list puts no constraint on that side.
 
-The full selector list is in the [engine configuration reference](../reference/engine-configuration.md#selectors). Selectors by workload (`service:`, `sa:`, `spiffe:` and others) are planned and rejected for now.
+The full selector list is in the [engine configuration reference](../reference/engine-configuration.md#selectors).
+
+## Workload selectors
+
+With [workload identity](../reference/engine-configuration.md#identity) enabled, routes can name callers and targets by what they are rather than by address:
+
+![The engine looks up the caller's IP in the identity map to get its namespace, ServiceAccount, SPIFFE ID, labels and Services, resolves the destination Service from the destination address or a cluster-local authority, settles the traffic class, applies unknown_source, and then matches routes.](/img/diagrams/identity-routing.svg)
+
+```yaml
+identity:
+  enabled: true
+  address: hyper-operator-identity.hyper-system.svc:9444
+  ca_file: /etc/hypergate/identity/ca.crt
+router:
+  routes:
+    - name: checkout-to-ledger
+      target_chain: internal-strict
+      matches:
+        - traffic: east_west
+          sources: ["service:shop/checkout", "sa:shop/checkout"]
+          destinations: ["service:payments/ledger"]
+          path_prefix: /v1/charges
+    - name: partners
+      target_chain: partner
+      matches:
+        - sources: [external]
+          destinations: ["host:api.example.com"]
+  default_chains:
+    north_south: public
+    east_west: deny-unlisted
+  unknown_source: deny
+```
+
+- The caller is looked up by its [client IP](./client-ip.md). Selectors by workload therefore trust the source address, which holds where the CNI prevents spoofing and nothing SNATs traffic inside the cluster.
+- `labels:` sees only the labels on the operator's allow-list (`operator.identity.labelKeys`).
+- Node addresses (hostNetwork traffic) are known, but are not pods: they match no workload selector and are not `external`.
+
+### Destination Service
+
+`service:` and `namespace:` on the destination side use the Service the request goes to, found in this order:
+
+1. `destination.address` is a Service cluster IP → that Service.
+2. `destination.address` is a pod in the identity map (the CNI already picked a backend, as Cilium does) → that pod's Services.
+3. The `:authority` is a cluster-local name, `<svc>.<ns>`, `<svc>.<ns>.svc` or `<svc>.<ns>.svc.cluster.local`, of a Service that exists → that Service.
+
+### Unknown callers
+
+An east-west request whose caller is not in the identity map, for example a pod created a moment ago or traffic during an operator leader change, follows `router.unknown_source` (`HyperConfig.spec.unknownSource`):
+
+| Value | Behaviour |
+| --- | --- |
+| `deny` (default) | `503 Service Unavailable`, logged with the client IP. |
+| `default` | Routing continues; only `ip:`, `cidr:` and `any` can match the caller, and `external` does not. |
 
 ## Default chain
 
@@ -112,7 +164,8 @@ The engine rejects a configuration, at start-up or on reload, when:
 - a route has no `target_chain`,
 - a route's `target_chain`, `default_chain`, a `default_chains` entry or `other` names a chain that is not defined under `chains`,
 - a `path_regex_pattern` or header `regex_pattern` does not compile,
-- a `traffic` value is invalid, or a selector has an unknown prefix, a malformed value, or a prefix that is not allowed on its side (for example `host:` in `sources`).
+- a `traffic` value is invalid, or a selector has an unknown prefix, a malformed value, or a prefix that is not allowed on its side (for example `host:` in `sources`),
+- a workload selector is used without workload identity.
 
 A rejected reload leaves the previous policy in place. See [Hot reload](./hot-reload.md).
 

@@ -95,6 +95,7 @@ router:
 | `redis` | map of name to object | empty | Named Redis services. See [redis](#redis). |
 | `chains` | map of name to list | empty | Named filter chains. See [chains](#chains). |
 | `router` | object | empty | Routes and the default chain. See [router](#router). |
+| `identity` | object | disabled | Connection to the operator's workload identity stream. See [identity](#identity). |
 
 Unknown keys are ignored.
 
@@ -211,6 +212,7 @@ Filters run in list order. See [Filter chains](../concepts/filter-chains.md) for
 | `default_chains.east_west` | string | empty | Chain for unmatched east-west requests. Falls back to `default_chain` when empty. Must name a defined chain. |
 | `default_chain` | string | empty | Chain for requests that match no route and have no `default_chains` entry for their class. Empty means such requests pass without policy. Must name a defined chain. |
 | `other` | string | empty | Legacy alias of `default_chain`, used only when `default_chain` is empty. Must name a defined chain. |
+| `unknown_source` | `deny` or `default` | `deny` | East-west requests whose caller is not in the identity map: `deny` answers `503`; `default` continues, but only `ip:`, `cidr:` and `any` can match the caller. Applies only with `identity.enabled`. |
 
 ### router.routes[]
 
@@ -252,10 +254,35 @@ Each entry of `sources` and `destinations` is a string `prefix:value`.
 | `cidr:<prefix>` | ✓ | ✓ | As `ip:`, by prefix, for example `cidr:10.0.0.0/8`. Host bits must be zero. |
 | `host:<name>` | | ✓ | The request `:authority` (or `Host`) without port, case-insensitive. `*.example.com` matches one or more labels in front of `example.com`, not `example.com` itself. |
 | `any` | ✓ | ✓ | Every request. |
+| `service:<ns>/<name>` | ✓ | ✓ | Source: the caller is an endpoint of that Service. Destination: the [resolved destination Service](../concepts/routing.md#destination-service). |
+| `namespace:<ns>` | ✓ | ✓ | Source: the caller pod's namespace. Destination: the destination Service's namespace. |
+| `sa:<ns>/<name>` | ✓ | | The caller pod's ServiceAccount. |
+| `spiffe:<id>` | ✓ | | The caller's SPIFFE ID, `spiffe://<trust-domain>/ns/<ns>/sa/<sa>`. |
+| `labels:[<ns>/]k=v[,k=v…]` | ✓ | | Every pair is among the caller pod's labels (and the pod is in `<ns>` when given). Only labels on the operator's allow-list are known. |
+| `external` | ✓ | | The caller is not in the identity map. Never matches an east-west caller that is merely missing from it (see `unknown_source`). |
 
-The workload selectors `service:`, `namespace:`, `sa:`, `spiffe:`, `labels:` and `external` are reserved. They need the workload identity map, which the engine does not receive yet, so a configuration that uses them is rejected. See the [design](https://github.com/taha2samy-3/hypergate-engine/blob/main/docs/design/identity-aware-routing.md).
+The last six are **workload selectors**. They need `identity.enabled`; without it a configuration that uses them is rejected. Node addresses (hostNetwork traffic) are known but are not pods, so they match no workload selector.
 
 See [Routing](../concepts/routing.md) for the full semantics.
+
+## identity
+
+Connects the engine to the hyper-operator's workload identity stream, which maps every pod IP to its namespace, ServiceAccount, SPIFFE ID, labels and Services. The operator fills this block when it runs the identity server; see [Operations](./operations.md#workload-identity-cache). It is read at start-up: changing it needs a restart, and a reload that turns `enabled` on or off is rejected.
+
+| Key | Type | Default | Description |
+| --- | --- | --- | --- |
+| `enabled` | bool | `false` | Receive the identity map. Workload selectors and `unknown_source` need it. |
+| `address` | string | none, **required** when enabled | `host:port` of the operator's identity Service. |
+| `ca_file` | string | none, **required** unless `insecure` | CA certificate that signed the operator's server certificate. Re-read on every reconnect. |
+| `server_name` | string | host of `address` | Name checked in the server certificate. |
+| `token_file` | string | `/var/run/secrets/hypergate/identity/token` | Projected ServiceAccount token with audience `hypergate-identity`. Re-read on every reconnect, so rotation needs no restart. |
+| `insecure` | bool | `false` | Connect without TLS. Development only. |
+
+With identity enabled:
+
+- `/readyz` stays `503` until the first complete identity map has arrived, so callers are never misclassified at start-up.
+- While the stream is down, the engine keeps using the last map it received and reconnects with backoff. Engines resuming against a new operator leader receive only what changed.
+- `GET /debug/identity` on the health port shows the stream status; `GET /debug/identity?ip=<address>` shows the workload or Service behind an address.
 
 ## Validation rules
 
@@ -265,7 +292,10 @@ A configuration is rejected, at start-up (the engine exits) or on reload (the pr
 - `server.client_ip.trusted_proxy_hops` is negative,
 - a Redis service has an invalid `type`, `socket_type`, `on_empty_behavior` or duration,
 - a route has no `target_chain`, or a `target_chain`, `default_chain`, `default_chains` entry or `other` names an undefined chain,
-- a match has an invalid `traffic`, or a selector with an unknown prefix, a malformed value, a prefix not allowed on that side, or a workload prefix,
+- a match has an invalid `traffic`, or a selector with an unknown prefix, a malformed value, or a prefix not allowed on that side,
+- a workload selector is used without `identity.enabled`,
+- `router.unknown_source` is not `deny` or `default`,
+- `identity.enabled` is true without `identity.address`, or without `identity.ca_file` and not `insecure`,
 - a route `path_regex_pattern` or header `regex_pattern` does not compile,
 - any filter fails to compile: unknown `type`, invalid options, an undefined `redis_service`, a Redis service that cannot be reached within `startup_max_elapsed_time`, a failed JWKS fetch, an unreadable secret file.
 

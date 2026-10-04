@@ -10,6 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	hyperv1alpha1 "github.com/taha2samy/hypergate/hyper-operator/api/v1alpha1"
+	"github.com/taha2samy/hypergate/hyper-operator/internal/routes"
 )
 
 func webhookScheme(t *testing.T) *runtime.Scheme {
@@ -74,5 +75,17 @@ func TestHyperChainDeleteProtectsDefaultChains(t *testing.T) {
 	}
 	if _, err := v.ValidateDelete(context.Background(), &hyperv1alpha1.HyperChain{ObjectMeta: metav1.ObjectMeta{Name: "other"}}); err != nil {
 		t.Fatalf("unreferenced chain delete refused: %v", err)
+	}
+}
+
+func TestHyperRouteValidator_WorkloadSelectorsWithIdentity(t *testing.T) {
+	chain := &hyperv1alpha1.HyperChain{ObjectMeta: metav1.ObjectMeta{Name: "partner"}}
+	v := &HyperRouteValidator{
+		Client: fake.NewClientBuilder().WithScheme(webhookScheme(t)).WithObjects(chain).Build(),
+		Routes: routes.Options{Workloads: true},
+	}
+	r := route("partner", hyperv1alpha1.MatchRule{Sources: []string{"service:shop/checkout"}, Destinations: []string{"namespace:payments"}})
+	if _, err := v.ValidateCreate(context.Background(), r); err != nil {
+		t.Fatalf("workload selectors rejected with identity: %v", err)
 	}
 }

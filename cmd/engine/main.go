@@ -18,6 +18,7 @@ import (
 	"github.com/taha2samy/hypergate/internal/config"
 	"github.com/taha2samy/hypergate/internal/engine"
 	mygrpc "github.com/taha2samy/hypergate/internal/grpc"
+	"github.com/taha2samy/hypergate/internal/identity"
 	mylogger "github.com/taha2samy/hypergate/internal/logger"
 	"github.com/taha2samy/hypergate/internal/memory"
 	"github.com/taha2samy/hypergate/internal/policy"
@@ -27,8 +28,11 @@ import (
 
 // startHealthServer serves Kubernetes probes: /healthz reports process liveness and
 // /readyz reports whether a policy is loaded and the gRPC listener is serving.
-func startHealthServer(addr string, ready func() bool) *http.Server {
+func startHealthServer(addr string, ready func() bool, extra map[string]http.Handler) *http.Server {
 	mux := http.NewServeMux()
+	for path, h := range extra {
+		mux.Handle(path, h)
+	}
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("ok"))
 	})
@@ -91,10 +95,31 @@ func main() {
 	// service (indefinitely by default at boot) and fetches JWKS. /healthz answers
 	// during that wait so the liveness probe does not restart the pod, while
 	// /readyz stays 503 until the policy is loaded and gRPC is serving.
+	// Workload identity: the map is streamed from the operator. It is read at
+	// start-up only; changing the identity block needs a restart.
+	var identityIndex *identity.Index
+	debugHandlers := map[string]http.Handler{}
+	if idCfg := initialConfig.Identity; idCfg.Enabled {
+		identityIndex = identity.NewIndex()
+		client := identity.NewClient(identity.Options{
+			Address:    idCfg.Address,
+			CAFile:     idCfg.CAFile,
+			ServerName: idCfg.ServerName,
+			TokenFile:  idCfg.TokenFile,
+			Insecure:   idCfg.Insecure,
+			NodeID:     os.Getenv("NODE_NAME"),
+		}, identityIndex)
+		go client.Run(ctx)
+		debugHandlers["/debug/identity"] = identity.DebugHandler(client)
+		mylogger.Info("Workload identity enabled", zap.String("address", idCfg.Address))
+	}
+
 	var serving atomic.Bool
 	healthSrv := startHealthServer(initialConfig.Server.HealthAddress, func() bool {
-		return serving.Load() && policyMgr.Ready()
-	})
+		// With identity enabled, requests are only accepted once the first full
+		// identity map has arrived, so callers are never misclassified at start-up.
+		return serving.Load() && policyMgr.Ready() && (identityIndex == nil || identityIndex.Synced())
+	}, debugHandlers)
 	var pprofSrv *http.Server
 	if initialConfig.Server.PprofAddress != "" {
 		pprofSrv = startPprofServer(initialConfig.Server.PprofAddress)
@@ -108,6 +133,14 @@ func main() {
 	// failure the previous policy keeps serving.
 	config.WatchConfig(configPath, func(newConfig *config.Config) error {
 		mylogger.Info("Hot-reloading policy...", zap.String("version", newConfig.Version))
+		// The identity client is started at boot only. Turning identity on or off
+		// without a restart would leave workload selectors without a map.
+		if newConfig.Identity.Enabled != (identityIndex != nil) {
+			return fmt.Errorf("identity.enabled changed; restart the engine to apply it")
+		}
+		if newConfig.Identity != initialConfig.Identity {
+			mylogger.Warn("Identity settings changed; they take effect after a restart")
+		}
 		if err := policyMgr.Apply(newConfig); err != nil {
 			return err
 		}
@@ -127,7 +160,11 @@ func main() {
 		zap.Int("initial_header_capacity", initialConfig.Server.InitialHeaderCapacity),
 	)
 
-	grpcServer, err := mygrpc.NewGRPCServer(pool, routerInst, registry, executor)
+	var serverOpts []mygrpc.Option
+	if identityIndex != nil {
+		serverOpts = append(serverOpts, mygrpc.WithIdentity(identityIndex))
+	}
+	grpcServer, err := mygrpc.NewGRPCServer(pool, routerInst, registry, executor, serverOpts...)
 	if err != nil {
 		mylogger.Fatal("Failed to initialize gRPC server", zap.Error(err))
 	}

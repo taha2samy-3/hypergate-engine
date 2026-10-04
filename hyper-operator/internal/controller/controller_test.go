@@ -2,6 +2,8 @@ package controller
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -351,5 +353,110 @@ func TestCompiler_TrafficSelectorsAndDefaultChains(t *testing.T) {
 		if hr.Status.State != want {
 			t.Errorf("%s: state %q, want %q (message %q)", name, hr.Status.State, want, hr.Status.Message)
 		}
+	}
+}
+
+func TestCompiler_IdentityEnablesWorkloadSelectors(t *testing.T) {
+	scheme := testScheme(t)
+	hc := hyperConfig("main", "hyper-system", time.Now())
+	hc.Spec.DefaultChain = "c"
+	hc.Spec.UnknownSource = hyperv1alpha1.UnknownSourceDefault
+	chain := &hyperv1alpha1.HyperChain{ObjectMeta: metav1.ObjectMeta{Name: "c"}}
+	route := &hyperv1alpha1.HyperRoute{
+		ObjectMeta: metav1.ObjectMeta{Name: "checkout-to-ledger"},
+		Spec: hyperv1alpha1.HyperRouteSpec{
+			TargetPolicy: "c",
+			Matches: []hyperv1alpha1.MatchRule{{
+				Traffic:      hyperv1alpha1.TrafficEastWest,
+				Sources:      []string{"service:shop/checkout"},
+				Destinations: []string{"service:payments/ledger"},
+			}},
+		},
+	}
+	build := func(identity IdentitySettings) (*config.Config, *hyperv1alpha1.HyperRoute) {
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(hc.DeepCopy(), chain.DeepCopy(), route.DeepCopy()).
+			WithStatusSubresource(&hyperv1alpha1.HyperChain{}, &hyperv1alpha1.HyperRoute{}).Build()
+		r := &HyperChainMasterCompilerReconciler{Client: c, Scheme: scheme, Identity: identity}
+		if _, err := r.Reconcile(context.Background(), ctrl.Request{}); err != nil {
+			t.Fatal(err)
+		}
+		var hr hyperv1alpha1.HyperRoute
+		_ = c.Get(context.Background(), client.ObjectKey{Name: "checkout-to-ledger"}, &hr)
+		return compiledEngineConfig(t, c), &hr
+	}
+
+	// Without the identity server the route is rejected.
+	cfg, hr := build(IdentitySettings{})
+	if len(cfg.Router.Routes) != 0 || hr.Status.State != hyperv1alpha1.HyperRouteStateInvalid || !strings.Contains(hr.Status.Message, "identity map") {
+		t.Fatalf("workload route without identity: routes=%d status=%+v", len(cfg.Router.Routes), hr.Status)
+	}
+	if cfg.Identity.Enabled {
+		t.Fatal("identity block compiled without the identity server")
+	}
+
+	// With it, the route compiles and engines get the identity block.
+	cfg, hr = build(IdentitySettings{Enabled: true, Address: "hyper-operator-identity.hyper-system.svc:9444",
+		ServerName: "hyper-operator-identity.hyper-system.svc", CAFile: "/tmp/ca.crt"})
+	if len(cfg.Router.Routes) != 1 || hr.Status.State != hyperv1alpha1.HyperRouteStateReady {
+		t.Fatalf("workload route with identity: routes=%d status=%+v", len(cfg.Router.Routes), hr.Status)
+	}
+	id := cfg.Identity
+	if !id.Enabled || id.Address != "hyper-operator-identity.hyper-system.svc:9444" || id.CAFile != "/etc/hypergate/identity/ca.crt" ||
+		id.TokenFile != "/var/run/secrets/hypergate/identity/token" || id.ServerName != "hyper-operator-identity.hyper-system.svc" {
+		t.Fatalf("identity block = %+v", id)
+	}
+	if cfg.Router.UnknownSource != config.UnknownSourceDefault {
+		t.Fatalf("unknown_source = %q", cfg.Router.UnknownSource)
+	}
+}
+
+func TestHyperConfigReconcile_IdentityVolumesAndCA(t *testing.T) {
+	scheme := testScheme(t)
+	hc := hyperConfig("main", "hyper-system", time.Now())
+	caFile := filepath.Join(t.TempDir(), "ca.crt")
+	if err := os.WriteFile(caFile, []byte("-----BEGIN CERTIFICATE-----\nCA\n-----END CERTIFICATE-----\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&hc).WithStatusSubresource(&hyperv1alpha1.HyperConfig{}).Build()
+	r := &HyperConfigReconciler{Client: c, Scheme: scheme, Identity: IdentitySettings{Enabled: true, CAFile: caFile}}
+	res, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "main"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.RequeueAfter == 0 {
+		t.Fatal("identity CA must be refreshed periodically")
+	}
+
+	var cm corev1.ConfigMap
+	if err := c.Get(context.Background(), client.ObjectKey{Namespace: "hyper-system", Name: identityCAConfigMap}, &cm); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(cm.Data["ca.crt"], "BEGIN CERTIFICATE") {
+		t.Fatalf("CA not copied: %v", cm.Data)
+	}
+
+	var ds appsv1.DaemonSet
+	if err := c.Get(context.Background(), client.ObjectKey{Namespace: "hyper-system", Name: "hyper-engine"}, &ds); err != nil {
+		t.Fatal(err)
+	}
+	var token *corev1.ServiceAccountTokenProjection
+	var caVolume bool
+	for _, v := range ds.Spec.Template.Spec.Volumes {
+		if v.Projected != nil && v.Projected.Sources[0].ServiceAccountToken != nil {
+			token = v.Projected.Sources[0].ServiceAccountToken
+		}
+		if v.ConfigMap != nil && v.ConfigMap.Name == identityCAConfigMap {
+			caVolume = true
+		}
+	}
+	if token == nil || token.Audience != "hypergate-identity" || !caVolume {
+		t.Fatalf("identity volumes missing: token=%+v ca=%v", token, caVolume)
+	}
+	mounts := map[string]bool{}
+	for _, m := range ds.Spec.Template.Spec.Containers[0].VolumeMounts {
+		mounts[m.MountPath] = true
+	}
+	if !mounts["/var/run/secrets/hypergate/identity"] || !mounts["/etc/hypergate/identity"] {
+		t.Fatalf("identity mounts missing: %v", mounts)
 	}
 }

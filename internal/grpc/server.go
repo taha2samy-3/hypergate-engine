@@ -22,6 +22,7 @@ import (
 
 	"github.com/taha2samy/hypergate/internal/config"
 	"github.com/taha2samy/hypergate/internal/engine"
+	"github.com/taha2samy/hypergate/internal/identity"
 	mylogger "github.com/taha2samy/hypergate/internal/logger"
 	"github.com/taha2samy/hypergate/internal/memory"
 	"github.com/taha2samy/hypergate/internal/router"
@@ -32,7 +33,18 @@ type Server struct {
 	router   *router.EngineRouter
 	registry *engine.ChainRegistry
 	executor *engine.ChainExecutor
+	// identity is the workload identity map, nil when identity is disabled.
+	identity *identity.Index
 	extprocv3.UnimplementedExternalProcessorServer
+}
+
+// Option configures the ext_proc server.
+type Option func(*Server)
+
+// WithIdentity makes the server resolve callers and destinations in the
+// workload identity map.
+func WithIdentity(idx *identity.Index) Option {
+	return func(s *Server) { s.identity = idx }
 }
 
 // NewGRPCServer initializes the gRPC server with high-performance keepalive settings
@@ -42,6 +54,7 @@ func NewGRPCServer(
 	routerInst *router.EngineRouter,
 	registry *engine.ChainRegistry,
 	executor *engine.ChainExecutor,
+	options ...Option,
 ) (*grpc.Server, error) {
 	activeCfg := config.GlobalConfig.Load()
 
@@ -92,6 +105,9 @@ func NewGRPCServer(
 		router:   routerInst,
 		registry: registry,
 		executor: executor,
+	}
+	for _, o := range options {
+		o(authServer)
 	}
 
 	extprocv3.RegisterExternalProcessorServer(grpcServer, authServer)

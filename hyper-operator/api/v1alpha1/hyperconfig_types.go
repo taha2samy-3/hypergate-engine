@@ -64,6 +64,14 @@ type HyperConfigSpec struct {
 	// +optional
 	DefaultChains *DefaultChains `json:"defaultChains,omitempty"`
 
+	// UnknownSource decides what happens to east-west requests whose caller is
+	// not in the identity map (a pod created moments ago, an operator failover):
+	// Deny (default, 503) or Default (continue; only network selectors can match).
+	// Applies only when the operator runs the identity server.
+	// +kubebuilder:default=Deny
+	// +optional
+	UnknownSource UnknownSourcePolicy `json:"unknownSource,omitempty"`
+
 	// ExtProc attaches this engine to Envoy through typed filter objects the
 	// operator generates. Nothing is attached unless it is listed here. The
 	// operator never creates or edits Gateway API HTTPRoutes.
@@ -85,6 +93,15 @@ type HyperConfigSpec struct {
 	// +kubebuilder:default=65536
 	PreallocBodyBufferBytes int32 `json:"preallocBodyBufferBytes,omitempty" yaml:"prealloc_body_buffer_bytes,omitempty"`
 }
+
+// UnknownSourcePolicy is Deny or Default.
+// +kubebuilder:validation:Enum=Deny;Default
+type UnknownSourcePolicy string
+
+const (
+	UnknownSourceDeny    UnknownSourcePolicy = "Deny"
+	UnknownSourceDefault UnknownSourcePolicy = "Default"
+)
 
 // ExtProcFailureMode says what Envoy does when the engine cannot be reached.
 // +kubebuilder:validation:Enum=FailClosed;FailOpen

@@ -17,15 +17,22 @@ import (
 	"github.com/taha2samy/hypergate/internal/selector"
 )
 
+// Options say what the engines can evaluate.
+type Options struct {
+	// Workloads is true when engines receive the workload identity map (the
+	// operator runs the identity server), which workload selectors need.
+	Workloads bool
+}
+
 // Validate reports every problem of a HyperRoute spec, joined into one error.
-func Validate(spec *hyperv1alpha1.HyperRouteSpec) error {
-	_, err := Compile(spec)
+func Validate(spec *hyperv1alpha1.HyperRouteSpec, opts Options) error {
+	_, err := Compile(spec, opts)
 	return err
 }
 
 // Compile converts the matches of a HyperRoute into engine match entries. It
 // returns an error, listing every problem, when any match is invalid.
-func Compile(spec *hyperv1alpha1.HyperRouteSpec) ([]config.MatchConfig, error) {
+func Compile(spec *hyperv1alpha1.HyperRouteSpec, opts Options) ([]config.MatchConfig, error) {
 	var errs []error
 	if spec.TargetPolicy == "" {
 		errs = append(errs, errors.New("targetPolicy must name a HyperChain"))
@@ -36,7 +43,7 @@ func Compile(spec *hyperv1alpha1.HyperRouteSpec) ([]config.MatchConfig, error) {
 
 	out := make([]config.MatchConfig, 0, len(spec.Matches))
 	for i, m := range spec.Matches {
-		mc, err := compileMatch(&m)
+		mc, err := compileMatch(&m, opts)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("matches[%d]: %w", i, err))
 			continue
@@ -49,17 +56,17 @@ func Compile(spec *hyperv1alpha1.HyperRouteSpec) ([]config.MatchConfig, error) {
 	return out, nil
 }
 
-func compileMatch(m *hyperv1alpha1.MatchRule) (config.MatchConfig, error) {
+func compileMatch(m *hyperv1alpha1.MatchRule, opts Options) (config.MatchConfig, error) {
 	var errs []error
 
 	traffic, err := engineTraffic(m.Traffic)
 	if err != nil {
 		errs = append(errs, err)
 	}
-	if _, err := selector.Compile(m.Sources, selector.Source); err != nil {
+	if _, err := selector.Compile(m.Sources, selector.Source, opts.Workloads); err != nil {
 		errs = append(errs, fmt.Errorf("sources: %w", err))
 	}
-	if _, err := selector.Compile(m.Destinations, selector.Destination); err != nil {
+	if _, err := selector.Compile(m.Destinations, selector.Destination, opts.Workloads); err != nil {
 		errs = append(errs, fmt.Errorf("destinations: %w", err))
 	}
 	if m.PathRegexPattern != "" {
@@ -110,6 +117,14 @@ func DefaultChains(spec *hyperv1alpha1.HyperConfigSpec) config.DefaultChainsConf
 		NorthSouth: spec.DefaultChains.NorthSouth,
 		EastWest:   spec.DefaultChains.EastWest,
 	}
+}
+
+// UnknownSource returns the engine value of HyperConfig.spec.unknownSource.
+func UnknownSource(spec *hyperv1alpha1.HyperConfigSpec) string {
+	if spec.UnknownSource == hyperv1alpha1.UnknownSourceDefault {
+		return config.UnknownSourceDefault
+	}
+	return config.UnknownSourceDeny
 }
 
 // ReferencedChains lists the HyperChains a HyperConfig uses as fallbacks, with

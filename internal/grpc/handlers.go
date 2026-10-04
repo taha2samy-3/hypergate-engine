@@ -14,6 +14,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/taha2samy/hypergate/internal/clientip"
+	"github.com/taha2samy/hypergate/internal/config"
 	"github.com/taha2samy/hypergate/internal/engine"
 	mylogger "github.com/taha2samy/hypergate/internal/logger"
 	"github.com/taha2samy/hypergate/internal/selector"
@@ -38,9 +39,9 @@ func stringAttribute(attrs map[string]*structpb.Struct, key string) string {
 }
 
 // trafficFromContext returns the traffic class sent by Envoy in the
-// x-hypergate-traffic stream metadata (configured by the operator on the ext_proc
-// filter, so clients cannot set it). Without it the class is inferred: until the
-// engine receives the workload identity map every caller counts as north-south.
+// x-hypergate-traffic stream metadata (configured on the ext_proc filter, so
+// clients cannot set it), or TrafficAny when it is absent or invalid; the class
+// is then inferred once the caller is known (see resolveIdentity).
 func trafficFromContext(ctx context.Context) selector.Traffic {
 	if md, ok := metadata.FromIncomingContext(ctx); ok {
 		if vals := md.Get(selector.TrafficMetadataKey); len(vals) > 0 {
@@ -52,7 +53,34 @@ func trafficFromContext(ctx context.Context) selector.Traffic {
 				zap.String("key", selector.TrafficMetadataKey), zap.String("value", vals[0]))
 		}
 	}
-	return selector.TrafficNorthSouth
+	return selector.TrafficAny
+}
+
+// resolveIdentity looks up the caller and the destination in the identity map
+// and settles the traffic class. Without metadata, a caller that is a pod in the
+// map is east-west and anything else north-south.
+func (s *Server) resolveIdentity(ctx *engine.RequestContext) {
+	inferred := ctx.Traffic == selector.TrafficAny
+	if inferred {
+		ctx.Traffic = selector.TrafficNorthSouth
+	}
+	if s.identity == nil {
+		return
+	}
+	ctx.SourceWorkload = s.identity.Lookup(ctx.ClientAddr)
+	if inferred && ctx.SourceWorkload.IsPod() {
+		ctx.Traffic = selector.TrafficEastWest
+	}
+
+	ctx.DestinationServices = ctx.DestinationServices[:0]
+	if svc := s.identity.ServiceByClusterIP(ctx.DestinationAddr); svc != nil {
+		ctx.DestinationServices = append(ctx.DestinationServices, svc.Key())
+	} else if w := s.identity.Lookup(ctx.DestinationAddr); w.IsPod() {
+		// The CNI resolved the Service to a backend pod before Envoy saw it.
+		ctx.DestinationServices = append(ctx.DestinationServices, w.Services...)
+	} else if svc := s.identity.ServiceFromHost(ctx.Host); svc != nil {
+		ctx.DestinationServices = append(ctx.DestinationServices, svc.Key())
+	}
 }
 
 // streamState is the per-stream routing decision. It is made once, against the
@@ -75,6 +103,15 @@ func (s *Server) resolve(st *streamState, reqCtx *engine.RequestContext) {
 
 	if st.snap.Config == nil {
 		mylogger.Error("No policy loaded, rejecting request", zap.String("path", reqCtx.Path))
+		reqCtx.Block(http.StatusServiceUnavailable, "Service Unavailable")
+		return
+	}
+
+	s.resolveIdentity(reqCtx)
+	if s.identity != nil && reqCtx.Traffic == selector.TrafficEastWest && reqCtx.SourceWorkload == nil &&
+		st.snap.Config.Router.UnknownSource != config.UnknownSourceDefault {
+		mylogger.Warn("East-west request from a caller that is not in the identity map, rejecting",
+			zap.String("client_ip", reqCtx.ClientIP), zap.String("path", reqCtx.Path))
 		reqCtx.Block(http.StatusServiceUnavailable, "Service Unavailable")
 		return
 	}

@@ -4,8 +4,8 @@
 //
 // Network selectors (ip:, cidr:, host:, any) are matched directly from the
 // request. Workload selectors (service:, namespace:, sa:, spiffe:, labels:,
-// external) are parsed and validated, but compiling them is rejected until the
-// engine receives the workload identity map.
+// external) are matched against the workload identity map, so compiling them
+// requires the engine to receive that map.
 package selector
 
 import (
@@ -13,6 +13,8 @@ import (
 	"net"
 	"net/netip"
 	"strings"
+
+	"github.com/taha2samy/hypergate/internal/identity"
 )
 
 // Side says whether a selector constrains the caller or the target of a request.
@@ -91,6 +93,9 @@ type Selector struct {
 	// host is the lower-cased host; for wildcards it is the suffix including the leading dot.
 	host     string
 	wildcard bool
+	// labels: optional namespace and the required key/value pairs.
+	labelNS string
+	labelKV map[string]string
 }
 
 // String returns the canonical `prefix:value` form.
@@ -142,7 +147,7 @@ func Parse(raw string, side Side) (Selector, error) {
 	case KindSPIFFE:
 		err = validateSPIFFE(value)
 	case KindLabels:
-		err = validateLabels(value)
+		sel.labelNS, sel.labelKV, err = parseLabels(value)
 	}
 	if err != nil {
 		return Selector{}, fmt.Errorf("selector %q: %w", raw, err)
@@ -275,23 +280,26 @@ func validateSPIFFE(v string) error {
 	return validateDNSSubdomain(parts[4])
 }
 
-func validateLabels(v string) error {
-	if ns, rest, ok := strings.Cut(v, "/"); ok && !strings.Contains(ns, "=") {
-		if err := validateDNSLabel(ns); err != nil {
-			return err
+func parseLabels(v string) (string, map[string]string, error) {
+	var ns string
+	if before, rest, ok := strings.Cut(v, "/"); ok && !strings.Contains(before, "=") {
+		if err := validateDNSLabel(before); err != nil {
+			return "", nil, err
 		}
-		v = rest
+		ns, v = before, rest
 	}
+	kv := map[string]string{}
 	for _, pair := range strings.Split(v, ",") {
 		k, val, ok := strings.Cut(pair, "=")
 		if !ok || k == "" {
-			return fmt.Errorf("label %q must be key=value", pair)
+			return "", nil, fmt.Errorf("label %q must be key=value", pair)
 		}
 		if strings.ContainsAny(k+val, " \t") {
-			return fmt.Errorf("label %q must not contain spaces", pair)
+			return "", nil, fmt.Errorf("label %q must not contain spaces", pair)
 		}
+		kv[k] = val
 	}
-	return nil
+	return ns, kv, nil
 }
 
 // Set is a compiled list of selectors for one side. Entries are alternatives:
@@ -302,12 +310,33 @@ type Set struct {
 	prefixes []netip.Prefix
 	hosts    map[string]struct{}
 	suffixes []string
-	raw      []string
+
+	// Workload selectors.
+	services   map[string]struct{} // "<ns>/<name>"
+	namespaces map[string]struct{}
+	sas        map[string]struct{} // "<ns>/<name>"
+	spiffe     map[string]struct{}
+	labels     []labelSelector
+	external   bool
+
+	raw []string
 }
 
-// Compile parses and compiles a selector list. Workload selectors are rejected
-// until the engine receives the workload identity map.
-func Compile(list []string, side Side) (*Set, error) {
+type labelSelector struct {
+	namespace string
+	kv        map[string]string
+}
+
+// UsesWorkloads reports whether the set has a workload selector.
+func (s *Set) UsesWorkloads() bool {
+	return s != nil && (s.external || len(s.services) > 0 || len(s.namespaces) > 0 ||
+		len(s.sas) > 0 || len(s.spiffe) > 0 || len(s.labels) > 0)
+}
+
+// Compile parses and compiles a selector list. Workload selectors are accepted
+// only when allowWorkloads is true, that is when the engine receives the
+// workload identity map.
+func Compile(list []string, side Side, allowWorkloads bool) (*Set, error) {
 	if len(list) == 0 {
 		return nil, nil
 	}
@@ -317,8 +346,8 @@ func Compile(list []string, side Side) (*Set, error) {
 		if err != nil {
 			return nil, err
 		}
-		if sel.Kind.Workload() {
-			return nil, fmt.Errorf("selector %q: %s selectors require the workload identity map, which this engine version does not receive yet; use ip:, cidr:, host: or any", raw, sel.Kind)
+		if sel.Kind.Workload() && !allowWorkloads {
+			return nil, fmt.Errorf("selector %q: %s selectors require the workload identity map; enable identity (engine: identity.enabled, operator: the identity server) or use ip:, cidr:, host: or any", raw, sel.Kind)
 		}
 		set.raw = append(set.raw, sel.String())
 		switch sel.Kind {
@@ -335,14 +364,97 @@ func Compile(list []string, side Side) (*Set, error) {
 			if sel.wildcard {
 				set.suffixes = append(set.suffixes, sel.host)
 			} else {
-				if set.hosts == nil {
-					set.hosts = make(map[string]struct{})
-				}
-				set.hosts[sel.host] = struct{}{}
+				set.hosts = addKey(set.hosts, sel.host)
 			}
+		case KindService:
+			set.services = addKey(set.services, sel.Value)
+		case KindNamespace:
+			set.namespaces = addKey(set.namespaces, sel.Value)
+		case KindSA:
+			set.sas = addKey(set.sas, sel.Value)
+		case KindSPIFFE:
+			set.spiffe = addKey(set.spiffe, "spiffe:"+sel.Value)
+		case KindLabels:
+			set.labels = append(set.labels, labelSelector{namespace: sel.labelNS, kv: sel.labelKV})
+		case KindExternal:
+			set.external = true
 		}
 	}
 	return set, nil
+}
+
+func addKey(m map[string]struct{}, k string) map[string]struct{} {
+	if m == nil {
+		m = make(map[string]struct{})
+	}
+	m[k] = struct{}{}
+	return m
+}
+
+// MatchSource reports whether the caller satisfies any selector. w is the
+// caller's workload from the identity map (nil when unknown). external matches
+// only when w is nil and externalAllowed is true; the router disallows it for
+// east-west callers that are merely missing from the map.
+func (s *Set) MatchSource(addr netip.Addr, w *identity.Workload, externalAllowed bool) bool {
+	if s == nil || s.any || s.Match(addr, "") {
+		return true
+	}
+	if w == nil {
+		return s.external && externalAllowed
+	}
+	if !w.IsPod() {
+		return false
+	}
+	if _, ok := s.namespaces[w.Namespace]; ok {
+		return true
+	}
+	if _, ok := s.sas[w.Namespace+"/"+w.ServiceAccount]; ok {
+		return true
+	}
+	if _, ok := s.spiffe[w.SPIFFEID]; ok && w.SPIFFEID != "" {
+		return true
+	}
+	for _, svc := range w.Services {
+		if _, ok := s.services[svc]; ok {
+			return true
+		}
+	}
+	for _, l := range s.labels {
+		if l.matches(w) {
+			return true
+		}
+	}
+	return false
+}
+
+func (l labelSelector) matches(w *identity.Workload) bool {
+	if l.namespace != "" && l.namespace != w.Namespace {
+		return false
+	}
+	for k, v := range l.kv {
+		if got, ok := w.Labels[k]; !ok || got != v {
+			return false
+		}
+	}
+	return true
+}
+
+// MatchDestination reports whether the target satisfies any selector. services
+// are the destination Services ("<ns>/<name>") the engine resolved.
+func (s *Set) MatchDestination(addr netip.Addr, host string, services []string) bool {
+	if s == nil || s.any || s.Match(addr, host) {
+		return true
+	}
+	for _, svc := range services {
+		if _, ok := s.services[svc]; ok {
+			return true
+		}
+		ns, _, _ := strings.Cut(svc, "/")
+		if _, ok := s.namespaces[ns]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // String returns the canonical selectors of the set.

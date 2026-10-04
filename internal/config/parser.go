@@ -22,6 +22,9 @@ import (
 var initialK8sResourceVersion string
 
 const (
+	// DefaultIdentityTokenFile is where the engine mounts its identity token.
+	DefaultIdentityTokenFile = "/var/run/secrets/hypergate/identity/token"
+
 	DefaultConfigPath = "/etc/hyper-engine/config.yaml"
 	EnvConfigPath     = "CONFIG_FILE_PATH"
 	EnvConfigProvider = "CONFIG_PROVIDER"
@@ -161,7 +164,7 @@ func ParseBytes(data []byte) (*Config, error) {
 
 	for i, route := range cfg.Router.Routes {
 		for j, match := range route.Matches {
-			if err := cfg.Router.Routes[i].Matches[j].Compile(); err != nil {
+			if err := cfg.Router.Routes[i].Matches[j].Compile(cfg.Identity.Enabled); err != nil {
 				return nil, fmt.Errorf("route %q match index %d: %w", route.Name, j, err)
 			}
 			if match.PathRegexPattern != "" {
@@ -195,6 +198,25 @@ func ParseBytes(data []byte) (*Config, error) {
 	}
 
 	applyTLSEnvOverrides(&cfg.Server.TLS)
+
+	switch cfg.Router.UnknownSource {
+	case "":
+		cfg.Router.UnknownSource = UnknownSourceDeny
+	case UnknownSourceDeny, UnknownSourceDefault:
+	default:
+		return nil, fmt.Errorf(`router.unknown_source must be "deny" or "default", got %q`, cfg.Router.UnknownSource)
+	}
+	if id := &cfg.Identity; id.Enabled {
+		if id.Address == "" {
+			return nil, fmt.Errorf("identity.address is required when identity is enabled")
+		}
+		if id.CAFile == "" && !id.Insecure {
+			return nil, fmt.Errorf("identity.ca_file is required unless identity.insecure is true")
+		}
+		if id.TokenFile == "" {
+			id.TokenFile = DefaultIdentityTokenFile
+		}
+	}
 
 	if err := validateChainReferences(&cfg); err != nil {
 		return nil, err

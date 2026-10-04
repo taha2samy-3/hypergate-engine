@@ -31,7 +31,40 @@ spec:
 {{- end }}
 {{- if and .Values.certManager.enabled (include "hyper-operator.identityServer" .) }}
 ---
-# Server certificate of the identity stream; engines verify it against the issuer's CA.
+# A long-lived CA for the identity stream, so the ca.crt engines trust does not
+# change when the server certificate is renewed.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ .Values.operator.identity.server.serviceName }}-ca
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "hyper-operator.labels" . | nindent 4 }}
+spec:
+  isCA: true
+  commonName: {{ .Values.operator.identity.server.serviceName }}-ca
+  secretName: {{ .Values.operator.identity.server.serviceName }}-ca
+  duration: 87600h # 10 years
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: {{ .Values.certManager.issuerName }}
+    kind: Issuer
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ .Values.operator.identity.server.serviceName }}-ca
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "hyper-operator.labels" . | nindent 4 }}
+spec:
+  ca:
+    secretName: {{ .Values.operator.identity.server.serviceName }}-ca
+---
+# Server certificate of the identity stream. Its Secret's ca.crt is the CA above,
+# which the operator copies to every engine namespace.
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -42,7 +75,7 @@ metadata:
 spec:
   secretName: {{ .Values.operator.identity.server.certSecret }}
   issuerRef:
-    name: {{ .Values.certManager.issuerName }}
+    name: {{ .Values.operator.identity.server.serviceName }}-ca
     kind: Issuer
   duration: {{ .Values.certManager.duration }}
   renewBefore: {{ .Values.certManager.renewBefore }}

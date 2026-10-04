@@ -4,6 +4,8 @@ import (
 	"net/netip"
 	"strings"
 	"testing"
+
+	"github.com/taha2samy/hypergate/internal/identity"
 )
 
 func TestParse(t *testing.T) {
@@ -79,7 +81,7 @@ func TestParse(t *testing.T) {
 
 func TestCompileRejectsWorkloadSelectors(t *testing.T) {
 	for _, raw := range []string{"service:shop/checkout", "namespace:shop", "sa:shop/a", "spiffe://cluster.local/ns/a/sa/b", "labels:app=x", "external"} {
-		_, err := Compile([]string{"cidr:10.0.0.0/8", raw}, Source)
+		_, err := Compile([]string{"cidr:10.0.0.0/8", raw}, Source, false)
 		if err == nil || !strings.Contains(err.Error(), "identity map") {
 			t.Errorf("%s: want identity map error, got %v", raw, err)
 		}
@@ -87,7 +89,7 @@ func TestCompileRejectsWorkloadSelectors(t *testing.T) {
 }
 
 func TestCompileEmptyIsNil(t *testing.T) {
-	set, err := Compile(nil, Source)
+	set, err := Compile(nil, Source, false)
 	if err != nil || set != nil {
 		t.Fatalf("got %v, %v", set, err)
 	}
@@ -99,7 +101,7 @@ func TestCompileEmptyIsNil(t *testing.T) {
 func TestSetMatch(t *testing.T) {
 	mustCompile := func(side Side, list ...string) *Set {
 		t.Helper()
-		s, err := Compile(list, side)
+		s, err := Compile(list, side, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -195,5 +197,105 @@ func TestParseTraffic(t *testing.T) {
 	}
 	if _, err := ParseTraffic("internal"); err == nil {
 		t.Error("expected an error for an unknown class")
+	}
+}
+
+func TestCompileWorkloadSelectorsWithIdentity(t *testing.T) {
+	set, err := Compile([]string{"service:shop/checkout", "namespace:ops", "sa:shop/batch", "spiffe://cluster.local/ns/shop/sa/web",
+		"labels:shop/app=api,tier=web", "labels:team=sre", "external"}, Source, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !set.UsesWorkloads() {
+		t.Fatal("UsesWorkloads = false")
+	}
+	if net, _ := Compile([]string{"cidr:10.0.0.0/8"}, Source, true); net.UsesWorkloads() {
+		t.Fatal("network-only set reports workloads")
+	}
+	// Wrong side is still an error with identity.
+	if _, err := Compile([]string{"sa:shop/a"}, Destination, true); err == nil {
+		t.Fatal("sa: accepted as a destination")
+	}
+}
+
+func TestMatchSource(t *testing.T) {
+	set, err := Compile([]string{
+		"service:shop/checkout", "namespace:ops", "sa:shop/batch", "spiffe://cluster.local/ns/shop/sa/web",
+		"labels:shop/app=api,tier=web", "labels:team=sre", "cidr:192.0.2.0/24",
+	}, Source, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pod := func(ns, sa string, labels map[string]string, services ...string) *identity.Workload {
+		return &identity.Workload{Kind: identity.KindPod, Namespace: ns, ServiceAccount: sa,
+			SPIFFEID: "spiffe://cluster.local/ns/" + ns + "/sa/" + sa, Labels: labels, Services: services}
+	}
+	none := netip.Addr{}
+
+	tests := []struct {
+		name string
+		w    *identity.Workload
+		addr netip.Addr
+		want bool
+	}{
+		{"service membership", pod("shop", "x", nil, "shop/checkout"), none, true},
+		{"other service", pod("shop", "x", nil, "shop/cart"), none, false},
+		{"namespace", pod("ops", "anything", nil), none, true},
+		{"service account", pod("shop", "batch", nil), none, true},
+		{"same SA name, other namespace", pod("billing", "batch", nil), none, false},
+		{"spiffe", pod("shop", "web", nil), none, true},
+		{"labels with namespace, all pairs", pod("shop", "x", map[string]string{"app": "api", "tier": "web", "v": "2"}), none, true},
+		{"labels missing a pair", pod("shop", "x", map[string]string{"app": "api"}), none, false},
+		{"labels in another namespace", pod("billing", "x", map[string]string{"app": "api", "tier": "web"}), none, false},
+		{"labels without namespace", pod("billing", "x", map[string]string{"team": "sre"}), none, true},
+		{"node addresses never match workload selectors", &identity.Workload{Kind: identity.KindNode, Namespace: "ops"}, none, false},
+		{"network selector still applies", nil, netip.MustParseAddr("192.0.2.9"), true},
+		{"unknown caller without network match", nil, netip.MustParseAddr("198.51.100.1"), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := set.MatchSource(tt.addr, tt.w, true); got != tt.want {
+				t.Fatalf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMatchSourceExternal(t *testing.T) {
+	set, err := Compile([]string{"external"}, Source, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !set.MatchSource(netip.Addr{}, nil, true) {
+		t.Fatal("unknown caller must be external when allowed")
+	}
+	if set.MatchSource(netip.Addr{}, nil, false) {
+		t.Fatal("external must not match when the router disallows it (unknown east-west caller)")
+	}
+	if set.MatchSource(netip.Addr{}, &identity.Workload{Kind: identity.KindPod}, true) {
+		t.Fatal("a known workload is not external")
+	}
+}
+
+func TestMatchDestinationServices(t *testing.T) {
+	set, err := Compile([]string{"service:payments/ledger", "namespace:billing", "host:api.example.com"}, Destination, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range []struct {
+		services []string
+		host     string
+		want     bool
+	}{
+		{[]string{"payments/ledger"}, "", true},
+		{[]string{"payments/other", "payments/ledger"}, "", true},
+		{[]string{"billing/invoices"}, "", true},
+		{[]string{"payments/other"}, "", false},
+		{nil, "api.example.com", true},
+		{nil, "", false},
+	} {
+		if got := set.MatchDestination(netip.Addr{}, tt.host, tt.services); got != tt.want {
+			t.Errorf("services %v host %q: got %v, want %v", tt.services, tt.host, got, tt.want)
+		}
 	}
 }

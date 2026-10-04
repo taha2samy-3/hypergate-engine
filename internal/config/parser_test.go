@@ -213,3 +213,44 @@ func TestDocsFilterChainExampleParses(t *testing.T) {
 		}
 	}
 }
+
+func TestParseBytes_IdentityAndWorkloadSelectors(t *testing.T) {
+	base := "version: v1\nchains:\n  c: []\n"
+	route := "router:\n  routes:\n    - name: r\n      target_chain: c\n      matches:\n        - sources: [\"service:shop/checkout\", \"sa:shop/checkout\"]\n          destinations: [\"service:payments/ledger\"]\n"
+
+	if _, err := config.ParseBytes([]byte(base + route)); err == nil || !strings.Contains(err.Error(), "identity map") {
+		t.Fatalf("workload selectors without identity must be rejected, got %v", err)
+	}
+
+	withID := base + "identity:\n  enabled: true\n  address: hyper-operator-identity.hyper-system.svc:9444\n  ca_file: /etc/hypergate/identity/ca.crt\n" + route
+	cfg, err := config.ParseBytes([]byte(withID))
+	if err != nil {
+		t.Fatalf("workload selectors with identity rejected: %v", err)
+	}
+	if cfg.Identity.TokenFile != config.DefaultIdentityTokenFile || cfg.Router.UnknownSource != config.UnknownSourceDeny {
+		t.Fatalf("defaults not applied: %+v %q", cfg.Identity, cfg.Router.UnknownSource)
+	}
+	if !cfg.Router.Routes[0].Matches[0].CompiledSources.UsesWorkloads() {
+		t.Fatal("sources not compiled as workload selectors")
+	}
+
+	for name, tt := range map[string]struct{ doc, errPart string }{
+		"no address":     {"identity:\n  enabled: true\n  ca_file: /ca\n", "identity.address"},
+		"no CA":          {"identity:\n  enabled: true\n  address: x:1\n", "identity.ca_file"},
+		"bad unknown":    {"router:\n  unknown_source: allow\n", "router.unknown_source"},
+		"insecure is ok": {"identity:\n  enabled: true\n  address: x:1\n  insecure: true\n", ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := config.ParseBytes([]byte(base + tt.doc))
+			if tt.errPart == "" {
+				if err != nil {
+					t.Fatal(err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tt.errPart) {
+				t.Fatalf("want %q, got %v", tt.errPart, err)
+			}
+		})
+	}
+}

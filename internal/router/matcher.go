@@ -88,10 +88,13 @@ func matches(match *config.MatchConfig, ctx *engine.RequestContext) bool {
 		len(match.Destinations) > 0 && match.CompiledDestinations == nil {
 		return false
 	}
-	if !match.CompiledSources.Match(ctx.ClientAddr, "") {
+	// "external" means not a workload; an east-west caller that is merely
+	// missing from the identity map must not count as external.
+	externalOK := ctx.SourceWorkload == nil && ctx.Traffic != selector.TrafficEastWest
+	if !match.CompiledSources.MatchSource(ctx.ClientAddr, ctx.SourceWorkload, externalOK) {
 		return false
 	}
-	if !match.CompiledDestinations.Match(ctx.DestinationAddr, ctx.Host) {
+	if !match.CompiledDestinations.MatchDestination(ctx.DestinationAddr, ctx.Host, ctx.DestinationServices) {
 		return false
 	}
 

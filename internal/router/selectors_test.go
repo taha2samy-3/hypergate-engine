@@ -13,7 +13,7 @@ func compiledRouter(t *testing.T, rc config.RouterConfig) *config.RouterConfig {
 	t.Helper()
 	for i := range rc.Routes {
 		for j := range rc.Routes[i].Matches {
-			if err := rc.Routes[i].Matches[j].Compile(); err != nil {
+			if err := rc.Routes[i].Matches[j].Compile(false); err != nil {
 				t.Fatal(err)
 			}
 		}
