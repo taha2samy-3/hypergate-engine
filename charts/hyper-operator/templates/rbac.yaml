@@ -20,6 +20,7 @@ rules:
       - externalauthfilters
       - firewallfilters
       - jwtauthfilters
+      - corsfilters
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: ["hyper.io"]
     resources:
@@ -36,6 +37,7 @@ rules:
       - externalauthfilters/status
       - firewallfilters/status
       - jwtauthfilters/status
+      - corsfilters/status
     verbs: ["get", "update", "patch"]
   - apiGroups: ["hyper.io"]
     resources:
@@ -52,6 +54,7 @@ rules:
       - externalauthfilters/finalizers
       - firewallfilters/finalizers
       - jwtauthfilters/finalizers
+      - corsfilters/finalizers
     verbs: ["update"]
   - apiGroups: [""]
     resources: ["configmaps", "services", "serviceaccounts", "namespaces", "events"]

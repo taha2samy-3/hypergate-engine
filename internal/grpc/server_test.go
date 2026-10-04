@@ -11,6 +11,7 @@ import (
 
 	"github.com/taha2samy/hypergate/internal/config"
 	"github.com/taha2samy/hypergate/internal/engine"
+	"github.com/taha2samy/hypergate/internal/filters/cors"
 	"github.com/taha2samy/hypergate/internal/filters/deny"
 	"github.com/taha2samy/hypergate/internal/filters/header_modifier"
 	"github.com/taha2samy/hypergate/internal/memory"
@@ -214,4 +215,50 @@ func TestProcess_StreamKeepsSnapshotAcrossReload(t *testing.T) {
 	if !released {
 		t.Fatal("retired snapshot not cleaned up after last release")
 	}
+}
+
+// authAlwaysDenies stands in for an auth filter placed after CORS.
+type authAlwaysDenies struct{}
+
+func (authAlwaysDenies) Execute(ctx *engine.RequestContext) error {
+	ctx.Block(401, "unauthorized")
+	return nil
+}
+
+func TestProcess_CORSPreflightAndErrorResponses(t *testing.T) {
+	c, err := cors.NewFilter(cors.Config{AllowOrigins: []string{"https://app.example.com"}, AllowMethods: []string{"GET", "POST"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{Router: config.RouterConfig{DefaultChain: "c"}}
+	s := newTestServer(cfg, map[string]engine.Chain{"c": {c, authAlwaysDenies{}}})
+
+	preflight := reqHeaders("/api", true, "origin", "https://app.example.com", "access-control-request-method", "POST")
+	preflight.GetRequestHeaders().Headers.Headers[1].RawValue = []byte("OPTIONS")
+	out := run(t, s, preflight)
+	imm := out[0].GetImmediateResponse()
+	if imm == nil || imm.GetStatus().GetCode() != 204 {
+		t.Fatalf("preflight must be answered 204 before auth runs, got %v", out[0])
+	}
+	if !hasHeader(imm.GetHeaders(), "access-control-allow-methods", "GET, POST") {
+		t.Fatal("preflight response lacks allow-methods")
+	}
+
+	out = run(t, s, reqHeaders("/api", true, "origin", "https://app.example.com"))
+	imm = out[0].GetImmediateResponse()
+	if imm == nil || imm.GetStatus().GetCode() != 401 {
+		t.Fatalf("expected 401 from auth, got %v", out[0])
+	}
+	if !hasHeader(imm.GetHeaders(), "access-control-allow-origin", "https://app.example.com") {
+		t.Fatal("401 must carry CORS headers so the browser can read it")
+	}
+}
+
+func hasHeader(m *extprocv3.HeaderMutation, key, value string) bool {
+	for _, h := range m.GetSetHeaders() {
+		if h.GetHeader().GetKey() == key && string(h.GetHeader().GetRawValue()) == value {
+			return true
+		}
+	}
+	return false
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/taha2samy/hypergate/internal/engine"
 	"github.com/taha2samy/hypergate/internal/filters/api_key"
 	"github.com/taha2samy/hypergate/internal/filters/correlation_id"
+	"github.com/taha2samy/hypergate/internal/filters/cors"
 	"github.com/taha2samy/hypergate/internal/filters/deny"
 	"github.com/taha2samy/hypergate/internal/filters/external_auth"
 	"github.com/taha2samy/hypergate/internal/filters/firewall"
@@ -138,6 +139,13 @@ func CreateFilter(filterType string, rawOptions interface{}, lookup RedisLookup)
 			return nil, fmt.Errorf("failed to parse config for firewall: %w", err)
 		}
 		return firewall.NewFirewallFilter(cfg)
+
+	case "cors":
+		var cfg cors.Config
+		if err := yaml.Unmarshal(optsBytes, &cfg); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal config for cors: %w", err)
+		}
+		return cors.NewFilter(cfg)
 
 	case "jwt_auth":
 		var cfg jwt_auth.Config

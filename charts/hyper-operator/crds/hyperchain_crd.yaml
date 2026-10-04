@@ -53,6 +53,7 @@ spec:
                       - ExternalAuthFilter
                       - FirewallFilter
                       - JwtAuthFilter
+                      - CorsFilter
                     name:
                       type: string
           status:

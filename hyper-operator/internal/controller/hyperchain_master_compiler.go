@@ -45,6 +45,7 @@ type HyperChainMasterCompilerReconciler struct {
 // +kubebuilder:rbac:groups=hyper.io,resources=externalauthfilters,verbs=get;list;watch
 // +kubebuilder:rbac:groups=hyper.io,resources=firewallfilters,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=hyper.io,resources=jwtauthfilters,verbs=get;list;watch
+// +kubebuilder:rbac:groups=hyper.io,resources=corsfilters,verbs=get;list;watch
 // +kubebuilder:rbac:groups=hyper.io,resources=apikeyfilters/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 
@@ -144,6 +145,12 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 		return ctrl.Result{}, err
 	}
 
+	var corsList hyperv1alpha1.CorsFilterList
+	if err := r.List(ctx, &corsList); err != nil {
+		reqLogger.Error(err, "unable to list CorsFilters")
+		return ctrl.Result{}, err
+	}
+
 	// Sort routes by priority descending
 	routes := routeList.Items
 	sort.Slice(routes, func(i, j int) bool {
@@ -210,6 +217,11 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 	jwtMap := make(map[string]*hyperv1alpha1.JwtAuthFilter)
 	for i := range jwtList.Items {
 		jwtMap[jwtList.Items[i].Name] = &jwtList.Items[i]
+	}
+
+	corsMap := make(map[string]*hyperv1alpha1.CorsFilter)
+	for i := range corsList.Items {
+		corsMap[corsList.Items[i].Name] = &corsList.Items[i]
 	}
 
 	// Map HyperChain list and handle status bubbling
@@ -335,6 +347,15 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 					break
 				}
 				resolvedOptions = jwtAuthOptions(f)
+			case "CorsFilter":
+				filterType = "cors"
+				f, exists := corsMap[filterRef.Name]
+				if !exists {
+					failed = true
+					failMsg = fmt.Sprintf("Filter %s of Kind CorsFilter not found", filterRef.Name)
+					break
+				}
+				resolvedOptions = f.Spec
 			default:
 				failed = true
 				failMsg = fmt.Sprintf("Unknown filter Kind %s", filterRef.Kind)
@@ -587,6 +608,7 @@ func (r *HyperChainMasterCompilerReconciler) SetupWithManager(mgr ctrl.Manager) 
 		Watches(&hyperv1alpha1.ExternalAuthFilter{}, triggerFunc).
 		Watches(&hyperv1alpha1.FirewallFilter{}, triggerFunc).
 		Watches(&hyperv1alpha1.JwtAuthFilter{}, triggerFunc).
+		Watches(&hyperv1alpha1.CorsFilter{}, triggerFunc).
 		Complete(r)
 }
 

@@ -18,6 +18,7 @@ import (
 
 	hyperv1alpha1 "github.com/taha2samy/hypergate/hyper-operator/api/v1alpha1"
 	"github.com/taha2samy/hypergate/internal/config"
+	"github.com/taha2samy/hypergate/internal/filters"
 )
 
 func testScheme(t *testing.T) *runtime.Scheme {
@@ -233,5 +234,48 @@ func TestCompiler_CorrelationPropagateFalseReachesEngine(t *testing.T) {
 	}
 	if v, ok := cfg.Chains["c"][0].Options["propagate_to_downstream"]; !ok || v != false {
 		t.Fatalf("explicit false must be compiled, got %v (present=%v)", v, ok)
+	}
+}
+
+func TestCompiler_CorsFilterCompilesToWorkingEngineFilter(t *testing.T) {
+	scheme := testScheme(t)
+	hc := hyperConfig("main", "hyper-system", time.Now())
+	hc.Spec.DefaultChain = "web"
+	corsF := &hyperv1alpha1.CorsFilter{
+		ObjectMeta: metav1.ObjectMeta{Name: "browser"},
+		Spec: hyperv1alpha1.CorsFilterSpec{
+			AllowOrigins:     []string{"https://app.example.com"},
+			AllowMethods:     []string{"GET", "POST"},
+			AllowCredentials: true,
+			MaxAge:           600,
+		},
+	}
+	chain := &hyperv1alpha1.HyperChain{
+		ObjectMeta: metav1.ObjectMeta{Name: "web"},
+		Spec:       hyperv1alpha1.HyperChainSpec{Filters: []hyperv1alpha1.FilterReference{{Kind: "CorsFilter", Name: "browser"}}},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&hc, corsF, chain).
+		WithStatusSubresource(&hyperv1alpha1.HyperChain{}).Build()
+	r := &HyperChainMasterCompilerReconciler{Client: c, Scheme: scheme}
+	if _, err := r.Reconcile(context.Background(), ctrl.Request{}); err != nil {
+		t.Fatal(err)
+	}
+	var cm corev1.ConfigMap
+	if err := c.Get(context.Background(), client.ObjectKey{Namespace: "hyper-system", Name: engineConfigMapName}, &cm); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.ParseBytes([]byte(cm.Data["config.yaml"]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fc := cfg.Chains["web"][0]
+	if fc.Type != "cors" {
+		t.Fatalf("expected cors filter, got %q", fc.Type)
+	}
+	if _, err := filters.CreateFilter(fc.Type, fc.Options, nil); err != nil {
+		t.Fatalf("compiled options do not build an engine filter: %v", err)
+	}
+	if fc.Options["max_age"] != 600 || fc.Options["allow_credentials"] != true {
+		t.Fatalf("options not compiled with engine keys: %v", fc.Options)
 	}
 }

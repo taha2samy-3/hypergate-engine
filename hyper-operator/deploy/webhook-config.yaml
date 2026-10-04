@@ -139,3 +139,18 @@ webhooks:
         resources: ["jwtauthfilters"]
     admissionReviewVersions: ["v1"]
     sideEffects: None
+
+  - name: vcorsf.kb.io
+    clientConfig:
+      service:
+        name: hyper-operator
+        namespace: hyper-system
+        path: /validate-hyper-io-v1alpha1-corsfilter
+    failurePolicy: Fail
+    rules:
+      - apiGroups: ["hyper.io"]
+        apiVersions: ["v1alpha1"]
+        operations: ["DELETE"]
+        resources: ["corsfilters"]
+    admissionReviewVersions: ["v1"]
+    sideEffects: None

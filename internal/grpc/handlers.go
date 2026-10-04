@@ -68,7 +68,7 @@ func (s *Server) immediateResponse(stream extprocv3.ExternalProcessor_ProcessSer
 	if status == 0 {
 		status = http.StatusForbidden
 	}
-	mylogger.Info("Request blocked by filter chain, sending ImmediateResponse",
+	mylogger.Info("Answering request with ImmediateResponse",
 		zap.String("path", reqCtx.Path),
 		zap.Int32("status_code", status),
 		zap.Uint8("phase", uint8(reqCtx.Phase)),

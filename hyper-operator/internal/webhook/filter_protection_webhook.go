@@ -29,6 +29,7 @@ var _ admission.Validator[*hyperv1alpha1.ApiKeyFilter] = &FilterProtectionValida
 var _ admission.Validator[*hyperv1alpha1.ExternalAuthFilter] = &FilterProtectionValidator[*hyperv1alpha1.ExternalAuthFilter]{Kind: "ExternalAuthFilter"}
 var _ admission.Validator[*hyperv1alpha1.FirewallFilter] = &FilterProtectionValidator[*hyperv1alpha1.FirewallFilter]{Kind: "FirewallFilter"}
 var _ admission.Validator[*hyperv1alpha1.JwtAuthFilter] = &FilterProtectionValidator[*hyperv1alpha1.JwtAuthFilter]{Kind: "JwtAuthFilter"}
+var _ admission.Validator[*hyperv1alpha1.CorsFilter] = &FilterProtectionValidator[*hyperv1alpha1.CorsFilter]{Kind: "CorsFilter"}
 
 // ValidateCreate implements admission.Validator.
 func (v *FilterProtectionValidator[T]) ValidateCreate(ctx context.Context, obj T) (admission.Warnings, error) {
@@ -124,6 +125,13 @@ func SetupFiltersWebhookWithManager(mgr ctrl.Manager) error {
 	// Register validator for JwtAuthFilter
 	if err := ctrl.NewWebhookManagedBy(mgr, &hyperv1alpha1.JwtAuthFilter{}).
 		WithValidator(&FilterProtectionValidator[*hyperv1alpha1.JwtAuthFilter]{Client: c, Kind: "JwtAuthFilter"}).
+		Complete(); err != nil {
+		return err
+	}
+
+	// Register validator for CorsFilter
+	if err := ctrl.NewWebhookManagedBy(mgr, &hyperv1alpha1.CorsFilter{}).
+		WithValidator(&FilterProtectionValidator[*hyperv1alpha1.CorsFilter]{Client: c, Kind: "CorsFilter"}).
 		Complete(); err != nil {
 		return err
 	}
