@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="CORS">
+  <title>CORS</title>
+  <circle cx="10" cy="10" r="7"/>
+  <path d="M3 10h14"/>
+  <path d="M10 3c1.9 2 2.8 4.3 2.8 7s-.9 5-2.8 7c-1.9-2-2.8-4.3-2.8-7S8.1 5 10 3Z"/>
+  <path d="M15 18.5h6.5M19.5 16.5l2 2-2 2"/>
+</svg>

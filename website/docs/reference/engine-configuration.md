@@ -196,6 +196,7 @@ A map from chain name to an ordered list of filters. Each filter is:
 | `firewall` | [Firewall](/docs/filters/firewall) |
 | `deny` | [Deny](/docs/filters/deny) |
 | `header_modifier` | [Header modifier](/docs/filters/header-modifier) |
+| `cors` | [CORS](/docs/filters/cors) |
 | `correlation_id` | [Correlation ID](/docs/filters/correlation-id) |
 | `redis_metadata_enricher` | [Redis metadata enricher](/docs/filters/redis-metadata-enricher) |
 

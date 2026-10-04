@@ -21,6 +21,7 @@ All kinds belong to the API group `hyper.io`, version `v1alpha1`, and are **clus
 | [FirewallFilter](#firewallfilter) | `firewallfilters` | `fwf`, `firewall` | filter `firewall` and a sidecar |
 | [DenyFilter](#denyfilter) | `denyfilters` | `deny` | filter `deny` |
 | [HeaderModifierFilter](#headermodifierfilter) | `headermodifierfilters` | `hmf` | filter `header_modifier` |
+| [CorsFilter](#corsfilter) | `corsfilters` | `corsf` | filter `cors` |
 | [CorrelationIdFilter](#correlationidfilter) | `correlationidfilters` | `corridf` | filter `correlation_id` |
 | [RedisMetadataEnricherFilter](#redismetadataenricherfilter) | `redismetadataenricherfilters` | `rmef` | filter `redis_metadata_enricher` |
 
@@ -142,7 +143,7 @@ spec:
 | `filters[].kind` | enum, **required** | | Filter kind (see below). |
 | `filters[].name` | string, **required** | | `metadata.name` of the filter resource. |
 
-`kind` is one of the nine filter kinds: `RateLimitFilter`, `HeaderModifierFilter`, `DenyFilter`, `CorrelationIdFilter`, `RedisMetadataEnricherFilter`, `ApiKeyFilter`, `ExternalAuthFilter`, `FirewallFilter`, `JwtAuthFilter`.
+`kind` is one of the ten filter kinds: `RateLimitFilter`, `HeaderModifierFilter`, `DenyFilter`, `CorrelationIdFilter`, `RedisMetadataEnricherFilter`, `ApiKeyFilter`, `ExternalAuthFilter`, `FirewallFilter`, `JwtAuthFilter`, `CorsFilter`.
 
 :::note Upgrading from an older release
 Older CRD manifests listed only the first five kinds, and Helm never upgrades CRDs. If the API server rejects a chain with `Unsupported value`, re-apply `charts/hyper-operator/crds/`.
@@ -484,6 +485,36 @@ spec:
 | `remove` | list of string | empty | `remove` (shorthand for `upstream.remove`) |
 
 `status` is an empty object.
+
+## CorsFilter
+
+See [CORS](/docs/filters/cors).
+
+```yaml
+apiVersion: hyper.io/v1alpha1
+kind: CorsFilter
+metadata:
+  name: web-app
+spec:
+  allowOrigins: ["https://app.example.com"]
+  allowMethods: [GET, POST, PUT, DELETE]
+  allowHeaders: [Authorization, Content-Type]
+  allowCredentials: true
+  maxAge: 600
+```
+
+| Field | Type | Default | Engine option |
+| --- | --- | --- | --- |
+| `allowOrigins` | list of string | empty | `allow_origins` |
+| `allowOriginRegex` | list of string | empty | `allow_origin_regex` |
+| `allowMethods` | list of string | `GET, HEAD, POST` (engine default) | `allow_methods` |
+| `allowHeaders` | list of string | empty | `allow_headers` |
+| `exposeHeaders` | list of string | empty | `expose_headers` |
+| `allowCredentials` | boolean | `false` | `allow_credentials` |
+| `maxAge` | integer (seconds), minimum 0 | `0` | `max_age` |
+| `blockDisallowedOrigins` | boolean | `false` | `block_disallowed_origins` |
+
+Schema validation (CEL) requires `allowOrigins` or `allowOriginRegex`, and rejects `allowCredentials: true` together with `allowOrigins: ["*"]`. `status` is an empty object.
 
 ## CorrelationIdFilter
 

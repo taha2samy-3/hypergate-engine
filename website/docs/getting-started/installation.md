@@ -47,7 +47,7 @@ kubectl -n hyper-operator-system get pods
 kubectl get crds | grep hyper.io
 ```
 
-You should see 13 CRDs: `hyperconfigs`, `hyperredis`, `hyperchains`, `hyperroutes` and the nine filter kinds, all in the `hyper.io` group and all cluster-scoped.
+You should see 14 CRDs: `hyperconfigs`, `hyperredis`, `hyperchains`, `hyperroutes` and the ten filter kinds, all in the `hyper.io` group and all cluster-scoped.
 
 Nothing is deployed for the engine yet. The engine DaemonSet appears in the target namespace when you create a `HyperConfig`; continue with the [Kubernetes quickstart](./quickstart-kubernetes.md).
 

@@ -15,7 +15,7 @@ The JWT filter validates bearer tokens inside the engine: the signature, `exp`/`
 | CRD kind | `JwtAuthFilter` |
 | Engine filter type | `jwt_auth` |
 | Runs in phase | request headers |
-| Blocks with | `401` and a JSON body `{"error":"unauthorized","message":...}` |
+| Blocks with | `401`, a JSON body `{"error":"unauthorized","message":...}` and `WWW-Authenticate: Bearer` |
 | Fail mode | closed; `failOpen: true` only covers an unreachable introspection endpoint |
 
 ## Example: JWKS (RS256/ES256)
@@ -36,7 +36,9 @@ spec:
   stripToken: true
 ```
 
-The engine fetches the key set when the filter loads. If that first fetch fails, the filter does not compile and the config is rejected, so the previous policy keeps running. After that it refreshes every `jwksRefreshInterval` (default 5 minutes) and keeps the last good key set if a refresh fails. The algorithm is inferred from each key, and keys are matched by the token's `kid`.
+The engine fetches the key set when the filter loads, with a 10-second timeout. If that first fetch fails, the filter does not compile and the config is rejected, so the previous policy keeps running. After that it refreshes every `jwksRefreshInterval` (default 5 minutes) and keeps the last good key set if a refresh fails. The algorithm is inferred from each key, and keys are matched by the token's `kid`.
+
+**Key rotation:** when a token does not verify with the cached keys (for example it is signed with a new `kid` the identity provider just published), the engine fetches the key set again immediately and retries once. These on-demand refreshes happen at most once every 30 seconds, so invalid tokens cannot be used to hammer the JWKS endpoint.
 
 ## Example: shared HMAC secret
 
@@ -77,19 +79,36 @@ chains:
 
 | `source` | Where the token is read | Related option |
 | --- | --- | --- |
-| `header` (default) | `headerName` (default `authorization`); a leading `Bearer ` / `bearer ` is stripped | `headerName` |
-| `query` | query parameter | `queryParam` |
+| `header` (default) | `headerName` (default `authorization`); a leading `Bearer ` is stripped (scheme matched case-insensitively) | `headerName` |
+| `query` | query parameter (URL-decoded) | `queryParam` |
 | `cookie` | cookie in the `Cookie` header | `cookieName` |
 
 ## Validation flow
 
 1. No token → `401` `missing authentication token`.
-2. Validate locally with the HMAC secret if one is configured, otherwise with the JWKS key set.
+2. Validate locally with the HMAC secret if one is configured, otherwise with the JWKS key set. If both are configured, the secret is used and the JWKS is not consulted.
 3. If local validation fails:
    - without `introspectionEndpoint` → `401` `invalid token`;
-   - with `introspectionEndpoint`: `POST token=<token>` (form-encoded, with the optional `Authorization` from `introspectionAuthSecretRef`). The token is accepted only on `200` with `"active": true`, and the response fields then act as claims. Any other answer → `401` `token validation failed`.
+   - with `introspectionEndpoint`: `POST` with the form-encoded body `token=<token>`, plus the optional `Authorization` header from `introspectionAuthSecretRef`. The token is accepted only on `200` with `"active": true`. If `issuer` / `audience` are configured and the response contains `iss` / `aud`, they must match too. The response fields then act as claims. Any other answer → `401` `token validation failed`.
 4. `failOpen: true` applies only when the introspection endpoint **cannot give an answer**: a network error, a timeout or a `5xx`. The request then continues **without** claim headers. Invalid, expired, forged or inactive tokens are always rejected.
-5. On success each `claimMappings` entry sets its header from the claim, overwriting any client-supplied value. `stripToken` removes the token header before forwarding.
+5. On success each `claimMappings` entry sets its header from the claim.
+6. `stripToken` removes the token before forwarding: the header, the query parameter (the upstream `:path` is rewritten) or the single cookie, depending on `source`.
+
+### Claim headers
+
+Mapped headers are identity assertions your services rely on, so the filter **always removes the client's own values of every mapped header** first. A header can only come from a validated claim. A client cannot send `x-user-id: admin` and have it pass through when a claim is missing, or on the `failOpen` path.
+
+Claim names are case-sensitive (`tenantId` is not `tenantid`); header names are not. Values are rendered as follows:
+
+| Claim value | Header value |
+| --- | --- |
+| string | as-is |
+| number, boolean | `42`, `3.5`, `true` |
+| `exp`, `iat`, `nbf` | Unix seconds |
+| array | comma-separated, e.g. `admin,dev` |
+| object | compact JSON |
+
+Control characters (such as CR/LF) are removed, so a claim can never inject extra headers.
 
 ## Option reference
 
@@ -106,13 +125,13 @@ chains:
 | `algorithm` | `algorithm` | string | `HS256` with a secret, else `RS256` | Expected algorithm for the shared secret. |
 | `issuer` | `issuer` | string | not checked | Required `iss`. |
 | `audience` | `audience` | string | not checked | Required `aud`. |
-| `claimMappings` | `claim_mappings` | map | — | Claim name → upstream header. |
+| `claimMappings` | `claim_mappings` | map | — | Claim name (case-sensitive) → upstream header. Client values of these headers are always removed. |
 | `introspectionEndpoint` | `introspection_endpoint` | URL | — | RFC 7662 endpoint used when local validation fails. |
 | `introspectionAuthSecretRef` | `introspection_auth_header_file` | Secret ref / path | — | `Authorization` header value sent to the introspection endpoint. |
 | — | `introspection_auth_header` | string | — | Inline variant (engine only). |
 | `introspectionTimeout` | `introspection_timeout` | duration | `2s` | Timeout of the introspection call. |
 | `failOpen` | `fail_open` | bool | `false` | Allow requests (without claims) when introspection is unavailable. Never accepts invalid tokens. |
-| `stripToken` | `strip_token` | bool | `false` | Remove the token header before forwarding. |
+| `stripToken` | `strip_token` | bool | `false` | Remove the token (header, query parameter or cookie) before forwarding. |
 
 A filter must have at least one of `jwksEndpoint`, a local secret or `introspectionEndpoint`; otherwise it does not load.
 
