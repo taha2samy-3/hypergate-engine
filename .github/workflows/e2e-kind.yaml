@@ -1,0 +1,145 @@
+name: Kind E2E (identity)
+
+# End-to-end tests of workload identity and identity-aware routing on a kind
+# cluster created by the runner: operator leadership and the identity Service,
+# engine identity sync, routing by caller identity through Envoy Gateway, leader
+# failover timings, and scale. See test/e2e/kind/.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '**/*.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'Dockerfile'
+      - 'hyper-operator/**'
+      - 'charts/hyper-operator/**'
+      - 'proto/**'
+      - 'test/e2e/kind/**'
+      - '.github/workflows/e2e-kind.yaml'
+  push:
+    branches: [main]
+    paths:
+      - '**/*.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'Dockerfile'
+      - 'hyper-operator/**'
+      - 'charts/hyper-operator/**'
+      - 'proto/**'
+      - 'test/e2e/kind/**'
+      - '.github/workflows/e2e-kind.yaml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  KIND_CLUSTER: hypergate-e2e
+  OP_NS: hyper-operator-system
+  CERT_MANAGER_VERSION: v1.21.2
+  ENVOY_GATEWAY_VERSION: v1.9.2
+  ENGINE_IMAGE: ghcr.io/taha2samy-3/hyper-engine:e2e
+  OPERATOR_IMAGE: ghcr.io/taha2samy-3/hyper-operator:e2e
+
+jobs:
+  scale-simulated:
+    name: Identity scale (10k simulated pods)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Measure index memory, initial sync and change latency
+        env:
+          HYPERGATE_SCALE_TEST: "1"
+          HYPERGATE_SCALE_PODS: "10000"
+        run: go test -run TestScale_SimulatedPods -v -timeout 10m ./hyper-operator/internal/identity/
+
+  kind-e2e:
+    name: Identity and routing on kind
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build engine image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          tags: ${{ env.ENGINE_IMAGE }}
+          load: true
+          cache-from: type=gha,scope=e2e-engine
+          cache-to: type=gha,scope=e2e-engine,mode=max
+
+      - name: Build operator image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: hyper-operator/Dockerfile
+          tags: ${{ env.OPERATOR_IMAGE }}
+          load: true
+          cache-from: type=gha,scope=e2e-operator
+          cache-to: type=gha,scope=e2e-operator,mode=max
+
+      - name: Create kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: ${{ env.KIND_CLUSTER }}
+          config: test/e2e/kind/kind-config.yaml
+          wait: 120s
+
+      - name: Load images into kind
+        run: |
+          kind load docker-image "$ENGINE_IMAGE" --name "$KIND_CLUSTER"
+          kind load docker-image "$OPERATOR_IMAGE" --name "$KIND_CLUSTER"
+
+      - uses: azure/setup-helm@v4
+
+      - name: Install cert-manager
+        run: |
+          kubectl apply -f "https://github.com/cert-manager/cert-manager/releases/download/${CERT_MANAGER_VERSION}/cert-manager.yaml"
+          kubectl -n cert-manager wait --for=condition=Available deploy --all --timeout=180s
+
+      - name: Install metrics-server (operator memory measurement)
+        run: |
+          kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+          kubectl -n kube-system patch deploy metrics-server --type=json \
+            -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
+
+      - name: Install Envoy Gateway (includes the Gateway API CRDs)
+        run: |
+          helm install eg oci://docker.io/envoyproxy/gateway-helm --version "$ENVOY_GATEWAY_VERSION" \
+            -n envoy-gateway-system --create-namespace --wait --timeout 5m
+
+      - name: Install hyper-operator (identity cache and server enabled)
+        run: |
+          helm install hyper-operator charts/hyper-operator -n "$OP_NS" --create-namespace \
+            -f test/e2e/kind/operator-values.yaml --wait --timeout 5m
+
+      - name: Run end-to-end checks
+        run: test/e2e/kind/run.sh
+
+      - name: Export cluster logs
+        if: failure()
+        run: kind export logs ./kind-logs --name "$KIND_CLUSTER"
+
+      - name: Upload cluster logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kind-logs
+          path: ./kind-logs
+          retention-days: 7

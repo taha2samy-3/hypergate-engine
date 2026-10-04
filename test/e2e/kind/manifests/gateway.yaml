@@ -1,10 +1,27 @@
 # Envoy Gateway in front of the ledger. The HTTPRoute is written by the
 # "developer"; the operator only attaches the engine to the Gateway.
+# kind has no load balancer: run the Envoy Service as ClusterIP so the Gateway
+# gets an address and becomes Programmed.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata: {name: clusterip, namespace: envoy-gateway-system}
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyService:
+        type: ClusterIP
+---
 apiVersion: gateway.networking.k8s.io/v1
 kind: GatewayClass
 metadata: {name: eg}
 spec:
   controllerName: gateway.envoyproxy.io/gatewayclass-controller
+  parametersRef:
+    group: gateway.envoyproxy.io
+    kind: EnvoyProxy
+    name: clusterip
+    namespace: envoy-gateway-system
 ---
 apiVersion: v1
 kind: Namespace
