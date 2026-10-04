@@ -8,7 +8,7 @@ The routing documentation lives on the documentation site:
 ## Summary
 
 - The engine picks one filter chain per request, on the request headers, from `router.routes`. Routes are evaluated in order and the first match wins. With the operator, HyperRoutes are ordered by `spec.priority`, highest first.
-- A route's `matches` entries are alternatives (OR). Inside one entry every set field must hold (AND): `path_prefix` and `path_regex_pattern` test the raw `:path` including the query string; `headers` require an exact value, `"*"` for presence, or a `regex_pattern`. Write header names in lower case in engine YAML.
+- A route's `matches` entries are alternatives (OR). Inside one entry every set field must hold (AND): `path_prefix` and `path_regex_pattern` test the raw `:path` including the query string; `headers` require an exact value, `"*"` for presence, or a `regex_pattern`. Header names are matched case-insensitively.
 - No match: `router.default_chain` runs. No match and no default chain: the request passes without policy.
 - Fail closed: a route or default chain that points at a chain that is not loaded returns `503`, and so does a request arriving before any policy is loaded. A filter's internal error returns `500`.
 - The engine rejects configurations whose routes or default chain reference undefined chains, or whose regexes do not compile; on reload the previous policy keeps serving.

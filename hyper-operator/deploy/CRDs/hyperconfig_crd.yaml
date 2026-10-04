@@ -18,6 +18,19 @@ spec:
       storage: true
       subresources:
         status: {}
+      additionalPrinterColumns:
+      - name: Server Address
+        type: string
+        jsonPath: .spec.serverAddress
+      - name: Log Level
+        type: string
+        jsonPath: .spec.logLevel
+      - name: Target Namespace
+        type: string
+        jsonPath: .spec.targetNamespace
+      - name: State
+        type: string
+        jsonPath: .status.state
       schema:
         openAPIV3Schema:
           type: object

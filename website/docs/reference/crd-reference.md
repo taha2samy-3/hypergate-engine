@@ -38,7 +38,6 @@ metadata:
   name: default-engine
 spec:
   targetNamespace: hyper-system
-  redisServiceRef: shared-redis
   defaultChain: public
   logLevel: INFO
   trustedProxyHops: 1
@@ -76,7 +75,7 @@ The compiler always sets `server.health_address: ":9003"` so that the probes mat
 | `state` | string | `Ready` after the engine resources were reconciled, `Conflict` when an older HyperConfig manages the same `targetNamespace`. |
 | `message` | string | Explanation, for example `Engine resources reconciled in namespace hyper-system` or `targetNamespace "hyper-system" is already managed by HyperConfig "a"`. |
 
-Printer columns: `Server Address`, `Log Level`, `Redis Ref`, `State`.
+Printer columns: `Server Address`, `Log Level`, `Target Namespace`, `State`.
 
 ## HyperRedis
 
@@ -116,7 +115,7 @@ Populated only when `activeConnHealthCheck` is `true`. The operator then connect
 | `state` | enum `Connected`, `Error`, `Pending` | Result of the operator's last `PING`. |
 | `lastCheck` | timestamp | Time of the last check. |
 
-Printer columns: `State`, `Type`, `Last Check`.
+Printer columns: `Type`, `State`, `Last Check`.
 
 ## HyperChain
 
@@ -228,7 +227,7 @@ spec:
 | `dynamicCost.defaultFallbackCost` | integer (int64) | `1` | `dynamic_cost.default_fallback_cost` |
 | `dynamicCost.maxAllowedCost` | integer (int64) | unset (no cap) | `dynamic_cost.max_allowed_cost` |
 | `headerMappings` | map of string to string | empty | `header_mappings` |
-| `descriptors` | list | empty | `descriptors` |
+| `descriptors` | list, **required** | | `descriptors` |
 | `descriptors[].entries` | list, **required** | | `entries` |
 | `descriptors[].entries[].key` | string, **required** | | `key` |
 | `descriptors[].entries[].value` | string | empty (any value) | `value` |
@@ -278,7 +277,7 @@ spec:
 | `valueFormat` | enum `plain`, `hash`, `json` | `hash` | `value_format` | `hash` |
 | `delimiter` | string | `\|` | `delimiter` | `\|` for `plain` |
 | `statusCheck.enabled` | boolean | `false` | `status_check.enabled` | `false` |
-| `statusCheck.fieldName` | string | empty | `status_check.field_name` | |
+| `statusCheck.fieldName` | string | empty | `status_check.field_name` | Required when `statusCheck.enabled`; the status check needs `valueFormat` `hash` or `json`. |
 | `statusCheck.expectedValue` | string | empty | `status_check.expected_value` | |
 | `outputMappings[].targetHeader` | string, **required** | | `output_mappings[].target_header` | |
 | `outputMappings[].redisField` | string | empty | `output_mappings[].redis_field` | |
@@ -405,7 +404,7 @@ spec:
 | `rulesConfigMap` | string | empty | ConfigMap in the target namespace, mounted into the sidecar at `/etc/firewall/rules/`. |
 | `rulesSecretRef` | string | empty | Secret in the target namespace, mounted into the sidecar at `/etc/firewall/secrets/`. |
 
-The compiler sets `socket_path: /var/run/hypergate/fw-<name>.sock`. `status` is an empty object. Printer columns: `Image`, `InspectBody`, `MaxBodySizeKB`.
+The compiler sets `socket_path: /var/run/hypergate/fw-<name>.sock`. `status` is an empty object. Printer columns: `Protocol`, `Image`, `InspectBody`, `MaxBodySizeKB`.
 
 ### Sidecar container
 
@@ -537,8 +536,8 @@ spec:
 | `algorithm` | string: `uuidv4`, `uuidv7`, `xid`, `ulid` | unset (engine: `uuidv4`) | `algorithm` |
 | `mode` | string: `if_missing`, `overwrite` | unset (engine: `if_missing`) | `mode` |
 | `prefix` | string | empty | `prefix` |
-| `propagateToUpstream` | boolean | unset (engine: `true`) | `propagate_to_upstream` |
-| `propagateToDownstream` | boolean | unset (engine: `true`) | `propagate_to_downstream` |
+| `propagateToUpstream` | boolean | `true` | `propagate_to_upstream` |
+| `propagateToDownstream` | boolean | `true` | `propagate_to_downstream` |
 | `inputHeaderName` | string | unset (engine: `headerName`) | `input_header_name` |
 | `responseHeaderName` | string | unset (engine: `headerName`) | `response_header_name` |
 | `validationRegex` | string | empty | `validation_regex` |

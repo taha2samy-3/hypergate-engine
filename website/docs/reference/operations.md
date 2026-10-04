@@ -12,7 +12,7 @@ The engine serves two HTTP endpoints on `server.health_address` (default `:9003`
 
 | Path | `200` when | Otherwise |
 | --- | --- | --- |
-| `/healthz` | The process is running. | |
+| `/healthz` | The process is running. Served from the start, also while the initial policy is still being compiled. | |
 | `/readyz` | A policy has been loaded successfully **and** the gRPC listener is serving. | `503 not ready` |
 
 `/readyz` stays `200` when a later reload is rejected, because the previous policy is still serving. On `SIGTERM` or `SIGINT` the engine marks itself not ready, stops accepting new streams, waits for in-flight streams to finish (`GracefulStop`), closes filters and Redis clients, and exits.
@@ -24,7 +24,7 @@ The operator configures the engine container with:
 | Readiness | `/readyz` on port 9003 | every 5 s, 3 failures |
 | Liveness | `/healthz` on port 9003 | after 10 s, every 10 s, 3 failures |
 
-Redis health checks (`active_conn_health_check`) only log state changes; they do not affect `/readyz`. At start-up, however, the engine does not become ready until every configured Redis service has answered `PING` (see `startup_max_elapsed_time`).
+Redis health checks (`active_conn_health_check`) only log state changes; they do not affect `/readyz`. At start-up, however, the engine does not become ready until every configured Redis service has answered `PING` (see `startup_max_elapsed_time`). The health server starts before that wait, so the liveness probe keeps passing and the pod is not restarted while Redis comes up.
 
 ## Profiling
 
@@ -51,7 +51,7 @@ Logs go to `telemetry.logging.output_path` (default `stdout`) in `console` or `j
 | `Compiled filter chain` | INFO | A chain was built (at start-up and on every reload). |
 | `Policy reloaded successfully` | INFO | A reload was published. |
 | `Config reload rejected, keeping previous policy` | ERROR | A reload failed; the error field says why. |
-| `Request blocked by filter chain, sending ImmediateResponse` | INFO | A filter ended a request; includes `status_code` and `phase`. |
+| `Answering request with ImmediateResponse` | INFO | The engine ended a request itself (a filter block or a CORS preflight); includes `status_code` and `phase`. |
 | `Filter execution failed with internal error` | ERROR | A filter errored; the request received `500`. |
 | `Route targets a chain that is not loaded, rejecting request` | ERROR | Fail-closed `503`. |
 | `Request body inspection was required but Envoy never sent the body` | ERROR | Envoy is missing `allow_mode_override: true`; the response was replaced with `500`. |
@@ -99,9 +99,9 @@ Configuration changes do not need a rollout; they are hot-reloaded. Changing `se
 
 ```bash
 kubectl get hyperconfigs
-# NAME        SERVER ADDRESS   LOG LEVEL   REDIS REF      STATE
-# edge        0.0.0.0:9001     INFO        shared-redis   Ready
-# edge-copy   0.0.0.0:9001     DEBUG       shared-redis   Conflict
+# NAME        SERVER ADDRESS   LOG LEVEL   TARGET NAMESPACE   STATE      AGE
+# edge        0.0.0.0:9001     INFO        hyper-system       Ready      3d
+# edge-copy   0.0.0.0:9001     DEBUG       hyper-system       Conflict   5m
 ```
 
 Two HyperConfigs have the same `targetNamespace`. The oldest one owns the namespace; the other is not reconciled and does not contribute a ConfigMap. `status.message` names the owner. Delete the duplicate or give it a different `targetNamespace`.
@@ -110,15 +110,15 @@ Two HyperConfigs have the same `targetNamespace`. The oldest one owns the namesp
 
 ```bash
 kubectl get hyperchains
-# NAME         STATE      MESSAGE
-# public-api   Degraded   Filter api-limit of Kind RateLimitFilter not found
+# NAME         STATE      MESSAGE                                              AGE
+# public-api   Degraded   Filter api-limit of Kind RateLimitFilter not found   2m
 ```
 
 The chain references a filter that does not exist (or has an unknown kind). The operator compiles it into a chain that answers every request with `503 Service Unavailable`, so its routes fail closed instead of losing their policy. Create the missing filter or fix the reference; the chain becomes `Ready` on the next reconcile.
 
 ### A HyperChain is rejected with `Unsupported value`
 
-The HyperChain CRD installed in the cluster is older than the operator and does not list the filter kind in `spec.filters[].kind`. Helm installs CRDs only on first install and never upgrades them. Re-apply them: `kubectl apply -f charts/hyper-operator/crds/`.
+The HyperChain CRD installed in the cluster is older than the operator and does not list the filter kind in `spec.filters[].kind`. Helm installs CRDs only on first install and never upgrades them. Re-apply them: `kubectl apply --server-side -f charts/hyper-operator/crds/`.
 
 ### Every request on a route returns 503
 
@@ -133,12 +133,12 @@ Look for `Filter execution failed with internal error` in the engine log. Typica
 
 - Search the engine log for `Config reload rejected, keeping previous policy`; the error explains which route, chain or filter failed.
 - `K8S` provider: make sure the ConfigMap key is `config.yaml` and the engine's ServiceAccount can `get` and `watch` it. A rejected ConfigMap version is not retried until the ConfigMap changes.
-- A reload that adds or changes a Redis service waits until that service answers `PING`. With the default `startup_max_elapsed_time: 0s` it can wait indefinitely and hold later reloads behind it.
+- A reload that adds or changes a Redis service waits until that service answers `PING`. With the default `startup_max_elapsed_time: 0s` a reload waits at most 30 s, then is rejected and the previous policy keeps serving.
 - Settings under `server` (except `client_ip`) and `telemetry` need a restart.
 
 ### Engine pods are never ready
 
-The engine connects to every configured Redis service before it starts serving. Check the log for `Redis connection attempt failed; will retry` and verify the HyperRedis `url`. A `jwt_auth` filter whose JWKS endpoint is unreachable at start-up makes the engine exit instead; the pod then restarts.
+The engine compiles its policy, which includes connecting to every configured Redis service and fetching JWKS, before `/readyz` succeeds. Meanwhile `/healthz` answers, so the pod stays up and simply not ready. Check the log for `Redis connection attempt failed; will retry` and verify the HyperRedis `url`. A `jwt_auth` filter whose JWKS endpoint is unreachable at start-up makes the engine exit instead; the pod then restarts.
 
 ### Engine pods stay in `ContainerCreating`
 

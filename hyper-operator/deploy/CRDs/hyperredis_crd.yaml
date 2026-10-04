@@ -18,6 +18,16 @@ spec:
       storage: true
       subresources:
         status: {}
+      additionalPrinterColumns:
+      - name: Type
+        type: string
+        jsonPath: .spec.type
+      - name: State
+        type: string
+        jsonPath: .status.state
+      - name: Last Check
+        type: date
+        jsonPath: .status.lastCheck
       schema:
         openAPIV3Schema:
           type: object

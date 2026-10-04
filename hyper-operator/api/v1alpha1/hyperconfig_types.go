@@ -91,7 +91,7 @@ type HyperConfigStatus struct {
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:printcolumn:name="Server Address",type="string",JSONPath=".spec.serverAddress"
 // +kubebuilder:printcolumn:name="Log Level",type="string",JSONPath=".spec.logLevel"
-// +kubebuilder:printcolumn:name="Redis Ref",type="string",JSONPath=".spec.redisServiceRef"
+// +kubebuilder:printcolumn:name="Target Namespace",type="string",JSONPath=".spec.targetNamespace"
 // +kubebuilder:printcolumn:name="State",type="string",JSONPath=".status.state"
 
 // HyperConfig is the Schema for the hyperconfigs API

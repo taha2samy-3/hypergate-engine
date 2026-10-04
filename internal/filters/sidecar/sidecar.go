@@ -38,13 +38,14 @@ func ForwardAll(list []string) bool {
 }
 
 // SelectHeaders returns the request headers to send to a sidecar, reflecting
-// changes made by earlier filters in the chain. Pseudo-headers (":path", ...) are
-// never returned; use SetForwardedRequest to convey them over HTTP.
+// changes made by earlier filters in the chain. Pseudo-headers (":path", ...) and
+// hop-by-hop headers are never returned; use SetForwardedRequest to convey the
+// original request over HTTP.
 func SelectHeaders(ctx *engine.RequestContext, list []string) map[string]string {
 	out := make(map[string]string, len(ctx.Headers))
 	add := func(k string) {
 		k = strings.ToLower(k)
-		if strings.HasPrefix(k, ":") {
+		if strings.HasPrefix(k, ":") || hopByHop[k] {
 			return
 		}
 		if v := ctx.GetHeader(k); v != "" {

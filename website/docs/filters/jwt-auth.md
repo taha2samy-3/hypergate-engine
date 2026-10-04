@@ -86,7 +86,7 @@ chains:
 ## Validation flow
 
 1. No token → `401` `missing authentication token`.
-2. Validate locally with the HMAC secret if one is configured, otherwise with the JWKS key set. If both are configured, the secret is used and the JWKS is not consulted.
+2. Validate locally with the HMAC secret if one is configured, otherwise with the JWKS key set. If both are configured, the secret is used and the JWKS is not consulted for validation; the JWKS is still fetched when the filter loads, and a failed fetch rejects the configuration.
 3. If local validation fails:
    - without `introspectionEndpoint` → `401` `invalid token`;
    - with `introspectionEndpoint`: `POST` with the form-encoded body `token=<token>`, plus the optional `Authorization` header from `introspectionAuthSecretRef`. The token is accepted only on `200` with `"active": true`. If `issuer` / `audience` are configured and the response contains `iss` / `aud`, they must match too. The response fields then act as claims. Any other answer → `401` `token validation failed`.

@@ -37,7 +37,6 @@ kind: HyperConfig
 metadata:
   name: default-engine
 spec:
-  redisServiceRef: shared-redis
   trustedProxyHops: 1
 ```
 

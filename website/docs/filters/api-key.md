@@ -88,9 +88,9 @@ chains:
 
 | `valueFormat` | Redis type | How `outputMappings` read it | Status field |
 | --- | --- | --- | --- |
-| `hash` (default) | Hash, read with `HMGET` | `redisField` names a hash field | `statusCheck.fieldName` is a hash field |
+| `hash` (default) | Hash, read with `HMGET` (or `EXISTS` when no `redisField` and no status check are configured); a hash whose mapped fields are all empty counts as an unknown key | `redisField` names a hash field | `statusCheck.fieldName` is a hash field |
 | `json` | String containing JSON, read with `GET` | `jsonPath` is a [gjson path](https://github.com/tidwall/gjson/blob/master/SYNTAX.md) such as `owner.tenant` | `statusCheck.fieldName` is a gjson path |
-| `plain` | String split by `delimiter` (default `|`), read with `GET` | mappings are filled **by position**: the first mapping gets the first part, and so on | not supported |
+| `plain` | String split by `delimiter` (default `|`), read with `GET` | mappings are filled **by position**: the first mapping gets the first part, and so on | not supported: `statusCheck.enabled` with `plain` is rejected when the config loads |
 
 ### Local cache
 
@@ -121,7 +121,7 @@ A mapping only overwrites the client's header when the stored record has a value
 | `valueFormat` | `value_format` | enum | `hash` | `hash`, `json` or `plain`. |
 | `delimiter` | `delimiter` | string | `|` | Separator for `plain`. |
 | `statusCheck.enabled` | `status_check.enabled` | bool | `false` | Reject keys whose status field differs from `expectedValue`. |
-| `statusCheck.fieldName` | `status_check.field_name` | string | — | Hash field or JSON path holding the status. |
+| `statusCheck.fieldName` | `status_check.field_name` | string | — | Hash field or JSON path holding the status. Required when `statusCheck.enabled`. |
 | `statusCheck.expectedValue` | `status_check.expected_value` | string | — | The only accepted status. |
 | `outputMappings[].targetHeader` | `output_mappings[].target_header` | string | required | Upstream header to set. |
 | `outputMappings[].redisField` | `output_mappings[].redis_field` | string | — | Source field for `hash`. |

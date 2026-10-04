@@ -90,7 +90,7 @@ With `operator.enableWebhooks: true` the operator validates:
 
 The webhooks use `failurePolicy: Fail`, so the operator must be running for these operations to succeed.
 
-Without cert-manager, either set `certManager.enabled=false` and provide the `webhook-server-cert` Secret (keys `tls.crt` and `tls.key`, valid for `<release>.<namespace>.svc`) plus the CA bundle in the `ValidatingWebhookConfiguration` yourself, or turn the webhooks off with `operator.enableWebhooks=false`. Without webhooks, a HyperChain that references a missing filter is still accepted by the API server; the operator then marks it `Degraded` and compiles it to a chain that rejects requests with `503` (see [Failure modes](../concepts/failure-modes.md)).
+Without cert-manager, either set `certManager.enabled=false` and provide the `webhook-server-cert` Secret (keys `tls.crt` and `tls.key`, valid for `<webhook Service name>.<namespace>.svc`, i.e. the chart fullname such as `hyper-operator.hyper-operator-system.svc`) plus the CA bundle in the `ValidatingWebhookConfiguration` yourself, or turn the webhooks off with `operator.enableWebhooks=false`. Without webhooks, a HyperChain that references a missing filter is still accepted by the API server; the operator then marks it `Degraded` and compiles it to a chain that rejects requests with `503` (see [Failure modes](../concepts/failure-modes.md)).
 
 ## Upgrading the CRDs
 
@@ -119,7 +119,7 @@ The file you pass is the engine configuration described in [Engine configuration
 | `workload.kind` | `DaemonSet` | `DaemonSet` or `Deployment`. |
 | `replicaCount` | `1` | Replicas when `workload.kind` is `Deployment`. |
 | `image.repository` / `image.tag` | `ghcr.io/taha2samy-3/hyper-engine` / chart `appVersion` | Engine image. |
-| `engine.configProvider` | `K8S` | `K8S`, `FILE` or `URL`. With `K8S` the chart also creates a Role that can `get` and `watch` the ConfigMap. |
+| `engine.configProvider` | `K8S` | `K8S`, `FILE` or `URL`. With `K8S` (and `serviceAccount.create`) the chart also creates a Role that can `get` and `watch` the ConfigMap. `FILE` and `URL` need you to supply the file (`extraVolumes`/`extraVolumeMounts`, `CONFIG_FILE_PATH`) or the URL (`extraEnv` with `CONFIG_URL`). |
 | `engine.configMapName` | `hyper-engine-config` | ConfigMap read with the `K8S` provider (key `config.yaml`). |
 | `initialConfig.create` | `true` | Create the ConfigMap from `initialConfig.content`. It carries `helm.sh/resource-policy: keep`. |
 | `initialConfig.content` | a minimal config with an empty `public` chain | Engine YAML. |

@@ -44,7 +44,6 @@ certManager:
   enabled: true
   issuerName: "hyper-selfsigned-issuer"
   certificateName: "hyper-operator-cert"
-  secretName: "webhook-server-cert"
   duration: "8760h"   # 1 year
   renewBefore: "360h" # 15 days
 

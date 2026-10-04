@@ -17,7 +17,7 @@ Envoy opens one ext_proc gRPC stream per HTTP request and sends one message per 
 | 1 | Request headers | Always (with the default `processing_mode`). | Resolves the client IP, selects the chain, runs the filters that handle this phase. May ask Envoy for the request body. |
 | 2 | Request body | `request_body_mode` is not `NONE`, or a filter requested it through a mode override. | Runs filters that inspect the body (the firewall with `inspect_body`). |
 | 3 | Request trailers | `request_trailer_mode: SEND`. | No built-in filter uses this phase; it is passed through. |
-| 4 | Response headers | `response_header_mode: SEND` (the Envoy default). | Applies response headers queued by earlier filters, runs filters with response conditions, enforces fail-closed checks. |
+| 4 | Response headers | `response_header_mode: SEND` (the Envoy default). | Applies response headers queued by earlier filters, runs filters with response conditions, merges the CORS `Vary` header, enforces fail-closed checks. |
 | 5 | Response body | `response_body_mode` is not `NONE`. | No built-in filter uses this phase; it is passed through. |
 | 6 | Response trailers | `response_trailer_mode: SEND`. | Applies trailer mutations only. |
 
@@ -31,6 +31,7 @@ The chain is selected once, on the first message of the stream, and reused for e
 | `deny` without response conditions | Request headers |
 | `deny` with `response_headers` or `not_response_headers` | Response headers |
 | `firewall` | Request headers; with `inspect_body`, the request body instead when the request has one |
+| `cors` | Request headers (decision; preflights answered with an immediate `204`/`403`); response headers (merges `Vary`) |
 
 Filters run in the order they are listed in the chain. A filter sees the effect of earlier filters in the same chain: a header set by `header_modifier` or injected by `api_key`, `jwt_auth` or `redis_metadata_enricher` is visible to later filters, and a header removed earlier reads as absent. This is how an enricher can feed a rate limiter (`header_mappings`), or a header modifier can supply a rate-limit cost.
 
@@ -39,7 +40,7 @@ Filters run in the order they are listed in the chain. A filter sees the effect 
 Header changes are collected while the chain runs and sent to Envoy in the response to the current message:
 
 - **Upstream request headers** (set or remove) are sent with the request-headers response. Setting a header replaces any existing value (`OVERWRITE_IF_EXISTS_OR_ADD`). Because Envoy holds the request headers while it buffers the body, header changes made during the body phase (for example by a firewall with `inspect_body`) are sent with the request-body response and applied too.
-- **`:path`**: the API key filter rewrites `:path` when it strips a key from the query string. Changing only the query does not change Envoy's route selection, which has already happened.
+- **`:path`**: the API key filter (`hide_credentials`) and the JWT filter (`strip_token` with `source: query`) rewrite `:path` when they strip a credential from the query string. Changing only the query does not change Envoy's route selection, which has already happened.
 - **Client-facing response headers** (rate-limit headers, a correlation ID sent downstream, `header_modifier` `downstream` rules) are recorded during the request phase and applied when the response headers arrive. `downstream.remove` also removes headers that the upstream set.
 
 Client-facing response headers therefore require Envoy to send response headers to the engine (`response_header_mode: SEND`, the default).

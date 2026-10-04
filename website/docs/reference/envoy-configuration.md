@@ -48,7 +48,7 @@ Place it before `envoy.filters.http.router` and after any filter whose effect Hy
 | `allowed_override_modes` | unset | If you restrict overrides, allow the mode the engine sends: headers `SEND`, request body `BUFFERED`, response body `NONE`, trailers `SKIP`. |
 | `request_attributes` | `["source.address"]` | Sends Envoy's downstream peer address. The engine uses it to resolve the client IP instead of trusting `X-Forwarded-For`. See [Client IP](../concepts/client-ip.md). |
 | `message_timeout` | above the slowest filter | Deadline for each ext_proc message. Envoy's default is 200 ms. The sidecar filters default to a `2s` timeout and JWT introspection to `2s`, and a new Redis connection can take up to its dial `timeout`. Either lower those timeouts or raise `message_timeout`. |
-| `mutation_rules` | unset | By default Envoy lets an external processor change any header except `host`, `:authority`, `:scheme`, `:method` and `x-envoy-*`. The API key filter rewrites `:path` to strip a key from the query string, so do not set `disallow_system: true` if you rely on that. |
+| `mutation_rules` | unset | By default Envoy lets an external processor change any header except `host`, `:authority`, `:scheme`, `:method` and `x-envoy-*`. The API key filter (`hide_credentials`) and the JWT filter (`strip_token` with `source: query`) rewrite `:path` to strip a credential from the query string, so do not set `disallow_system: true` if you rely on that. |
 
 A buffered request body is subject to Envoy's buffer limits; bodies above them are rejected by Envoy before the engine sees them.
 
@@ -56,7 +56,7 @@ Header mutations from the engine do not make Envoy re-select the route, because 
 
 ## Complete standalone example
 
-This is `tests/envoy.yaml` from the repository with the client IP attribute, `use_remote_address` and a message timeout added.
+This is `tests/envoy.yaml` from the repository with the client IP attribute, `use_remote_address` and a message timeout added (the access log and `always_set_request_id_in_response` are omitted).
 
 ```yaml title="envoy.yaml"
 static_resources:

@@ -91,7 +91,7 @@ metadata:
 spec:
   headerName: x-request-id
   algorithm: uuidv7
-  mode: if_missing
+  mode: overwrite        # Envoy already sets x-request-id; replace it with a UUIDv7
 ---
 apiVersion: hyper.io/v1alpha1
 kind: RateLimitFilter
@@ -212,8 +212,8 @@ kubectl -n hyper-system get daemonset,service,configmap
 
 Expected state:
 
-- `HyperConfig default-engine` shows `State: Ready`.
-- Both HyperChains show `State: Ready` and `Message: Chain successfully compiled`.
+- `kubectl get hyperconfigs` shows `default-engine` with `STATE` `Ready`.
+- `kubectl get hyperchains` shows both chains with `STATE` `Ready` and `MESSAGE` `Chain successfully compiled`.
 - `hyper-system` contains the `hyper-engine` DaemonSet, the `hyper-engine-svc` Service (gRPC on port 9001) and the `hyper-engine-config` ConfigMap.
 
 Inspect the compiled engine configuration:

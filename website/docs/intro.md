@@ -47,7 +47,7 @@ Platform behaviour that applies to every chain:
 
 - **Routing with a fail-closed default.** Routes are matched in order. A route or default chain that points at a chain that is not loaded returns `503`; an internal filter error returns `500`. See [Routing](./concepts/routing.md) and [Failure modes](./concepts/failure-modes.md).
 - **Transactional hot reload.** A new configuration is compiled completely before it is published. If anything fails, the previous policy keeps serving. In-flight requests finish on the policy they started with. See [Hot reload](./concepts/hot-reload.md).
-- **Trustworthy client IP.** The client address comes from Envoy's peer address and a configured number of trusted proxy hops, never from a raw `X-Forwarded-For` value. See [Client IP](./concepts/client-ip.md).
+- **Trustworthy client IP.** The client address comes from Envoy's peer address and a configured number of trusted proxy hops, never from client-written `X-Forwarded-For` entries, provided Envoy sends `source.address` (or appends the peer with `use_remote_address`). See [Client IP](./concepts/client-ip.md).
 - **Sidecars over Unix domain sockets.** Authorization and firewall sidecars run inside the engine pod and are reached through a shared socket directory, without a Service or network hop. See [Architecture](./concepts/architecture.md).
 - **Operational endpoints.** `/healthz` and `/readyz` for probes, optional `pprof`, structured logs. See [Operations](./reference/operations.md).
 

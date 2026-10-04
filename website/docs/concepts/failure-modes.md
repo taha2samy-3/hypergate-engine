@@ -20,7 +20,7 @@ Hypergate fails closed by default: when it cannot make a decision, the request i
 | A filter needed the request body but Envoy never sent it | Response replaced with `500 Internal Server Error` (the upstream has already been called) | Fix Envoy: `allow_mode_override: true` or `request_body_mode: BUFFERED` |
 | Invalid configuration at start-up | Engine exits; the pod restarts | No |
 | Invalid configuration on reload | Rejected and logged; the previous policy keeps serving | No |
-| Reload adds a Redis service that is unreachable | Reload waits for it (forever with the default `startup_max_elapsed_time: 0s`), then is rejected if the deadline passes; the previous policy keeps serving | `startup_max_elapsed_time` |
+| Reload adds a Redis service that is unreachable | Reload waits for it (up to 30 s with the default `startup_max_elapsed_time: 0s`, otherwise the configured limit), then is rejected; the previous policy keeps serving | `startup_max_elapsed_time` |
 
 ### Operator
 
@@ -38,18 +38,19 @@ Hypergate fails closed by default: when it cannot make a decision, the request i
 | --- | --- | --- | --- | --- |
 | `embedded_rate_limiter` | Redis | `500` | Not applicable. Over limit: `429 Too Many Requests` | `fail_open: true` on a descriptor skips that descriptor when Redis fails. `shadow_mode: true` never blocks for being over the limit (a Redis error still returns `500` unless `fail_open` is set). |
 | `api_key` | Redis | `500` | Missing or unknown key: `401`; status check mismatch: `403` | None |
-| `jwt_auth` | JWKS endpoint, introspection endpoint | JWKS unavailable when the filter is compiled: configuration rejected. Background refresh failure: the last good key set is kept. Introspection failure: `401` | Missing token: `401`. Invalid token: `401` | `fail_open: true` lets the request through whenever validation fails, including invalid and expired tokens. A missing token is still rejected. |
+| `jwt_auth` | JWKS endpoint, introspection endpoint | JWKS unavailable when the filter is compiled: configuration rejected. Background refresh failure: the last good key set is kept. Introspection failure: `401` | Missing token: `401`. Invalid token: `401` | `fail_open: true` lets the request through (without claim headers) only when the introspection endpoint is unreachable, times out or answers `5xx`. Missing, invalid, expired or inactive tokens are always rejected. |
 | `external_auth` | Sidecar over UDS | `500` | The sidecar's status (gRPC deny without a status: `403`) | None |
 | `firewall` | Sidecar over UDS | `500` | The sidecar's status, or `403` for a gRPC immediate response without a status | None |
 | `redis_metadata_enricher` | Redis | **Fails open**: the request continues without the enrichment headers | Key not found: no headers are added | Always fail-open |
 | `deny` | None | Not applicable | Configured status, default `403` | Not applicable |
 | `header_modifier` | None | Not applicable | Not applicable | Not applicable |
+| `cors` | None | Not applicable | Disallowed origin: preflight `403`; actual request forwarded without CORS headers, or `403` with `block_disallowed_origins` | Not applicable |
 | `correlation_id` | None | Not applicable | Invalid incoming ID (with `validation_regex`): replaced by a new one | Not applicable |
 
 Notes:
 
 - The rate limiter and API key filter keep per-instance caches. A key that was just revoked in Redis can still be accepted for up to 30 seconds by an engine instance that cached it; a key that is over its rate limit is rejected locally until its window resets, without asking Redis.
-- `jwt_auth` with `fail_open: true` removes authentication for malformed or forged tokens as well. Use it only where the upstream enforces authentication itself.
+- `jwt_auth` with `fail_open: true` lets requests through **without identity** while the introspection endpoint is down; malformed, forged or expired tokens are still rejected. Mapped claim headers are removed on that path, so upstreams see no identity and must treat such requests as anonymous.
 - The enricher being fail-open matters when a later filter depends on its headers. For example a rate limiter keyed on an enriched tier header sees the header missing and uses the value `default` (or the descriptor's fallback entry) during a Redis outage.
 
 ## Choosing Envoy's failure mode

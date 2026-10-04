@@ -100,7 +100,7 @@ Headers are read *after* the effect of earlier filters in the chain. For example
 Keys and configured values are lower-cased when the filter loads. Runtime values are compared as they arrive, so a descriptor with `value: premium` does not match a header value `Premium`. Normalise such values upstream (for example with the enricher) or configure them in lower case.
 :::
 
-Descriptors that use the **same set of keys** form one *dimension* (above, `user`+`plan` is one dimension and `client_ip` another). Within a dimension, the most specific descriptor that matches wins and the rest are skipped. Specific means more entries first, then more entries with explicit values. Every dimension is evaluated, and the request is rejected if **any** matching descriptor is over its limit. In the example, a premium user is counted against the 600/minute descriptor and the 1000/minute IP descriptor, but not the 60/minute one.
+Descriptors that use the **same keys in the same order** form one *dimension* (above, `user`+`plan` is one dimension and `client_ip` another). Within a dimension, the most specific descriptor that matches wins and the rest are skipped. Specific means more entries first, then more entries with explicit values. Every dimension is evaluated, and the request is rejected if **any** matching descriptor is over its limit. In the example, a premium user is counted against the 600/minute descriptor and the 1000/minute IP descriptor, but not the 60/minute one.
 
 ## Algorithms
 

@@ -18,6 +18,13 @@ spec:
       storage: true
       subresources:
         status: {}
+      additionalPrinterColumns:
+      - name: Priority
+        type: integer
+        jsonPath: .spec.priority
+      - name: Target Policy
+        type: string
+        jsonPath: .spec.targetPolicy
       schema:
         openAPIV3Schema:
           type: object

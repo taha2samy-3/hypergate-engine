@@ -44,7 +44,7 @@ router:
   - `"*"` (plain or as `exact`) only requires that the header is present;
   - `regex_pattern: <re>` requires the value to match the expression;
   - `exact` and `regex_pattern` may both be set, and both must hold.
-- Header names must be written in **lower case** in the engine configuration: the engine lower-cases incoming header names but compares route header names as written. (The operator lower-cases HyperRoute header names for you.)
+- Header names are case-insensitive: the engine lower-cases both incoming header names and route header names (the operator does the same for HyperRoutes). Header values are compared exactly.
 - Repeated request headers are joined with `, ` before matching (cookies with `; `).
 - An entry with no fields matches every request.
 

@@ -80,14 +80,14 @@ Requests without an `Origin` header (server-to-server calls, curl) are not affec
 
 | Origin | Response (from the engine; nothing is forwarded upstream) |
 | --- | --- |
-| allowed | `204` with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods`, `Access-Control-Allow-Headers` (if configured), `Access-Control-Max-Age` (if `maxAge > 0`), `Access-Control-Allow-Credentials` (if enabled) and `Vary: Origin` |
+| allowed | `204` with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods`, `Access-Control-Allow-Headers` (if configured), `Access-Control-Max-Age` (if `maxAge > 0`), `Access-Control-Allow-Credentials` (if enabled) and `Vary: Origin` (unless `allowOrigins` is `"*"`) |
 | not allowed | `403 CORS origin not allowed`, without CORS headers |
 
 The requested method and headers are not validated by the engine: the browser compares them with the returned lists and refuses to send the request if they are not covered. Use `"*"` in `allowMethods` / `allowHeaders` to echo whatever the browser asked for.
 
 **Actual request**: any other request with an `Origin` header:
 
-- **Allowed origin**: the request continues through the chain. The response (from the upstream or from a later filter) gets `Access-Control-Allow-Origin`, `Access-Control-Expose-Headers`, `Access-Control-Allow-Credentials` and `Vary`. An upstream `Vary` value is kept and `Origin` is added to it.
+- **Allowed origin**: the request continues through the chain. The response (from the upstream or from a later filter) gets `Access-Control-Allow-Origin`, plus `Access-Control-Expose-Headers` (if configured), `Access-Control-Allow-Credentials` (if enabled) and `Vary: Origin` (unless `"*"`). An upstream `Vary` value is kept and `Origin` is added to it.
 - **Disallowed origin**: by default the request is forwarded without CORS headers, so the browser hides the response from the page. With `blockDisallowedOrigins: true` the engine answers `403` instead, so the upstream never handles requests from foreign origins.
 
 **Which origin is returned**:

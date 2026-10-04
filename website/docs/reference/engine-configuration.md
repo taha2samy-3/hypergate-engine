@@ -106,7 +106,7 @@ Unknown keys are ignored.
 | `max_concurrent_streams` | uint32 | `10000` (when `0`) | No | Maximum concurrent gRPC streams per connection from Envoy. Each HTTP request is one stream. |
 | `pool_prewarm_size` | int | `5000` (when `<= 0`) | No | Number of request contexts allocated at start-up. |
 | `initial_header_capacity` | int | `64` (when `<= 0`) | No | Initial capacity of each context's header maps. |
-| `prealloc_body_buffer_bytes` | int | `0` | No | Size of the body buffer pre-allocated per request context. Bodies larger than the buffer are used without copying. The operator compiles `65536` by default. |
+| `prealloc_body_buffer_bytes` | int | `65536` (when `<= 0`) | No | Size of the body buffer pre-allocated per request context. Bodies larger than the buffer are used without copying. |
 | `health_address` | string | `:9003` | No | Address of the HTTP server for `/healthz` and `/readyz`. |
 | `pprof_address` | string | empty (disabled) | No | When set, serves `/debug/pprof/` on this address. Bind it to `127.0.0.1` and never expose it publicly. |
 | `client_ip` | object | | | See [server.client_ip](#serverclient_ip). |
@@ -226,7 +226,7 @@ All fields that are set must match (AND).
 | --- | --- | --- | --- |
 | `path_prefix` | string | empty | Prefix of the raw `:path`, including the query string. |
 | `path_regex_pattern` | string | empty | RE2 expression matched against the raw `:path` (unanchored). Must compile. |
-| `headers` | map of header name to [header match](#header-match) | empty | Every listed header must be present and satisfy its condition. Write header names in lower case. |
+| `headers` | map of header name to [header match](#header-match) | empty | Every listed header must be present and satisfy its condition. Header names are case-insensitive. |
 
 ### Header match
 
@@ -261,8 +261,8 @@ A configuration is rejected, at start-up (the engine exits) or on reload (the pr
 | `CONFIG_K8S_NAMESPACE` | `hyper-system` | `K8S` provider: ConfigMap namespace. Uses the in-cluster service account, which needs `get` and `watch` on the ConfigMap. |
 | `CONFIG_URL` | none | `URL` provider: URL fetched with `GET` at start-up and on every reload. Required with `URL`. |
 | `TLS_CERT_FILE`, `TLS_KEY_FILE` | none | When both are set, TLS is enabled on the gRPC listener with these files, overriding `server.tls`. Used by the `hypergate-engine` Helm chart. |
-| `TLS_CA_FILE` | none | CA bundle for client certificates, overriding `server.tls.ca_file`. |
-| `TLS_MUTUAL_TLS` | none | `true` requires client certificates (mTLS). |
+| `TLS_CA_FILE` | none | CA bundle for client certificates, overriding `server.tls.ca_file`. Only applied when `TLS_CERT_FILE` and `TLS_KEY_FILE` are set. |
+| `TLS_MUTUAL_TLS` | none | `true` requires client certificates (mTLS). Only applied when `TLS_CERT_FILE` and `TLS_KEY_FILE` are set. |
 | `CONFIG_RELOAD_ADDRESS` | `127.0.0.1:9002`, or `:9002` when a token is set | `URL` provider: listen address of `POST /v1/reload`. |
 | `CONFIG_RELOAD_TOKEN` | none | `URL` provider: when set, reload calls must send `Authorization: Bearer <token>`. |
 

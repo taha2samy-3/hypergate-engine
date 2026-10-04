@@ -44,6 +44,7 @@ chains:
       options:
         header_name: x-request-id
         algorithm: uuidv7
+        mode: overwrite   # Envoy already generates x-request-id; replace it
     - type: embedded_rate_limiter
       options:
         domain: standalone_public

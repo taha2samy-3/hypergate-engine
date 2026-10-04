@@ -86,10 +86,11 @@ func main() {
 
 	registry := engine.NewChainRegistry()
 	policyMgr := policy.NewManager(ctx, registry, redis.NewClientConn)
-	if err := policyMgr.Apply(initialConfig); err != nil {
-		mylogger.Fatal("Failed to compile policy on boot", zap.Error(err))
-	}
 
+	// Serve probes before compiling the policy: compiling waits for every Redis
+	// service (indefinitely by default at boot) and fetches JWKS. /healthz answers
+	// during that wait so the liveness probe does not restart the pod, while
+	// /readyz stays 503 until the policy is loaded and gRPC is serving.
 	var serving atomic.Bool
 	healthSrv := startHealthServer(initialConfig.Server.HealthAddress, func() bool {
 		return serving.Load() && policyMgr.Ready()
@@ -97,6 +98,10 @@ func main() {
 	var pprofSrv *http.Server
 	if initialConfig.Server.PprofAddress != "" {
 		pprofSrv = startPprofServer(initialConfig.Server.PprofAddress)
+	}
+
+	if err := policyMgr.Apply(initialConfig); err != nil {
+		mylogger.Fatal("Failed to compile policy on boot", zap.Error(err))
 	}
 
 	// Hot reload: the new policy is only published once every chain compiled; on

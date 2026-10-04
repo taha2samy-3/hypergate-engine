@@ -18,6 +18,13 @@ spec:
     storage: true
     subresources:
       status: {}
+    additionalPrinterColumns:
+    - name: State
+      type: string
+      jsonPath: .status.state
+    - name: Message
+      type: string
+      jsonPath: .status.message
     schema:
       openAPIV3Schema:
         type: object
