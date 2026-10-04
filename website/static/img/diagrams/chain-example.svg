@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 560" role="img" aria-labelledby="t d">
+  <title id="t">Filter chain example</title>
+  <desc id="d">Three routes select three chains. Requests under /admin use the admin chain: a deny filter that returns 404 unless x-internal is true, then JWT validation. Requests under /api/ use the web-api chain: cors, correlation_id, jwt_auth, the Redis metadata enricher, the rate limiter and the header modifier. Everything else uses the empty public chain and passes without policy. With the operator, HyperRoutes point to HyperChains, HyperChains list filter resources by kind and name, filters name a HyperRedis, the HyperConfig names the default chain, and the compiler writes the engine ConfigMap.</desc>
+  <defs>
+    <style>
+      text { font-family: Inter, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #E2E8F0; }
+      .h { font-size: 15px; font-weight: 700; }
+      .b { font-size: 14px; }
+      .s { font-size: 12.5px; fill: #94A3B8; }
+      .cap { font-size: 12.5px; fill: #94A3B8; letter-spacing: 0.08em; }
+      .box { fill: #1E293B; stroke: #334155; stroke-width: 1.5; }
+      .rt { fill: #1E293B; stroke: #22D3EE; stroke-width: 2; }
+      .ch { fill: #1E293B; stroke: #6366F1; stroke-width: 2; }
+      .pill { fill: #0F172A; stroke: #475569; stroke-width: 1.2; }
+      .ok { fill: #0B2A22; stroke: #10B981; stroke-width: 2; }
+      .ln { stroke: #94A3B8; stroke-width: 1.8; fill: none; }
+    </style>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#94A3B8"/></marker>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="560" rx="18" fill="#0F172A"/>
+  <rect x="0.75" y="0.75" width="1198.5" height="558.5" rx="18" fill="none" stroke="#1E293B" stroke-width="1.5"/>
+
+  <text x="30" y="46" class="cap">ROUTES (FIRST MATCH WINS)</text>
+  <text x="360" y="46" class="cap">CHAINS (FILTERS IN ORDER)</text>
+  <text x="950" y="46" class="cap">WITH THE OPERATOR</text>
+
+  <!-- routes -->
+  <rect x="30" y="80" width="280" height="80" rx="12" class="rt"/>
+  <text x="48" y="108" class="h">admin · priority 200</text>
+  <text x="48" y="132" class="s">path_prefix: /admin</text>
+
+  <rect x="30" y="220" width="280" height="80" rx="12" class="rt"/>
+  <text x="48" y="248" class="h">api · priority 100</text>
+  <text x="48" y="272" class="s">path_prefix: /api/</text>
+
+  <rect x="30" y="380" width="280" height="80" rx="12" class="box"/>
+  <text x="48" y="408" class="h">no route matched</text>
+  <text x="48" y="432" class="s">default_chain: public</text>
+
+  <!-- chains -->
+  <rect x="360" y="70" width="540" height="100" rx="12" class="ch"/>
+  <text x="378" y="96" class="h">admin</text>
+  <rect x="378" y="112" width="240" height="40" rx="9" class="pill"/>
+  <text x="392" y="137" class="b">1 deny</text>
+  <text x="462" y="137" class="s">404 unless x-internal</text>
+  <rect x="634" y="112" width="250" height="40" rx="9" class="pill"/>
+  <text x="648" y="137" class="b">2 jwt_auth</text>
+  <text x="738" y="137" class="s">audience admin</text>
+
+  <rect x="360" y="196" width="540" height="150" rx="12" class="ch"/>
+  <text x="378" y="222" class="h">web-api</text>
+  <rect x="378" y="238" width="160" height="40" rx="9" class="pill"/>
+  <text x="392" y="263" class="b">1 cors</text>
+  <rect x="550" y="238" width="160" height="40" rx="9" class="pill"/>
+  <text x="564" y="263" class="b">2 correlation_id</text>
+  <rect x="722" y="238" width="162" height="40" rx="9" class="pill"/>
+  <text x="736" y="263" class="b">3 jwt_auth</text>
+  <rect x="378" y="290" width="160" height="40" rx="9" class="pill"/>
+  <text x="392" y="315" class="b">4 enricher</text>
+  <rect x="550" y="290" width="160" height="40" rx="9" class="pill"/>
+  <text x="564" y="315" class="b">5 rate limiter</text>
+  <rect x="722" y="290" width="162" height="40" rx="9" class="pill"/>
+  <text x="736" y="315" class="b">6 header_modifier</text>
+
+  <rect x="360" y="380" width="540" height="80" rx="12" class="ok"/>
+  <text x="378" y="408" class="h">public: []</text>
+  <text x="378" y="432" class="s">empty chain: passes without policy, still counts as a match</text>
+
+  <path d="M310 120 H 352" class="ln" marker-end="url(#a)"/>
+  <path d="M310 260 C 330 260, 335 271, 352 271" class="ln" marker-end="url(#a)"/>
+  <path d="M310 420 H 352" class="ln" marker-end="url(#a)"/>
+
+  <!-- operator -->
+  <rect x="950" y="70" width="220" height="56" rx="10" class="rt"/>
+  <text x="966" y="94" class="b">HyperRoute</text>
+  <text x="966" y="114" class="s">targetPolicy: web-api</text>
+
+  <rect x="950" y="156" width="220" height="56" rx="10" class="ch"/>
+  <text x="966" y="180" class="b">HyperChain</text>
+  <text x="966" y="200" class="s">filters: [{kind, name}, …]</text>
+
+  <rect x="950" y="242" width="220" height="74" rx="10" class="box"/>
+  <text x="966" y="266" class="b">Filter resources</text>
+  <text x="966" y="286" class="s">CorsFilter, JwtAuthFilter, …</text>
+  <text x="966" y="304" class="s">redisService → HyperRedis</text>
+
+  <rect x="950" y="346" width="220" height="56" rx="10" class="box"/>
+  <text x="966" y="370" class="b">HyperConfig</text>
+  <text x="966" y="390" class="s">defaultChain: public</text>
+
+  <rect x="950" y="432" width="220" height="56" rx="10" class="ok"/>
+  <text x="966" y="456" class="b">Engine ConfigMap</text>
+  <text x="966" y="476" class="s">config.yaml (left side)</text>
+
+  <path d="M1060 126 V 148" class="ln" marker-end="url(#a)"/>
+  <path d="M1060 212 V 234" class="ln" marker-end="url(#a)"/>
+  <path d="M1060 316 V 338" class="ln" marker-end="url(#a)"/>
+  <path d="M1060 402 V 424" class="ln" marker-end="url(#a)"/>
+  <text x="1068" y="420" class="s">compiler</text>
+
+  <rect x="30" y="500" width="870" height="40" rx="10" class="box"/>
+  <text x="48" y="525" class="s">jwt_auth writes x-user-id → the enricher reads it and writes x-user-tier → the rate limiter limits per user and tier</text>
+</svg>

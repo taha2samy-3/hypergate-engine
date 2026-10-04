@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -44,7 +45,7 @@ func TestDocsFilterChainCRDsCompileLikeEngineExample(t *testing.T) {
 	decoder := serializer.NewCodecFactory(scheme).UniversalDeserializer()
 
 	var objs []client.Object
-	reader := utilyaml.NewYAMLReader(bufioReader(docsBlock(t, "crds.yaml")))
+	reader := utilyaml.NewYAMLReader(bufio.NewReader(bytes.NewReader(docsBlock(t, "crds.yaml"))))
 	for {
 		doc, err := reader.Read()
 		if errors.Is(err, io.EOF) {
@@ -123,5 +124,3 @@ func TestDocsFilterChainCRDsCompileLikeEngineExample(t *testing.T) {
 		}
 	}
 }
-
-func bufioReader(b []byte) *bufioWrapper { return &bufioWrapper{bytes.NewReader(b)} }

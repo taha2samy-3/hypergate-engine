@@ -1,0 +1,136 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 600" role="img" aria-labelledby="t d">
+  <title id="t">How a filter chain runs</title>
+  <desc id="d">Request headers enter the web-api chain and pass through cors, correlation_id, jwt_auth, redis_metadata_enricher, embedded_rate_limiter and header_modifier in order. correlation_id writes x-request-id, jwt_auth writes x-user-id, the enricher reads x-user-id and writes x-user-tier, and the rate limiter reads both. cors, jwt_auth and the rate limiter can end the request with an immediate response, which skips the remaining filters and the upstream. Otherwise the request goes upstream with the header changes, and response-phase work such as CORS and RateLimit headers is applied when the response headers arrive.</desc>
+  <defs>
+    <style>
+      text { font-family: Inter, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #E2E8F0; }
+      .h { font-size: 15px; font-weight: 700; }
+      .b { font-size: 14px; }
+      .s { font-size: 12.5px; fill: #94A3B8; }
+      .cap { font-size: 12.5px; fill: #94A3B8; letter-spacing: 0.08em; }
+      .num { font-size: 11px; font-weight: 700; fill: #A5B4FC; }
+      .box { fill: #1E293B; stroke: #334155; stroke-width: 1.5; }
+      .acc { fill: #1E293B; stroke: #6366F1; stroke-width: 2; }
+      .ok { fill: #0B2A22; stroke: #10B981; stroke-width: 2; }
+      .bad { fill: #3B0D1A; stroke: #F43F5E; stroke-width: 2; }
+      .ctx { fill: #0F1F2E; stroke: #22D3EE; stroke-width: 1.5; stroke-dasharray: 6 4; }
+      .chip { fill: #0E3A47; stroke: #22D3EE; stroke-width: 1.2; }
+      .ln { stroke: #94A3B8; stroke-width: 1.8; fill: none; }
+      .lnr { stroke: #F43F5E; stroke-width: 1.8; fill: none; stroke-dasharray: 5 4; }
+      .lnw { stroke: #10B981; stroke-width: 1.8; fill: none; }
+      .lnc { stroke: #22D3EE; stroke-width: 1.8; fill: none; }
+      .r { font-size: 12px; font-weight: 700; fill: #FDA4AF; }
+    </style>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#94A3B8"/></marker>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#F43F5E"/></marker>
+    <marker id="aw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#10B981"/></marker>
+    <marker id="ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#22D3EE"/></marker>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="600" rx="18" fill="#0F172A"/>
+  <rect x="0.75" y="0.75" width="1198.5" height="598.5" rx="18" fill="none" stroke="#1E293B" stroke-width="1.5"/>
+
+  <text x="20" y="40" class="cap">CHAIN web-api · FILTERS RUN IN LIST ORDER</text>
+
+  <!-- blocked -->
+  <rect x="150" y="56" width="830" height="66" rx="12" class="bad"/>
+  <text x="170" y="84" class="h" fill="#FECDD3">Block → ImmediateResponse</text>
+  <text x="170" y="106" class="s" fill="#FDA4AF">the chain stops, later filters are skipped, the upstream is not called; headers queued so far are included</text>
+
+  <!-- request -->
+  <rect x="20" y="170" width="110" height="110" rx="12" class="acc"/>
+  <text x="75" y="214" class="b" text-anchor="middle">Request</text>
+  <text x="75" y="234" class="s" text-anchor="middle">headers</text>
+  <path d="M130 225 H 142" class="ln" marker-end="url(#a)"/>
+
+  <!-- filters -->
+  <rect x="150" y="170" width="150" height="110" rx="12" class="box"/>
+  <text x="166" y="192" class="num">1</text>
+  <text x="166" y="214" class="h">cors</text>
+  <text x="166" y="238" class="s">preflight answered</text>
+  <text x="166" y="256" class="s">with 204 / 403</text>
+
+  <rect x="320" y="170" width="150" height="110" rx="12" class="box"/>
+  <text x="336" y="192" class="num">2</text>
+  <text x="336" y="214" class="h">correlation_id</text>
+  <text x="336" y="238" class="s">writes</text>
+  <text x="336" y="256" class="s">x-request-id</text>
+
+  <rect x="490" y="170" width="150" height="110" rx="12" class="box"/>
+  <text x="506" y="192" class="num">3</text>
+  <text x="506" y="214" class="h">jwt_auth</text>
+  <text x="506" y="238" class="s">validates the token,</text>
+  <text x="506" y="256" class="s">sub → x-user-id</text>
+
+  <rect x="660" y="170" width="150" height="110" rx="12" class="box"/>
+  <text x="676" y="192" class="num">4</text>
+  <text x="676" y="214" class="h">enricher</text>
+  <text x="676" y="238" class="s">Redis lookup,</text>
+  <text x="676" y="256" class="s">writes x-user-tier</text>
+
+  <rect x="830" y="170" width="150" height="110" rx="12" class="box"/>
+  <text x="846" y="192" class="num">5</text>
+  <text x="846" y="214" class="h">rate limiter</text>
+  <text x="846" y="238" class="s">per user and tier</text>
+  <text x="846" y="256" class="s">600 or 60 / minute</text>
+
+  <rect x="1000" y="170" width="170" height="110" rx="12" class="box"/>
+  <text x="1016" y="192" class="num">6</text>
+  <text x="1016" y="214" class="h">header_modifier</text>
+  <text x="1016" y="238" class="s">removes</text>
+  <text x="1016" y="256" class="s">x-internal-debug</text>
+
+  <path d="M300 225 H 312" class="ln" marker-end="url(#a)"/>
+  <path d="M470 225 H 482" class="ln" marker-end="url(#a)"/>
+  <path d="M640 225 H 652" class="ln" marker-end="url(#a)"/>
+  <path d="M810 225 H 822" class="ln" marker-end="url(#a)"/>
+  <path d="M980 225 H 992" class="ln" marker-end="url(#a)"/>
+
+  <!-- block arrows -->
+  <path d="M225 170 V 130" class="lnr" marker-end="url(#ar)"/>
+  <text x="233" y="152" class="r">204 / 403</text>
+  <path d="M565 170 V 130" class="lnr" marker-end="url(#ar)"/>
+  <text x="573" y="152" class="r">401</text>
+  <path d="M905 170 V 130" class="lnr" marker-end="url(#ar)"/>
+  <text x="913" y="152" class="r">429</text>
+
+  <!-- request context -->
+  <rect x="150" y="330" width="830" height="60" rx="12" class="ctx"/>
+  <text x="166" y="365" class="s" fill="#67E8F9">request context</text>
+  <rect x="340" y="346" width="110" height="28" rx="14" class="chip"/>
+  <text x="395" y="365" class="s" text-anchor="middle" fill="#CFFAFE">x-request-id</text>
+  <rect x="525" y="346" width="110" height="28" rx="14" class="chip"/>
+  <text x="580" y="365" class="s" text-anchor="middle" fill="#CFFAFE">x-user-id</text>
+  <rect x="735" y="346" width="110" height="28" rx="14" class="chip"/>
+  <text x="790" y="365" class="s" text-anchor="middle" fill="#CFFAFE">x-user-tier</text>
+
+  <path d="M395 280 V 340" class="lnw" marker-end="url(#aw)"/>
+  <path d="M555 280 V 340" class="lnw" marker-end="url(#aw)"/>
+  <path d="M615 346 C 640 320, 690 310, 700 288" class="lnc" marker-end="url(#ac)"/>
+  <path d="M770 280 V 340" class="lnw" marker-end="url(#aw)"/>
+  <path d="M825 346 C 850 320, 880 310, 890 288" class="lnc" marker-end="url(#ac)"/>
+  <path d="M600 346 C 700 300, 860 300, 880 288" class="lnc" marker-end="url(#ac)" opacity="0.55"/>
+
+  <text x="990" y="350" class="s" fill="#6EE7B7">writes</text>
+  <text x="990" y="372" class="s" fill="#67E8F9">reads</text>
+  <path d="M1040 345 H 1068" class="lnw"/>
+  <path d="M1040 367 H 1068" class="lnc"/>
+
+  <!-- upstream and response phase -->
+  <rect x="880" y="430" width="290" height="80" rx="12" class="ok"/>
+  <text x="900" y="460" class="h">Upstream</text>
+  <text x="900" y="484" class="s">request forwarded with the</text>
+  <text x="900" y="500" class="s">header changes</text>
+  <path d="M1110 280 V 422" class="ln" marker-end="url(#a)"/>
+  <text x="1118" y="404" class="s">all passed</text>
+
+  <rect x="150" y="430" width="650" height="80" rx="12" class="acc"/>
+  <text x="170" y="460" class="h">Response headers phase</text>
+  <text x="170" y="484" class="s">cors adds Access-Control-* and Vary · the rate limiter adds RateLimit-* headers ·</text>
+  <text x="170" y="500" class="s">header_modifier applies its downstream rules · correlation_id echoes the ID</text>
+  <path d="M880 470 H 808" class="ln" marker-end="url(#a)"/>
+  <text x="844" y="462" class="s" text-anchor="middle">response</text>
+
+  <rect x="20" y="534" width="1150" height="44" rx="10" class="box"/>
+  <text x="40" y="561" class="s">One chain per request, chosen on the first message · each filter runs only in the phases it handles · an internal error stops the chain with 500</text>
+</svg>
