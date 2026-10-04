@@ -9,6 +9,7 @@ import ExternalAuthIcon from '@site/static/img/icons/external-auth.svg';
 import FirewallIcon from '@site/static/img/icons/firewall.svg';
 import DenyIcon from '@site/static/img/icons/deny.svg';
 import HeaderModifierIcon from '@site/static/img/icons/header-modifier.svg';
+import CorsIcon from '@site/static/img/icons/cors.svg';
 import CorrelationIcon from '@site/static/img/icons/correlation-id.svg';
 import EnricherIcon from '@site/static/img/icons/enricher.svg';
 import HotReloadIcon from '@site/static/img/icons/hot-reload.svg';
@@ -67,6 +68,12 @@ const filters: Card[] = [
     Icon: HeaderModifierIcon,
     to: '/docs/filters/header-modifier',
     description: 'Add, override and remove headers on the way to the upstream and on the way back to the client.',
+  },
+  {
+    title: 'CORS',
+    Icon: CorsIcon,
+    to: '/docs/filters/cors',
+    description: 'Answer preflights at the gateway and add Access-Control headers for browser apps on other origins.',
   },
   {
     title: 'Correlation ID',

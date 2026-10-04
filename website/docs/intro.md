@@ -10,7 +10,7 @@ Hypergate is a policy engine for API gateways built on [Envoy](https://www.envoy
 
 Hypergate has two parts:
 
-- **The engine** (`cmd/engine`, Go). It loads a YAML policy, matches each request to a *filter chain* and runs the chain: rate limiting, API keys, JWT validation, external authorization, a firewall hook, conditional denies, header changes, correlation IDs and Redis-backed metadata enrichment.
+- **The engine** (`cmd/engine`, Go). It loads a YAML policy, matches each request to a *filter chain* and runs the chain: rate limiting, API keys, JWT validation, external authorization, a firewall hook, conditional denies, header changes, CORS for browser clients, correlation IDs and Redis-backed metadata enrichment.
 - **The operator** (`hyper-operator`). It adds cluster-scoped `hyper.io/v1alpha1` custom resources, compiles them into the engine's YAML, writes that YAML to a ConfigMap and runs the engine as a DaemonSet, injecting sidecars for external authorization and firewall filters.
 
 You can use the engine without the operator: it reads the same configuration from a file, a ConfigMap or a URL.
@@ -39,6 +39,7 @@ Because the integration point is standard `ext_proc`, Hypergate works with any E
 | [Firewall](/docs/filters/firewall) | `firewall` | `FirewallFilter` | Sends headers, and optionally the buffered body, to a WAF sidecar over a Unix domain socket. |
 | [Deny](/docs/filters/deny) | `deny` | `DenyFilter` | Blocks on path, request header or upstream response header conditions. |
 | [Header modifier](/docs/filters/header-modifier) | `header_modifier` | `HeaderModifierFilter` | Sets and removes request headers and client-facing response headers. |
+| [CORS](/docs/filters/cors) | `cors` | `CorsFilter` | Answers browser preflights and adds `Access-Control-*` headers for allowed origins. |
 | [Correlation ID](/docs/filters/correlation-id) | `correlation_id` | `CorrelationIdFilter` | Generates or propagates a request ID (UUIDv4, UUIDv7, ULID, XID). |
 | [Redis metadata enricher](/docs/filters/redis-metadata-enricher) | `redis_metadata_enricher` | `RedisMetadataEnricherFilter` | Builds a Redis key from request data and maps fields of the stored JSON to headers. |
 

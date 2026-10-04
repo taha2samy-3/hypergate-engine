@@ -20,7 +20,7 @@ route, runs that route's filter chain and answers with header mutations or an im
 
 | | |
 | --- | --- |
-| **Filters** | rate limiting (5 algorithms, Redis-backed), API keys, JWT, external auth and WAF sidecars over Unix sockets, deny rules, header modification, correlation IDs, Redis metadata enrichment |
+| **Filters** | rate limiting (5 algorithms, Redis-backed), API keys, JWT, external auth and WAF sidecars over Unix sockets, deny rules, header modification, CORS, correlation IDs, Redis metadata enrichment |
 | **Hot reload** | a new policy is compiled completely before it is published; in-flight requests keep the policy they started with |
 | **Fails closed** | a route pointing at a missing or degraded chain is rejected instead of silently skipping its policy |
 | **Kubernetes** | an operator compiles filter/chain/route CRDs into the engine config and runs the engine as a DaemonSet with its sidecars |
