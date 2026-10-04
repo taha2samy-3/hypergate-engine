@@ -14,7 +14,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -107,12 +109,12 @@ func (c *Config) ApplyDefaults() {
 	if c.IntrospectionTimeout <= 0 {
 		c.IntrospectionTimeout = 2 * time.Second
 	}
-	// Normalise claim mapping keys
-	lower := make(map[string]string, len(c.ClaimMappings))
-	for k, v := range c.ClaimMappings {
-		lower[strings.ToLower(k)] = strings.ToLower(v)
+	// Claim names are case-sensitive (RFC 7519); only the header names are normalised.
+	normalised := make(map[string]string, len(c.ClaimMappings))
+	for claim, header := range c.ClaimMappings {
+		normalised[claim] = strings.ToLower(header)
 	}
-	c.ClaimMappings = lower
+	c.ClaimMappings = normalised
 }
 
 // loadSecretFiles resolves *_file options into their values.
@@ -154,6 +156,10 @@ type Filter struct {
 	keySet atomic.Pointer[jwk.Set]
 
 	httpClient *http.Client // for introspection endpoint
+
+	// refreshMu serialises on-demand JWKS refreshes; lastFetch (unix nanos) rate-limits them.
+	refreshMu sync.Mutex
+	lastFetch atomic.Int64
 
 	stopRefresh chan struct{}
 	closeOnce   sync.Once
@@ -216,24 +222,27 @@ func (f *Filter) SupportedPhases() []engine.Phase {
 
 // Execute validates the JWT token and injects resolved claims as upstream headers.
 func (f *Filter) Execute(ctx *engine.RequestContext) error {
+	// Mapped headers are identity assertions for the upstream. Remove any value the
+	// client sent up front, so a header can only ever come from a validated claim,
+	// including when a claim is absent and on the fail_open path.
+	for _, header := range f.cfg.ClaimMappings {
+		ctx.RemoveHeaderUpstream(header)
+	}
+
 	rawToken := f.extractToken(ctx)
 	if rawToken == "" {
-		ctx.Blocked = true
-		ctx.ResponseStatus = 401
-		ctx.ResponseBody = `{"error":"unauthorized","message":"missing authentication token"}`
-		ctx.SetHeaderDownstream("content-type", "application/json")
 		mylogger.Debug("jwt_auth: no token found in request")
+		f.challenge(ctx, "missing authentication token", "")
 		return nil
 	}
 
-	// Attempt local JWT validation first.
 	claims, err := f.validateJWT(rawToken)
 	if err != nil {
 		mylogger.Debug("jwt_auth: local JWT validation failed", zap.Error(err))
 
 		if f.cfg.IntrospectionEndpoint == "" {
 			// An invalid token is never let through, even with fail_open.
-			f.reject(ctx, "invalid token")
+			f.challenge(ctx, "invalid token", "invalid_token")
 			return nil
 		}
 
@@ -243,26 +252,25 @@ func (f *Filter) Execute(ctx *engine.RequestContext) error {
 			if f.cfg.FailOpen && errors.As(introErr, &unavailable) {
 				// fail_open only covers an unreachable/failing introspection endpoint.
 				mylogger.Warn("jwt_auth: introspection unavailable, fail_open=true, allowing request", zap.Error(introErr))
+				f.stripToken(ctx)
 				return nil
 			}
 			mylogger.Warn("jwt_auth: token rejected by introspection", zap.Error(introErr))
-			f.reject(ctx, "token validation failed")
+			f.challenge(ctx, "token validation failed", "invalid_token")
 			return nil
 		}
 		claims = introClaims
 	}
 
-	// Inject mapped claims into upstream headers.
 	for claim, header := range f.cfg.ClaimMappings {
 		if val, ok := claims[claim]; ok {
-			ctx.SetHeaderUpstream(header, fmt.Sprintf("%v", val))
+			if s := claimString(val); s != "" {
+				ctx.SetHeaderUpstream(header, s)
+			}
 		}
 	}
 
-	// Strip token from upstream if configured.
-	if f.cfg.StripToken {
-		ctx.RemoveHeaderUpstream(f.cfg.HeaderName)
-	}
+	f.stripToken(ctx)
 
 	mylogger.Debug("jwt_auth: token validated successfully",
 		zap.Int("claims_injected", len(f.cfg.ClaimMappings)),
@@ -270,9 +278,80 @@ func (f *Filter) Execute(ctx *engine.RequestContext) error {
 	return nil
 }
 
-func (f *Filter) reject(ctx *engine.RequestContext, message string) {
+// stripToken removes the token from wherever it was read before forwarding.
+func (f *Filter) stripToken(ctx *engine.RequestContext) {
+	if !f.cfg.StripToken {
+		return
+	}
+	switch strings.ToLower(f.cfg.Source) {
+	case "query":
+		if stripped := removeQueryParam(ctx.Path, f.cfg.QueryParam); stripped != ctx.Path {
+			ctx.SetPath(stripped)
+		}
+	case "cookie":
+		if cookies, removed := removeCookie(ctx.GetHeader("cookie"), f.cfg.CookieName); removed {
+			if cookies == "" {
+				ctx.RemoveHeaderUpstream("cookie")
+			} else {
+				ctx.SetHeaderUpstream("cookie", cookies)
+			}
+		}
+	default:
+		ctx.RemoveHeaderUpstream(f.cfg.HeaderName)
+	}
+}
+
+// claimString renders a claim as a header value: strings as-is, numbers without
+// exponent notation, timestamps as Unix seconds, lists comma-separated, anything
+// else as compact JSON. Control characters are dropped so a claim can never break
+// out of its header.
+func claimString(v interface{}) string {
+	var out string
+	switch t := v.(type) {
+	case string:
+		out = t
+	case bool:
+		out = strconv.FormatBool(t)
+	case float64:
+		out = strconv.FormatFloat(t, 'f', -1, 64)
+	case json.Number:
+		out = t.String()
+	case int, int32, int64, uint, uint32, uint64:
+		out = fmt.Sprint(t)
+	case time.Time:
+		out = strconv.FormatInt(t.Unix(), 10)
+	case []string:
+		out = strings.Join(t, ",")
+	case []interface{}:
+		parts := make([]string, 0, len(t))
+		for _, item := range t {
+			parts = append(parts, claimString(item))
+		}
+		out = strings.Join(parts, ",")
+	default:
+		b, err := json.Marshal(t)
+		if err != nil {
+			return ""
+		}
+		out = string(b)
+	}
+	return strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return -1
+		}
+		return r
+	}, out)
+}
+
+// challenge rejects with 401 and an RFC 6750 WWW-Authenticate header.
+func (f *Filter) challenge(ctx *engine.RequestContext, message, bearerError string) {
 	ctx.Block(401, `{"error":"unauthorized","message":"`+message+`"}`)
 	ctx.SetHeaderDownstream("content-type", "application/json")
+	challenge := "Bearer"
+	if bearerError != "" {
+		challenge += ` error="` + bearerError + `"`
+	}
+	ctx.SetHeaderDownstream("www-authenticate", challenge)
 }
 
 // introspectionUnavailableError marks failures to reach a verdict (network error,
@@ -293,13 +372,10 @@ func (f *Filter) extractToken(ctx *engine.RequestContext) string {
 	case "cookie":
 		return extractCookie(ctx.GetHeader("cookie"), f.cfg.CookieName)
 	default: // "header"
-		raw := ctx.GetHeader(f.cfg.HeaderName)
-		// Strip "Bearer " prefix case-insensitively
-		if after, ok := strings.CutPrefix(raw, "Bearer "); ok {
-			return after
-		}
-		if after, ok := strings.CutPrefix(raw, "bearer "); ok {
-			return after
+		raw := strings.TrimSpace(ctx.GetHeader(f.cfg.HeaderName))
+		// The auth scheme is case-insensitive (RFC 7235).
+		if len(raw) > 7 && strings.EqualFold(raw[:7], "bearer ") {
+			return strings.TrimSpace(raw[7:])
 		}
 		return raw
 	}
@@ -332,6 +408,14 @@ func (f *Filter) validateJWT(rawToken string) (map[string]interface{}, error) {
 	}
 
 	tok, err := jwt.ParseString(rawToken, parseOpts...)
+	if err != nil && f.cfg.LocalSecret == "" && f.refreshAfterMiss() {
+		// The identity provider may have rotated its keys since the last refresh: retry
+		// once with a freshly fetched key set.
+		if ks := f.keySet.Load(); ks != nil {
+			parseOpts[1] = jwt.WithKeySet(*ks, jws.WithInferAlgorithmFromKey(true))
+			tok, err = jwt.ParseString(rawToken, parseOpts...)
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -356,7 +440,8 @@ func (f *Filter) introspect(ctx context.Context, token string) (map[string]inter
 	reqCtx, cancel := context.WithTimeout(ctx, f.cfg.IntrospectionTimeout)
 	defer cancel()
 
-	body := strings.NewReader("token=" + token)
+	form := url.Values{"token": {token}}
+	body := strings.NewReader(form.Encode())
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, f.cfg.IntrospectionEndpoint, body)
 	if err != nil {
 		return nil, fmt.Errorf("introspection: failed to create request: %w", err)
@@ -392,6 +477,19 @@ func (f *Filter) introspect(ctx context.Context, token string) (map[string]inter
 		return nil, fmt.Errorf("introspection: token is not active")
 	}
 
+	// Apply the same issuer/audience policy as for local validation when the
+	// introspection response carries those fields.
+	if f.cfg.Issuer != "" {
+		if iss, ok := result["iss"].(string); ok && iss != f.cfg.Issuer {
+			return nil, fmt.Errorf("introspection: issuer %q not accepted", iss)
+		}
+	}
+	if f.cfg.Audience != "" {
+		if aud, present := result["aud"]; present && !audienceContains(aud, f.cfg.Audience) {
+			return nil, fmt.Errorf("introspection: audience does not include %q", f.cfg.Audience)
+		}
+	}
+
 	return result, nil
 }
 
@@ -399,14 +497,46 @@ func (f *Filter) introspect(ctx context.Context, token string) (map[string]inter
 // JWKS management
 // ─────────────────────────────────────────────────────────────────────────────
 
+// jwksFetchTimeout bounds one JWKS download so a slow identity provider cannot hang
+// filter creation (and with it a config reload).
+const jwksFetchTimeout = 10 * time.Second
+
+// jwksMinRefreshGap rate-limits refreshes triggered by unknown keys.
+const jwksMinRefreshGap = 30 * time.Second
+
 func (f *Filter) fetchAndStoreJWKS(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, jwksFetchTimeout)
+	defer cancel()
 	set, err := jwk.Fetch(ctx, f.cfg.JWKSEndpoint)
+	f.lastFetch.Store(time.Now().UnixNano())
 	if err != nil {
 		return err
 	}
 	f.keySet.Store(&set)
 	mylogger.Debug("jwt_auth: JWKS keyset refreshed", zap.String("endpoint", f.cfg.JWKSEndpoint))
 	return nil
+}
+
+// refreshAfterMiss refetches the key set if the last fetch is older than
+// jwksMinRefreshGap. It reports whether a new key set was loaded.
+func (f *Filter) refreshAfterMiss() bool {
+	if f.cfg.JWKSEndpoint == "" {
+		return false
+	}
+	if time.Since(time.Unix(0, f.lastFetch.Load())) < jwksMinRefreshGap {
+		return false
+	}
+	f.refreshMu.Lock()
+	defer f.refreshMu.Unlock()
+	// Another request may have refreshed while this one waited for the lock.
+	if time.Since(time.Unix(0, f.lastFetch.Load())) < jwksMinRefreshGap {
+		return true
+	}
+	if err := f.fetchAndStoreJWKS(context.Background()); err != nil {
+		mylogger.Warn("jwt_auth: on-demand JWKS refresh failed", zap.Error(err))
+		return false
+	}
+	return true
 }
 
 func (f *Filter) backgroundRefresh() {
@@ -445,11 +575,68 @@ func extractQueryParam(path, name string) string {
 		}
 		if eqIdx := strings.IndexByte(part, '='); eqIdx != -1 {
 			if part[:eqIdx] == name {
+				if v, err := url.QueryUnescape(part[eqIdx+1:]); err == nil {
+					return v
+				}
 				return part[eqIdx+1:]
 			}
 		}
 	}
 	return ""
+}
+
+// removeQueryParam drops every occurrence of name from the query string of path.
+func removeQueryParam(path, name string) string {
+	idx := strings.IndexByte(path, '?')
+	if idx == -1 || name == "" {
+		return path
+	}
+	var kept []string
+	for _, part := range strings.Split(path[idx+1:], "&") {
+		key := part
+		if eq := strings.IndexByte(part, '='); eq != -1 {
+			key = part[:eq]
+		}
+		if key != name && part != "" {
+			kept = append(kept, part)
+		}
+	}
+	if len(kept) == 0 {
+		return path[:idx]
+	}
+	return path[:idx] + "?" + strings.Join(kept, "&")
+}
+
+// removeCookie drops the named cookie from a Cookie header value.
+func removeCookie(cookieHeader, name string) (string, bool) {
+	var kept []string
+	removed := false
+	for _, part := range strings.Split(cookieHeader, ";") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if eq := strings.IndexByte(part, '='); eq != -1 && part[:eq] == name {
+			removed = true
+			continue
+		}
+		kept = append(kept, part)
+	}
+	return strings.Join(kept, "; "), removed
+}
+
+func audienceContains(aud interface{}, want string) bool {
+	switch v := aud.(type) {
+	case string:
+		return v == want
+	case []interface{}:
+		for _, item := range v {
+			if s, ok := item.(string); ok && s == want {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func extractCookie(cookieHeader, name string) string {
