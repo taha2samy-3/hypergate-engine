@@ -31,6 +31,8 @@ tasks:
       - task: modification
       - task: metadata
       - task: correlation
+      - task: cors
+      - task: jwt
 
   api-key:
     desc: "Run API Key authentication integration tests"
@@ -61,3 +63,15 @@ tasks:
     cmds:
       - task: run-scenario
         vars: { NAME: "correlation" }
+
+  cors:
+    desc: "Run CORS filter integration tests"
+    cmds:
+      - task: run-scenario
+        vars: { NAME: "cors" }
+
+  jwt:
+    desc: "Run JWT authentication filter integration tests"
+    cmds:
+      - task: run-scenario
+        vars: { NAME: "jwt_auth" }

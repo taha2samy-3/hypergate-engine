@@ -1,0 +1,57 @@
+version: "v1"
+server:
+  address: "0.0.0.0:9001"
+telemetry:
+  logging:
+    level: "DEBUG"
+    format: "console"
+    output_path: "stdout"
+
+chains:
+  chain_jwt_header:
+    - type: "jwt_auth"
+      options:
+        local_secret: "integration-test-secret"
+        issuer: "https://issuer.hypergate.test"
+        audience: "hypergate-tests"
+        strip_token: true
+        claim_mappings:
+          sub: "x-user-id"
+          tenantId: "x-tenant"      # camelCase claim: names are case-sensitive
+          roles: "x-roles"
+          email: "x-user-email"
+
+  chain_jwt_query:
+    - type: "jwt_auth"
+      options:
+        local_secret: "integration-test-secret"
+        source: "query"
+        query_param: "access_token"
+        strip_token: true
+        claim_mappings:
+          sub: "x-user-id"
+
+  chain_jwt_cookie:
+    - type: "jwt_auth"
+      options:
+        local_secret: "integration-test-secret"
+        source: "cookie"
+        cookie_name: "session_jwt"
+        strip_token: true
+        claim_mappings:
+          sub: "x-user-id"
+
+router:
+  routes:
+    - name: "jwt-header"
+      target_chain: "chain_jwt_header"
+      matches:
+        - path_prefix: "/jwt/header"
+    - name: "jwt-query"
+      target_chain: "chain_jwt_query"
+      matches:
+        - path_prefix: "/jwt/query"
+    - name: "jwt-cookie"
+      target_chain: "chain_jwt_cookie"
+      matches:
+        - path_prefix: "/jwt/cookie"

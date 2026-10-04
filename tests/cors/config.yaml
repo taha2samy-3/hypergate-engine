@@ -1,0 +1,71 @@
+version: "v1"
+server:
+  address: "0.0.0.0:9001"
+telemetry:
+  logging:
+    level: "DEBUG"
+    format: "console"
+    output_path: "stdout"
+
+chains:
+  # Explicit origins + regex, credentials, preflight caching.
+  chain_cors_public:
+    - type: "cors"
+      options:
+        allow_origins: ["https://app.example.com"]
+        allow_origin_regex: ['https://[a-z0-9-]+\.preview\.example\.com']
+        allow_methods: ["GET", "POST", "PUT"]
+        allow_headers: ["Authorization", "Content-Type"]
+        expose_headers: ["X-Request-Id"]
+        allow_credentials: true
+        max_age: 600
+
+  # CORS in front of an "auth" step: a deny filter that rejects requests without
+  # Authorization stands in for jwt_auth / api_key.
+  chain_cors_auth:
+    - type: "cors"
+      options:
+        allow_origins: ["https://app.example.com"]
+        allow_methods: ["GET", "POST"]
+        allow_headers: ["Authorization"]
+    - type: "deny"
+      options:
+        status_code: 401
+        body: "unauthorized"
+        match:
+          not_headers:
+            authorization: "*"
+
+  # Requests from other origins never reach the upstream.
+  chain_cors_block:
+    - type: "cors"
+      options:
+        allow_origins: ["https://app.example.com"]
+        block_disallowed_origins: true
+
+  # Public, credential-less API open to every origin.
+  chain_cors_wildcard:
+    - type: "cors"
+      options:
+        allow_origins: ["*"]
+        allow_methods: ["*"]
+        allow_headers: ["*"]
+
+router:
+  routes:
+    - name: "cors-public"
+      target_chain: "chain_cors_public"
+      matches:
+        - path_prefix: "/cors/public"
+    - name: "cors-auth"
+      target_chain: "chain_cors_auth"
+      matches:
+        - path_prefix: "/cors/auth"
+    - name: "cors-block"
+      target_chain: "chain_cors_block"
+      matches:
+        - path_prefix: "/cors/block"
+    - name: "cors-wildcard"
+      target_chain: "chain_cors_wildcard"
+      matches:
+        - path_prefix: "/cors/wildcard"
