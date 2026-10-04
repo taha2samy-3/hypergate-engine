@@ -60,6 +60,16 @@ operator:
       - app.kubernetes.io/instance
       - app.kubernetes.io/component
       - app.kubernetes.io/version
+    # Leader-only delta xDS server that streams the map to engines (needs enabled).
+    server:
+      # -- Serve identities and point the identity Service at the leader
+      enabled: false
+      # -- Port of the identity stream server
+      port: 9444
+      # -- Selector-less Service engines connect to; the leader writes its EndpointSlice
+      serviceName: hyper-operator-identity
+      # -- TLS Secret (tls.crt, tls.key) for the server; issued by cert-manager when certManager.enabled
+      certSecret: hyper-operator-identity-cert
   # -- Enable the validating webhook server
   enableWebhooks: true
   # -- Webhook server port

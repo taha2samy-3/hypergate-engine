@@ -1,0 +1,19 @@
+{{- if include "hyper-operator.identityServer" . }}
+# No pod selector: the leader writes this Service's only EndpointSlice with its
+# own pod IP, so engines always reach the replica that holds the Lease.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.operator.identity.server.serviceName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "hyper-operator.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: grpc
+      port: {{ .Values.operator.identity.server.port }}
+      targetPort: {{ .Values.operator.identity.server.port }}
+      protocol: TCP
+      appProtocol: kubernetes.io/h2c
+{{- end }}

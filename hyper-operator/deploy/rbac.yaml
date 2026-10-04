@@ -54,6 +54,10 @@ rules:
   - apiGroups: ["cilium.io"]
     resources: ["ciliumendpoints"]
     verbs: ["get", "list", "watch"]
+  # Identity server (--identity-server): validate engine tokens.
+  - apiGroups: ["authentication.k8s.io"]
+    resources: ["tokenreviews"]
+    verbs: ["create"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -63,6 +67,32 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: hyper-operator-role
+subjects:
+  - kind: ServiceAccount
+    name: hyper-operator-sa
+    namespace: hyper-system
+---
+# Identity server (--identity-server): the leader writes the identity Service's
+# EndpointSlice in the operator namespace only.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: hyper-operator-identity-endpoints
+  namespace: hyper-system
+rules:
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: hyper-operator-identity-endpoints
+  namespace: hyper-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: hyper-operator-identity-endpoints
 subjects:
   - kind: ServiceAccount
     name: hyper-operator-sa

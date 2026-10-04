@@ -1,4 +1,4 @@
-{{- if and .Values.operator.enableWebhooks .Values.certManager.enabled }}
+{{- if and .Values.certManager.enabled (or .Values.operator.enableWebhooks (include "hyper-operator.identityServer" .)) }}
 apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
@@ -8,6 +8,8 @@ metadata:
     {{- include "hyper-operator.labels" . | nindent 4 }}
 spec:
   selfSigned: {}
+{{- end }}
+{{- if and .Values.operator.enableWebhooks .Values.certManager.enabled }}
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
@@ -26,4 +28,25 @@ spec:
   dnsNames:
     - {{ include "hyper-operator.fullname" . }}.{{ .Release.Namespace }}.svc
     - {{ include "hyper-operator.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local
+{{- end }}
+{{- if and .Values.certManager.enabled (include "hyper-operator.identityServer" .) }}
+---
+# Server certificate of the identity stream; engines verify it against the issuer's CA.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ .Values.operator.identity.server.serviceName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "hyper-operator.labels" . | nindent 4 }}
+spec:
+  secretName: {{ .Values.operator.identity.server.certSecret }}
+  issuerRef:
+    name: {{ .Values.certManager.issuerName }}
+    kind: Issuer
+  duration: {{ .Values.certManager.duration }}
+  renewBefore: {{ .Values.certManager.renewBefore }}
+  dnsNames:
+    - {{ .Values.operator.identity.server.serviceName }}.{{ .Release.Namespace }}.svc
+    - {{ .Values.operator.identity.server.serviceName }}.{{ .Release.Namespace }}.svc.cluster.local
 {{- end }}

@@ -51,3 +51,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- $tag := .Values.image.tag | default .Chart.AppVersion }}
 {{- printf "%s:%s" .Values.image.repository $tag }}
 {{- end }}
+
+{{/*
+"true" when the leader-only identity stream server is enabled.
+*/}}
+{{- define "hyper-operator.identityServer" -}}
+{{- if and .Values.operator.identity.enabled .Values.operator.identity.server.enabled -}}true{{- end -}}
+{{- end }}

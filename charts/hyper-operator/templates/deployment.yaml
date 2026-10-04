@@ -52,12 +52,33 @@ spec:
             - --identity-label-keys={{ join "," .labelKeys }}
             {{- end }}
             {{- end }}
+            {{- if include "hyper-operator.identityServer" . }}
+            - --identity-server
+            - --identity-server-address=:{{ .Values.operator.identity.server.port }}
+            - --identity-server-cert-dir=/tmp/identity-server-certs
+            - --identity-service-name={{ .Values.operator.identity.server.serviceName }}
+            {{- end }}
           env:
             - name: ENABLE_WEBHOOKS
               value: {{ .Values.operator.enableWebhooks | quote }}
             # Engine image used when a HyperConfig does not set spec.engineImage.
             - name: ENGINE_IMAGE
               value: {{ printf "%s:%s" .Values.engine.image.repository (.Values.engine.image.tag | default .Chart.AppVersion) | quote }}
+            {{- if include "hyper-operator.identityServer" . }}
+            # The leader writes its own address into the identity Service's EndpointSlice.
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            {{- end }}
           ports:
             - containerPort: {{ .Values.operator.webhookPort }}
               name: webhook-server
@@ -68,10 +89,20 @@ spec:
             - containerPort: {{ .Values.operator.metricsPort }}
               name: metrics
               protocol: TCP
+            {{- if include "hyper-operator.identityServer" . }}
+            - containerPort: {{ .Values.operator.identity.server.port }}
+              name: identity
+              protocol: TCP
+            {{- end }}
           volumeMounts:
             {{- if .Values.operator.enableWebhooks }}
             - mountPath: /tmp/k8s-webhook-server/serving-certs
               name: cert
+              readOnly: true
+            {{- end }}
+            {{- if include "hyper-operator.identityServer" . }}
+            - mountPath: /tmp/identity-server-certs
+              name: identity-cert
               readOnly: true
             {{- end }}
           {{- with .Values.livenessProbe }}
@@ -96,6 +127,12 @@ spec:
           secret:
             defaultMode: 420
             secretName: {{ .Values.operator.webhookCertSecret }}
+        {{- end }}
+        {{- if include "hyper-operator.identityServer" . }}
+        - name: identity-cert
+          secret:
+            defaultMode: 420
+            secretName: {{ .Values.operator.identity.server.certSecret }}
         {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
