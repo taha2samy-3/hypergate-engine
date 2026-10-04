@@ -461,7 +461,7 @@ Every sidecar mounts the shared `emptyDir` volume `uds-sockets` at `/var/run/hyp
 
 ## DenyFilter
 
-See [Deny](/docs/filters/deny). The schema requires `match`; use `match: {}` for an unconditional deny.
+See [Deny](/docs/filters/deny). Without `match` (or with `match: {}`) the filter denies every request that reaches it.
 
 ```yaml
 apiVersion: hyper.io/v1alpha1
@@ -479,7 +479,7 @@ spec:
 | --- | --- | --- | --- |
 | `statusCode` | integer (int32) | `403` | `status_code` |
 | `body` | string | `Forbidden` | `body` |
-| `match` | object, **required** | | `match` |
+| `match` | object | empty | `match` |
 | `match.pathPrefix` | string | empty | `match.path_prefix` |
 | `match.pathRegex` | string | empty | `match.path_regex` |
 | `match.headers` | map of string to string | empty | `match.headers` |

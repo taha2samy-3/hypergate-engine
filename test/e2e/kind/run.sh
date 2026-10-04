@@ -45,11 +45,15 @@ write_summary() {
 }
 
 # wait_until <description> <timeout seconds> <command...>
+# On timeout the output of the last attempt is printed.
 wait_until() {
   local desc=$1 timeout=$2; shift 2
-  local deadline=$(( $(date +%s) + timeout ))
-  until "$@" >/dev/null 2>&1; do
-    (( $(date +%s) < deadline )) || fail "timed out after ${timeout}s waiting for: $desc"
+  local deadline=$(( $(date +%s) + timeout )) out
+  until out=$("$@" 2>&1); do
+    if (( $(date +%s) >= deadline )); then
+      echo "Last attempt output:"; echo "$out" | tail -20
+      fail "timed out after ${timeout}s waiting for: $desc"
+    fi
     sleep 1
   done
 }
