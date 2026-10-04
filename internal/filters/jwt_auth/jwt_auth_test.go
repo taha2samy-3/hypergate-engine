@@ -127,7 +127,7 @@ func TestJWTAuth_HS256_ValidToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create filter: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	ctx := newCtx()
 	ctx.Headers["authorization"] = "Bearer " + token
@@ -157,7 +157,7 @@ func TestJWTAuth_HS256_ExpiredToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create filter: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	ctx := newCtx()
 	ctx.Headers["authorization"] = "Bearer " + token
@@ -181,7 +181,7 @@ func TestJWTAuth_HS256_WrongSecret(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create filter: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	ctx := newCtx()
 	ctx.Headers["authorization"] = "Bearer " + token
@@ -200,7 +200,7 @@ func TestJWTAuth_HS256_MissingToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create filter: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	ctx := newCtx()
 	// No authorization header
@@ -226,7 +226,7 @@ func TestJWTAuth_HS256_IssuerMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create filter: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	ctx := newCtx()
 	ctx.Headers["authorization"] = "Bearer " + token
@@ -249,7 +249,7 @@ func TestJWTAuth_HS256_StripToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create filter: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	ctx := newCtx()
 	ctx.Headers["authorization"] = "Bearer " + token
@@ -288,7 +288,7 @@ func TestJWTAuth_TokenFromQueryParam(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create filter: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	ctx := newCtx()
 	ctx.Path = "/api/v1/resource?access_token=" + token
@@ -312,7 +312,7 @@ func TestJWTAuth_TokenFromCookie(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create filter: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	ctx := newCtx()
 	ctx.Headers["cookie"] = "session=abc; auth_token=" + token + "; other=xyz"
@@ -343,7 +343,7 @@ func TestJWTAuth_RS256_ValidToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create filter with JWKS: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	ctx := newCtx()
 	ctx.Headers["authorization"] = "Bearer " + token
@@ -384,7 +384,7 @@ func TestJWTAuth_IntrospectionFallback_ActiveToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create filter: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	ctx := newCtx()
 	ctx.Headers["authorization"] = "Bearer opaque-token-xyz"
@@ -413,7 +413,7 @@ func TestJWTAuth_IntrospectionFallback_InactiveToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create filter: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	ctx := newCtx()
 	ctx.Headers["authorization"] = "Bearer revoked-token"
@@ -438,7 +438,7 @@ func TestJWTAuth_FailOpen_NetworkError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create filter: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	ctx := newCtx()
 	ctx.Headers["authorization"] = "Bearer some-token"
@@ -464,7 +464,7 @@ func TestJWTAuth_OnlyRunsOnRequestHeadersPhase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create filter: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	phases := f.SupportedPhases()
 	if len(phases) != 1 || phases[0] != engine.PhaseRequestHeaders {

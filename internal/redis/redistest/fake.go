@@ -106,7 +106,7 @@ func assign(rcv interface{}, v interface{}) {
 		return
 	}
 	dst := reflect.ValueOf(rcv)
-	if dst.Kind() != reflect.Ptr || dst.IsNil() {
+	if dst.Kind() != reflect.Pointer || dst.IsNil() {
 		return
 	}
 	target := dst.Elem()
