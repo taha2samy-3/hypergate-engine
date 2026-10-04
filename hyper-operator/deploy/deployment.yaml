@@ -23,13 +23,21 @@ spec:
           command:
             - /manager
           args:
+            - --metrics-bind-address=:8080
             - --leader-elect
+            - --leader-elect-lease-duration=15s
+            - --leader-elect-renew-deadline=10s
+            - --leader-elect-retry-period=2s
+            - --leader-elect-release-on-cancel=true
           env:
             - name: ENABLE_WEBHOOKS
               value: "true" # Webhooks enabled
           ports:
             - containerPort: 9443 # Default port for the webhook server
               name: webhook-server
+              protocol: TCP
+            - containerPort: 8080
+              name: metrics
               protocol: TCP
           volumeMounts:
             - mountPath: /tmp/k8s-webhook-server/serving-certs

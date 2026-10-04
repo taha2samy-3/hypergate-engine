@@ -35,8 +35,15 @@ spec:
           command:
             - /manager
           args:
+            - --metrics-bind-address=:{{ .Values.operator.metricsPort }}
             {{- if .Values.operator.leaderElect }}
+            {{- with .Values.operator.leaderElection }}
             - --leader-elect
+            - --leader-elect-lease-duration={{ .leaseDuration }}
+            - --leader-elect-renew-deadline={{ .renewDeadline }}
+            - --leader-elect-retry-period={{ .retryPeriod }}
+            - --leader-elect-release-on-cancel={{ .releaseOnCancel }}
+            {{- end }}
             {{- end }}
           env:
             - name: ENABLE_WEBHOOKS
@@ -50,6 +57,9 @@ spec:
               protocol: TCP
             - containerPort: 8081
               name: health
+              protocol: TCP
+            - containerPort: {{ .Values.operator.metricsPort }}
+              name: metrics
               protocol: TCP
           volumeMounts:
             {{- if .Values.operator.enableWebhooks }}

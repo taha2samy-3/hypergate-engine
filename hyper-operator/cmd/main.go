@@ -16,6 +16,7 @@ import (
 
 	hyperv1alpha1 "github.com/taha2samy/hypergate/hyper-operator/api/v1alpha1"
 	"github.com/taha2samy/hypergate/hyper-operator/internal/controller"
+	"github.com/taha2samy/hypergate/hyper-operator/internal/leader"
 	"github.com/taha2samy/hypergate/hyper-operator/internal/webhook"
 )
 
@@ -32,13 +33,11 @@ func init() {
 
 func main() {
 	var metricsAddr string
-	var enableLeaderElection bool
 	var probeAddr string
+	election := leader.DefaultElectionConfig()
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
-	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
-		"Enable leader election for controller manager. "+
-			"Enabling this will ensure there is only one active controller manager.")
+	election.BindFlags(flag.CommandLine)
 	opts := zap.Options{
 		Development: true,
 	}
@@ -47,15 +46,33 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	if err := election.Validate(); err != nil {
+		setupLog.Error(err, "invalid leader election flags")
+		os.Exit(1)
+	}
+
+	mgrOpts := ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsserver.Options{BindAddress: metricsAddr},
 		HealthProbeBindAddress: probeAddr,
-		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "hyper-operator.hyper.io",
-	})
+	}
+	election.Apply(&mgrOpts)
+
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), mgrOpts)
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
+		os.Exit(1)
+	}
+	if election.Enabled {
+		setupLog.Info("Leader election enabled",
+			"lease", election.LeaseName,
+			"leaseDuration", election.LeaseDuration,
+			"renewDeadline", election.RenewDeadline,
+			"retryPeriod", election.RetryPeriod,
+			"releaseOnCancel", election.ReleaseOnCancel)
+	}
+	if err := mgr.Add(leader.NewLeadershipReporter()); err != nil {
+		setupLog.Error(err, "unable to add leadership reporter")
 		os.Exit(1)
 	}
 
@@ -108,6 +125,9 @@ func main() {
 	}
 
 	setupLog.Info("starting manager")
+	// Start returns when the signal handler fires or when leadership is lost. Exit
+	// right away: LeaderElectionReleaseOnCancel relies on the process ending as soon
+	// as the manager has stopped.
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)

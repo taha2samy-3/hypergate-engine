@@ -29,8 +29,21 @@ serviceAccount:
 
 # ── Operator Settings ─────────────────────────────────────────────────────────
 operator:
-  # -- Enable leader election (required when replicaCount > 1)
+  # -- Enable leader election (required when replicaCount > 1). The replica holding
+  # the Lease reconciles; the others stay as warm standbys.
   leaderElect: true
+  # Lease timings. Must satisfy retryPeriod < renewDeadline < leaseDuration.
+  leaderElection:
+    # -- How long standbys wait after the leader's last renewal before taking over
+    leaseDuration: 15s
+    # -- How long the leader retries renewing before giving the Lease up
+    renewDeadline: 10s
+    # -- Interval between acquire/renew attempts
+    retryPeriod: 2s
+    # -- Release the Lease on shutdown so a standby takes over immediately (rolling upgrades)
+    releaseOnCancel: true
+  # -- Port of the Prometheus metrics endpoint (includes hypergate_operator_is_leader)
+  metricsPort: 8080
   # -- Enable the validating webhook server
   enableWebhooks: true
   # -- Webhook server port

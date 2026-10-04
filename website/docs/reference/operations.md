@@ -72,6 +72,30 @@ The `POST /v1/reload` endpoint exists only with `CONFIG_PROVIDER=URL`.
 - `CONFIG_RELOAD_ADDRESS` overrides the address in either case. Setting it to a non-loopback address without a token exposes an unauthenticated endpoint; avoid that.
 - The endpoint only triggers a fetch of `CONFIG_URL`; it never accepts configuration in the request body. Protect the configuration source itself as carefully as the engine.
 
+## Operator high availability
+
+The operator runs as a Deployment (2 replicas by default) and uses Kubernetes **Lease**-based leader election (`coordination.k8s.io/v1` Lease `hyper-operator.hyper.io` in the operator namespace). The replica holding the Lease reconciles resources. The others are standbys that keep serving the admission webhooks and take over when the Lease is free.
+
+| Helm value | Flag | Default | Meaning |
+| --- | --- | --- | --- |
+| `operator.leaderElect` | `--leader-elect` | `true` | Enable leader election (required with more than one replica). |
+| `operator.leaderElection.leaseDuration` | `--leader-elect-lease-duration` | `15s` | How long standbys wait after the leader's last renewal before taking over. |
+| `operator.leaderElection.renewDeadline` | `--leader-elect-renew-deadline` | `10s` | How long the leader retries renewing before it steps down. |
+| `operator.leaderElection.retryPeriod` | `--leader-elect-retry-period` | `2s` | Interval between acquire/renew attempts. |
+| `operator.leaderElection.releaseOnCancel` | `--leader-elect-release-on-cancel` | `true` | Release the Lease on shutdown, so a standby takes over within about one retry period. |
+
+The timings must satisfy `retryPeriod < renewDeadline < leaseDuration`; the operator refuses to start otherwise. When a leader loses its Lease (for example after a network partition) it stops and its container restarts as a standby, so two replicas never reconcile at the same time.
+
+Expected takeover times: about one `retryPeriod` (≈ 2 s) on a rolling upgrade or graceful stop, and about `leaseDuration` plus a few seconds (≈ 15–20 s) after a crash.
+
+Which replica leads:
+
+```bash
+kubectl -n <operator-namespace> get lease hyper-operator.hyper.io -o jsonpath='{.spec.holderIdentity}{"\n"}'
+```
+
+Each replica also exports `hypergate_operator_is_leader` (1 on the leader, 0 on standbys) on its metrics port (`operator.metricsPort`, default 8080), and logs `This replica is now the leader` / `This replica stopped leading`.
+
 ## Upgrading
 
 1. **CRDs.** Helm does not upgrade CRDs. Apply the CRDs of the target version first:
