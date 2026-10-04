@@ -27,6 +27,13 @@ tasks:
     cmds:
       - buf generate buf.build/envoyproxy/envoy --path envoy/service/auth/v3
 
+  proto:
+    desc: "Lint and generate Go code for Hypergate's protobuf definitions in proto/ (needs buf and protoc-gen-go)"
+    dir: proto
+    cmds:
+      - buf lint
+      - buf generate
+
   build:
     desc: "Build highly-optimized stripped Go binary for Linux"
     cmds:

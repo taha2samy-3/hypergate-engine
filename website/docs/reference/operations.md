@@ -108,6 +108,21 @@ The operator can keep a map from IP address to workload (pod, namespace, service
 
 With Cilium installed, the operator also reads each pod's security identity from its `CiliumEndpoint`. It detects the CRD at start-up and every five minutes after.
 
+The leader can also stream the map to engines (engines consume it from the next release):
+
+| Helm value | Flag | Default | Meaning |
+| --- | --- | --- | --- |
+| `operator.identity.server.enabled` | `--identity-server` | `false` | Serve the map over delta xDS from the leader. Needs `operator.identity.enabled`. |
+| `operator.identity.server.port` | `--identity-server-address` | `9444` | Port of the stream server. |
+| `operator.identity.server.serviceName` | `--identity-service-name` | `hyper-operator-identity` | Selector-less Service engines connect to. The leader writes its EndpointSlice with its own pod IP, so engines always reach the current leader. |
+| `operator.identity.server.certSecret` | `--identity-server-cert-dir` | `hyper-operator-identity-cert` | TLS certificate of the server, issued by cert-manager when `certManager.enabled`. Renewals are picked up without a restart. |
+
+Engines authenticate with a projected ServiceAccount token (audience `hypergate-identity`); the operator checks it with the TokenReview API and accepts only the engine ServiceAccount of a namespace that runs an engine. On a leader change, the new leader publishes its address within one retry period of winning the Lease, and engines reconnect and receive only what changed.
+
+```bash
+kubectl -n <operator-namespace> get endpointslice hyper-operator-identity -o wide   # the leader's pod IP
+```
+
 Metrics on each replica: `hypergate_identity_cache_synced` (1 once the initial state is indexed) and `hypergate_identity_cache_entries{kind="pod_ip"|"node_ip"|"service"}`. The design is in [workload identity distribution](https://github.com/taha2samy-3/hypergate-engine/blob/main/docs/design/identity-distribution.md).
 
 ## Upgrading
