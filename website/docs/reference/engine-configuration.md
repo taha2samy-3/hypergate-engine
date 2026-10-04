@@ -200,7 +200,7 @@ A map from chain name to an ordered list of filters. Each filter is:
 | `correlation_id` | [Correlation ID](/docs/filters/correlation-id) |
 | `redis_metadata_enricher` | [Redis metadata enricher](/docs/filters/redis-metadata-enricher) |
 
-Filters run in list order. An empty chain (`[]`) is valid and lets requests through. Identical filter definitions (same type, options and Redis service) share one instance, within a configuration and across reloads.
+Filters run in list order. See [Filter chains](../concepts/filter-chains.md) for how chains run, how filters pass data to each other, ordering advice and a complete example. An empty chain (`[]`) is valid and lets requests through. Identical filter definitions (same type, options and Redis service) share one instance, within a configuration and across reloads.
 
 ## router
 

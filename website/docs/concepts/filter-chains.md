@@ -20,6 +20,20 @@ A **chain** is a named, ordered list of filters. [Routing](./routing.md) picks e
 - **Empty chains are allowed.** `[]` lets requests through and still counts as a match, which is useful as an explicit "no policy" choice.
 - **Shared instances.** Identical filter definitions (same type, options and Redis service) share one instance across chains and across reloads, so listing the same rate limiter in two chains shares its counters.
 
+## Architecture
+
+![Loading: config.yaml is parsed and validated, the policy manager builds Redis clients and shared filter instances all or nothing, and the routes and chains become one snapshot the registry swaps in. Serving: each stream acquires the snapshot, the router picks a chain, the executor runs it per phase, and the stream releases the snapshot.](/img/diagrams/chain-architecture.svg)
+
+Chains are compiled once per configuration, not per request:
+
+1. **Parse and validate.** The engine rejects a configuration whose routes or default chains name a chain that does not exist, or whose regexes or selectors do not compile.
+2. **Build.** The policy manager creates the Redis clients and one filter instance per distinct definition (type, options and Redis client). Chains that list the same definition share the instance. Unchanged definitions reuse the instance from the previous configuration, so L1 caches, JWKS key sets and sidecar connections stay warm across reloads. If any filter fails to build, nothing is published and the previous policy keeps serving.
+3. **Publish.** The routes and the compiled chains become one immutable, reference-counted **snapshot**, swapped in as a unit, so a request can never be routed to a chain that is not compiled.
+4. **Serve.** Each ext_proc stream acquires the current snapshot and keeps it until the request ends, even if a reload happens meanwhile. The router picks one chain, and the executor runs it phase by phase, skipping filters that do not handle the phase and stopping at the first block.
+5. **Retire.** When the last stream holding an old snapshot ends, the filters and Redis clients that only the old snapshot used are closed.
+
+See [Hot reload](./hot-reload.md) for how new configurations arrive.
+
 ## Ordering filters
 
 Put cheap, broad decisions first and expensive or identity-dependent ones later:

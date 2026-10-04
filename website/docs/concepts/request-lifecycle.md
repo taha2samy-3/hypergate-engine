@@ -33,7 +33,7 @@ The chain is selected once, on the first message of the stream, and reused for e
 | `firewall` | Request headers; with `inspect_body`, the request body instead when the request has one |
 | `cors` | Request headers (decision; preflights answered with an immediate `204`/`403`); response headers (merges `Vary`) |
 
-Filters run in the order they are listed in the chain. A filter sees the effect of earlier filters in the same chain: a header set by `header_modifier` or injected by `api_key`, `jwt_auth` or `redis_metadata_enricher` is visible to later filters, and a header removed earlier reads as absent. This is how an enricher can feed a rate limiter (`header_mappings`), or a header modifier can supply a rate-limit cost.
+Filters run in the order they are listed in the chain (see [Filter chains](./filter-chains.md)). A filter sees the effect of earlier filters in the same chain: a header set by `header_modifier` or injected by `api_key`, `jwt_auth` or `redis_metadata_enricher` is visible to later filters, and a header removed earlier reads as absent. This is how an enricher can feed a rate limiter (`header_mappings`), or a header modifier can supply a rate-limit cost.
 
 ## Mutations
 

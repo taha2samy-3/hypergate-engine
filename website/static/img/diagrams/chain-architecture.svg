@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 500" role="img" aria-labelledby="t d">
+  <title id="t">Filter chain architecture</title>
+  <desc id="d">Loading: config.yaml is parsed and validated, then the policy manager builds Redis clients and filter instances all or nothing, sharing instances whose type, options and Redis client are identical and reusing them across reloads. The routes and compiled chains become one reference-counted snapshot that the chain registry swaps in. Serving: each ext_proc stream acquires the current snapshot, the router picks one chain, the executor runs its filters phase by phase and stops at a block, and the stream releases the snapshot at the end; the last stream on a retired snapshot closes the filters only it used.</desc>
+  <defs>
+    <style>
+      text { font-family: Inter, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #E2E8F0; }
+      .h { font-size: 15px; font-weight: 700; }
+      .s { font-size: 12.5px; fill: #94A3B8; }
+      .cap { font-size: 12.5px; fill: #94A3B8; letter-spacing: 0.08em; }
+      .box { fill: #1E293B; stroke: #334155; stroke-width: 1.5; }
+      .acc { fill: #1E293B; stroke: #6366F1; stroke-width: 2; }
+      .cy { fill: #1E293B; stroke: #22D3EE; stroke-width: 2; }
+      .ok { fill: #0B2A22; stroke: #10B981; stroke-width: 2; }
+      .ln { stroke: #94A3B8; stroke-width: 1.8; fill: none; }
+    </style>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#94A3B8"/></marker>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="500" rx="18" fill="#0F172A"/>
+  <rect x="0.75" y="0.75" width="1198.5" height="498.5" rx="18" fill="none" stroke="#1E293B" stroke-width="1.5"/>
+
+  <text x="30" y="46" class="cap">LOADING (START-UP AND EVERY RELOAD)</text>
+
+  <rect x="30" y="66" width="170" height="124" rx="12" class="cy"/>
+  <text x="48" y="94" class="h">config.yaml</text>
+  <text x="48" y="118" class="s">chains · router</text>
+  <text x="48" y="138" class="s">redis services</text>
+  <text x="48" y="164" class="s">file, ConfigMap, URL</text>
+
+  <rect x="230" y="66" width="190" height="124" rx="12" class="box"/>
+  <text x="248" y="94" class="h">Parse and validate</text>
+  <text x="248" y="118" class="s">chain references exist</text>
+  <text x="248" y="138" class="s">regexes and selectors</text>
+  <text x="248" y="158" class="s">compile</text>
+
+  <rect x="450" y="66" width="300" height="124" rx="12" class="acc"/>
+  <text x="468" y="94" class="h">Policy manager: build</text>
+  <text x="468" y="118" class="s">Redis clients (reused when unchanged)</text>
+  <text x="468" y="138" class="s">one instance per type + options + Redis,</text>
+  <text x="468" y="158" class="s">shared by chains and reused by reloads</text>
+  <text x="468" y="178" class="s">all or nothing: a failure keeps the old policy</text>
+
+  <rect x="780" y="66" width="180" height="124" rx="12" class="ok"/>
+  <text x="798" y="94" class="h">Snapshot</text>
+  <text x="798" y="118" class="s">routes + chains</text>
+  <text x="798" y="138" class="s">together, immutable,</text>
+  <text x="798" y="158" class="s">reference counted</text>
+
+  <rect x="990" y="66" width="180" height="124" rx="12" class="box"/>
+  <text x="1008" y="94" class="h">Chain registry</text>
+  <text x="1008" y="118" class="s">Swap: new snapshot</text>
+  <text x="1008" y="138" class="s">for new streams; the</text>
+  <text x="1008" y="158" class="s">old one is retired</text>
+
+  <path d="M200 128 H 222" class="ln" marker-end="url(#a)"/>
+  <path d="M420 128 H 442" class="ln" marker-end="url(#a)"/>
+  <path d="M750 128 H 772" class="ln" marker-end="url(#a)"/>
+  <path d="M960 128 H 982" class="ln" marker-end="url(#a)"/>
+
+  <text x="450" y="254" class="cap">SERVING (EVERY REQUEST = ONE EXT_PROC STREAM)</text>
+
+  <rect x="30" y="270" width="170" height="124" rx="12" class="cy"/>
+  <text x="48" y="298" class="h">Stream opens</text>
+  <text x="48" y="322" class="s">Envoy sends the</text>
+  <text x="48" y="342" class="s">request headers</text>
+
+  <rect x="230" y="270" width="190" height="124" rx="12" class="box"/>
+  <text x="248" y="298" class="h">Acquire snapshot</text>
+  <text x="248" y="322" class="s">kept for the whole</text>
+  <text x="248" y="342" class="s">request, even across</text>
+  <text x="248" y="362" class="s">a reload</text>
+
+  <rect x="450" y="270" width="300" height="124" rx="12" class="acc"/>
+  <text x="468" y="298" class="h">Router → one chain</text>
+  <text x="468" y="322" class="s">first matching route, else the default</text>
+  <text x="468" y="342" class="s">chain for the traffic class, else</text>
+  <text x="468" y="362" class="s">default_chain, else no chain</text>
+
+  <rect x="780" y="270" width="180" height="124" rx="12" class="acc"/>
+  <text x="798" y="298" class="h">Executor</text>
+  <text x="798" y="322" class="s">per phase, in order;</text>
+  <text x="798" y="342" class="s">skips filters for other</text>
+  <text x="798" y="362" class="s">phases; stops at a block</text>
+
+  <rect x="990" y="270" width="180" height="124" rx="12" class="box"/>
+  <text x="1008" y="298" class="h">Release</text>
+  <text x="1008" y="322" class="s">the last stream on a</text>
+  <text x="1008" y="342" class="s">retired snapshot closes</text>
+  <text x="1008" y="362" class="s">filters only it used</text>
+
+  <path d="M200 332 H 222" class="ln" marker-end="url(#a)"/>
+  <path d="M420 332 H 442" class="ln" marker-end="url(#a)"/>
+  <path d="M750 332 H 772" class="ln" marker-end="url(#a)"/>
+  <path d="M960 332 H 982" class="ln" marker-end="url(#a)"/>
+
+  <path d="M1080 190 V 220 H 325 V 262" class="ln" marker-end="url(#a)"/>
+  <text x="700" y="212" class="s" text-anchor="middle">current snapshot</text>
+
+  <rect x="30" y="422" width="1140" height="52" rx="10" class="box"/>
+  <text x="50" y="446" class="s">A reload never changes the chain of a request in flight, a request can never be routed to a chain that is not compiled,</text>
+  <text x="50" y="464" class="s">and filter state (L1 caches, JWKS keys, sidecar connections) survives reloads when the filter definition is unchanged.</text>
+</svg>

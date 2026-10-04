@@ -128,7 +128,7 @@ Printer columns: `Type`, `State`, `Last Check`.
 
 ## HyperChain
 
-An ordered list of filter references. Filters run in list order.
+An ordered list of filter references, compiled into one engine chain. Filters run in list order. See [Filter chains](../concepts/filter-chains.md) for how chains run and a complete example with every resource.
 
 ```yaml
 apiVersion: hyper.io/v1alpha1
