@@ -64,6 +64,10 @@ spec:
 | `defaultChain` | string | empty | `router.default_chain` | HyperChain for unmatched requests without a `defaultChains` entry for their traffic class. If it names a missing HyperChain, a `503` deny chain is compiled under that name. |
 | `defaultChains.northSouth` | string | empty | `router.default_chains.north_south` | HyperChain for unmatched north-south requests. A missing HyperChain compiles to a `503` deny chain. |
 | `defaultChains.eastWest` | string | empty | `router.default_chains.east_west` | HyperChain for unmatched east-west requests. A missing HyperChain compiles to a `503` deny chain. |
+| `extProc.gateways` | list of `{namespace, name}`, at most 64 | empty | | Envoy Gateway Gateways that get an `EnvoyExtensionPolicy` pointing at this engine. See [Envoy configuration](./envoy-configuration.md#envoy-gateway). |
+| `extProc.namespaces` | list of strings, at most 256 | empty | | Namespaces that get a `CiliumEnvoyExtProcFilter` named `hypergate`. Inactive until Cilium ships that CRD. |
+| `extProc.failureMode` | enum `FailClosed`, `FailOpen` | `FailClosed` | | What Envoy does when the engine cannot be reached. |
+| `extProc.messageTimeout` | Gateway API duration | `2500ms` | | Envoy's deadline for each ext_proc message. |
 | `poolPrewarmSize` | integer | `5000` | `server.pool_prewarm_size` | Request contexts allocated at start-up. |
 | `initialHeaderCapacity` | integer | `64` | `server.initial_header_capacity` | Initial header map capacity per context. |
 | `preallocBodyBufferBytes` | integer | `65536` | `server.prealloc_body_buffer_bytes` | Body buffer per context. |
@@ -76,6 +80,9 @@ The compiler always sets `server.health_address: ":9003"` so that the probes mat
 | --- | --- | --- |
 | `state` | string | `Ready` after the engine resources were reconciled, `Conflict` when an older HyperConfig manages the same `targetNamespace`. |
 | `message` | string | Explanation, for example `Engine resources reconciled in namespace hyper-system` or `targetNamespace "hyper-system" is already managed by HyperConfig "a"`. |
+| `conditions` | list of conditions | `EnvoyGatewayPolicies`, `CiliumFilters` and `HTTPRoutes`, each `True` or `False` with a reason (`Applied`, `NotConfigured`, `CRDNotInstalled`, `GatewayNotFound`, `InvalidReferences`, `Valid`). |
+
+The operator generates the objects named by `extProc` (`EnvoyExtensionPolicy`, `CiliumEnvoyExtProcFilter`, a `ReferenceGrant` named `hypergate-ext-proc` in `targetNamespace`). They carry the labels `app.kubernetes.io/managed-by: hyper-operator` and `hyper.io/hyperconfig: <name>` and are deleted when their entry is removed or the HyperConfig is deleted. It reads HTTPRoutes to report references to the `hypergate` filter that cannot work (as the `HTTPRoutes` condition and as Events on the HTTPRoute) but never creates or changes an HTTPRoute.
 
 Printer columns: `Server Address`, `Log Level`, `Target Namespace`, `State`.
 

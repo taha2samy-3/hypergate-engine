@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Status | **Approved** (revision 3). Phases R1 and R2 done, R3 next. Envoy attachment on Cilium **waits for upstream** `CiliumEnvoyExtProcFilter` (see [§2.1](#21-upstream-pull-requests-we-are-waiting-for)); everything else proceeds |
+| Status | **Approved** (revision 3). Phases R1–R3 done. Cilium attachment waits for upstream, and the current draft lacks fields Hypergate needs (see [§2.1](#21-upstream-pull-requests-we-are-waiting-for)). Envoy attachment on Cilium **waits for upstream** `CiliumEnvoyExtProcFilter` (see [§2.1](#21-upstream-pull-requests-we-are-waiting-for)); everything else proceeds |
 | Depends on | Upstream: [cilium#45951](https://github.com/cilium/cilium/issues/45951) / [PR #46479](https://github.com/cilium/cilium/pull/46479). Internal: [workload identity distribution](./identity-distribution.md) Phases 2–4 (workload-based source selectors only) |
 | Scope | Engine (selectors, router), HyperRoute / HyperConfig CRDs, operator (filter objects, ReferenceGrant, validation) |
 | Revision | 3. ext_proc only. Revision 1 (CiliumEnvoyConfig) and revision 2 (ext_authz) are withdrawn |
@@ -39,7 +39,20 @@ Amber, dashed parts depend on the upstream Cilium pull request; everything else 
 | [cilium/cilium#45951](https://github.com/cilium/cilium/issues/45951): CFP "Support Gateway API ExtensionRef through `CiliumEnvoyExtProcFilter`" | Design of the above | Open |
 | [cilium/cilium#30587](https://github.com/cilium/cilium/issues/30587): CFP "`HTTPRoute` `ExtensionRef` support for arbitrary L7 Envoy filters" | Earlier, broader proposal; context for #45951 | Open |
 
-Draft API of #46479: `cilium.io/v2alpha1`, kind `CiliumEnvoyExtProcFilter`, namespaced; backend service, message timeout, processing mode, request/response attributes, metadata, failure mode, allow mode override; referenced via `ExtensionRef` (group `cilium.io`); GAMMA supported; behind Helm value `gatewayAPI.enableExtensionRefFilters` (operator flag `enable-gateway-api-extension-ref-filters`). The repository's [`tasks/k8s.yaml`](../../tasks/k8s.yaml) already enables that flag. Field names below follow the draft and are re-checked when the PR is merged (phase R6).
+Draft API of #46479 as of head `35d016d` (checked October 2026): `cilium.io/v2alpha1`, kind `CiliumEnvoyExtProcFilter` (short name `ceepf`), namespaced. Spec fields: `backendRef` (`name`, optional `namespace` with a ReferenceGrant, `port`), `processingMode` (`requestHeaderMode`, `responseHeaderMode`, `requestBodyMode`, `responseBodyMode`, `requestTrailerMode`, `responseTrailerMode`) and `messageTimeout`. It is referenced via `ExtensionRef` (group `cilium.io`), GAMMA is supported, and it sits behind Helm value `gatewayAPI.enableExtensionRefFilters`. The repository's [`tasks/k8s.yaml`](../../tasks/k8s.yaml) already enables that flag.
+
+> **Gap found in the current draft.** The generated Envoy filter has only `grpc_service` and `stat_prefix`. There are no `request_attributes`, no `allow_mode_override`, no `failure_mode_allow` setting and no gRPC `initial_metadata`. For Hypergate on Cilium this means:
+>
+> | Missing in the draft | Effect on Hypergate |
+> | --- | --- |
+> | `request_attributes` (`source.address`, `destination.address`) | No caller IP (only `X-Forwarded-For`, usually absent east-west) and no destination address, so source and destination selectors cannot work |
+> | gRPC `initial_metadata` | No `x-hypergate-traffic`; the class must be inferred, which needs the identity map (Phase 4) |
+> | `allow_mode_override` | A firewall filter with `inspect_body` cannot ask for the body; such requests fail closed with `500` |
+> | `failure_mode_allow` | Always fail closed (acceptable, it is our default) |
+>
+> Proposed next step: contribute these fields upstream (comment on #46479 / #45951 with the use case, then a follow-up PR). This is not done yet because it publishes on our behalf; it needs the maintainers' go-ahead. Until then the operator generates filters with the fields that exist (phase R3), and R6 adds the rest once they are available.
+
+Field names below follow the draft and are re-checked when the PR is merged (phase R6).
 
 How we track it: the PR is checked at every milestone review. When it merges, phase R6 starts (field alignment and kind verification), and the operator activates filter generation automatically once the CRD is installed in a cluster.
 
@@ -94,8 +107,9 @@ spec:
     eastWest: deny-unlisted              # unmatched internal callers are rejected
   unknownSource: Deny
   extProc:
-    namespaceSelector:                   # namespaces that get the filter objects
-      matchLabels: { hypergate.io/ext-proc: enabled }
+    gateways:                            # Envoy Gateway: these Gateways get an EnvoyExtensionPolicy
+      - { namespace: edge, name: public }
+    namespaces: [payments]               # Cilium: these namespaces get the "hypergate" filter
     failureMode: FailClosed
 ```
 
@@ -168,10 +182,12 @@ Exposed to filters and logs as `destination_service`.
 
 | Responsibility | Detail |
 | --- | --- |
-| Envoy Gateway policy | When the `envoyextensionpolicies.gateway.envoyproxy.io` CRD exists: an `EnvoyExtensionPolicy` per selected Gateway (or per HTTPRoute) with `extProc` pointing to the engine Service, `x-hypergate-traffic: north-south` metadata, the request attributes listed below and the configured failure mode. Works with current Envoy Gateway releases. |
-| Filter objects | When the `ciliumenvoyextprocfilters.cilium.io` CRD exists (discovery check, re-checked periodically), create `hypergate` and `hypergate-gateway` in every namespace selected by `HyperConfig.spec.extProc.namespaceSelector`. Both point to the engine Service and request `source.address`, `destination.address`, `request.host`, `xds.cluster_name`, `xds.route_name`, `xds.route_metadata`, with `allowModeOverride: true` and the configured failure mode. Without the CRD this is a no-op, reported in HyperConfig status. |
-| ReferenceGrant | In the engine namespace, allowing `CiliumEnvoyExtProcFilter`s from the selected namespaces to reference the engine Service. |
-| Route validation | Watch `HTTPRoute`s whose `ExtensionRef` names a Hypergate filter. Check: `hypergate` used with Service parents and `hypergate-gateway` with Gateway parents; namespace selected; filter object present. Results go to HyperRoute / HyperConfig status and as Events on the HTTPRoute (its status belongs to the gateway controller). |
+| Envoy Gateway policy | For each Gateway listed in `HyperConfig.spec.extProc.gateways` (explicit list, decided), when the `envoyextensionpolicies.gateway.envoyproxy.io` CRD exists: an `EnvoyExtensionPolicy` `hypergate-<gateway>` in the Gateway's namespace targeting that Gateway, with `extProc` pointing to the engine Service, request attributes `source.address` and `destination.address`, `allowModeOverride: true`, the configured failure mode and message timeout. Envoy Gateway has no field for static gRPC metadata, so these requests reach the engine without `x-hypergate-traffic` and are treated as north-south, which is what Gateway traffic is. |
+| Filter objects | For each namespace listed in `HyperConfig.spec.extProc.namespaces` (explicit list, same principle), when the `ciliumenvoyextprocfilters.cilium.io` CRD exists (checked through the REST mapper, re-checked every 5 minutes): a `CiliumEnvoyExtProcFilter` `hypergate` pointing at the engine Service with the draft fields. A second `hypergate-gateway` object is only useful once the filter can carry stream metadata, so it is deferred to R6. Without the CRD this is a no-op, reported in the `CiliumFilters` condition. |
+| ReferenceGrant | `hypergate-ext-proc` in the engine namespace, allowing the generated `EnvoyExtensionPolicy`s and `CiliumEnvoyExtProcFilter`s from their namespaces to reference the engine Service. Narrowed or removed when entries are removed. |
+| Route validation | Read `HTTPRoute`s whose `ExtensionRef` names the Hypergate filter. Check that the namespace is listed and the CRD exists. Results go to the `HTTPRoutes` condition on HyperConfig and as `Warning` Events on the HTTPRoute (its status belongs to the gateway controller). |
+| Status | `HyperConfig.status.conditions`: `EnvoyGatewayPolicies`, `CiliumFilters`, `HTTPRoutes` (reasons such as `Applied`, `NotConfigured`, `CRDNotInstalled`, `GatewayNotFound`, `InvalidReferences`). |
+| Ownership | Generated objects carry `app.kubernetes.io/managed-by: hyper-operator` and `hyper.io/hyperconfig: <name>` plus an owner reference to the HyperConfig. An existing object with the same name that the operator did not create is never taken over. |
 | Compile routes | `traffic`, `sources`, `destinations`, `defaultChains`, `unknownSource` into the engine config after validation. |
 | Cleanup | Owner references on generated objects; removal when a namespace leaves the selector. |
 
@@ -243,7 +259,8 @@ R1–R5 proceed now. North-south and network-based policies are usable immediate
 | --- | --- |
 | R1 | **Done.** [`internal/selector`](../../internal/selector/selector.go) (parser, `ip:`/`cidr:`/`host:`/`any` matchers, workload prefixes parsed but rejected until R4), `traffic`/`sources`/`destinations` and `default_chains` in [`internal/config/routing.go`](../../internal/config/routing.go), router in [`internal/router/matcher.go`](../../internal/router/matcher.go), `x-hypergate-traffic` metadata and `destination.address` in [`internal/grpc/handlers.go`](../../internal/grpc/handlers.go). Tests: selector, parser, router and ext_proc tests. Note: `destination.address` is the local address of the downstream connection (the original destination of an intercepted call, the listener address on a gateway). `unknown_source` stays in R4: without the identity map every east-west caller would be unknown |
 | R2 | **Done.** `traffic` / `sources` / `destinations` on [`HyperRoute`](../../hyper-operator/api/v1alpha1/hyperroute_types.go) matches (enum, schema patterns kept equal to the Go constants by a test, at most 64 entries) and `defaultChains` on [`HyperConfig`](../../hyper-operator/api/v1alpha1/hyperconfig_types.go). Shared validation and compilation in [`hyper-operator/internal/routes`](../../hyper-operator/internal/routes/routes.go), used by the new [HyperRoute admission webhook](../../hyper-operator/internal/webhook/hyperroute_validation_webhook.go) and the [compiler](../../hyper-operator/internal/controller/hyperchain_master_compiler.go). HyperRoute `status.state` `Ready` / `Invalid`. Missing default chains compile to `503` deny chains; HyperChain deletion is refused while `defaultChains` uses it. `unknownSource` moves to R4 with the engine; `extProc.*` moves to R3 with the filter objects |
-| R3–R5 | Not started |
+| R3 | **Done.** [`ExtProcReconciler`](../../hyper-operator/internal/controller/extproc_controller.go): `EnvoyExtensionPolicy` per listed Gateway, `CiliumEnvoyExtProcFilter` per listed namespace (draft fields, inactive until the CRD exists), `ReferenceGrant` in the engine namespace, read-only HTTPRoute checks with Events, `HyperConfig.status.conditions`, pruning of removed entries, no take-over of foreign objects. `HyperConfig.spec.extProc` (`gateways`, `namespaces`, `failureMode`, `messageTimeout`). The HyperConfig controller now patches only its own status fields. Tests use a fake client with a REST mapper that installs or omits each optional CRD |
+| R4–R5 | Not started |
 | R6 | Blocked on [cilium/cilium#46479](https://github.com/cilium/cilium/pull/46479) |
 
 ## 13. Decisions log
@@ -254,6 +271,7 @@ R1–R5 proceed now. North-south and network-based policies are usable immediate
 | Envoy Gateway `EnvoyExtensionPolicy` for north-south | **Yes**, generated by the operator (R3) |
 | Structured selector long form | **No**, `prefix:value` only |
 | Who writes HTTPRoutes | **The developer only.** The operator reads them and never creates, edits or deletes them |
+| Which Gateways / namespaces get filter objects | **Explicit lists** in `HyperConfig.spec.extProc` (`gateways`, `namespaces`): nothing is attached unless it is listed |
 
 ## 14. Repository map
 
@@ -261,6 +279,7 @@ R1–R5 proceed now. North-south and network-based policies are usable immediate
 | --- | --- |
 | Selectors and traffic class | [`internal/selector/selector.go`](../../internal/selector/selector.go), [`traffic.go`](../../internal/selector/traffic.go) |
 | Engine router (matching) | [`internal/router/matcher.go`](../../internal/router/matcher.go) |
+| Operator ext_proc attachment (R3) | [`hyper-operator/internal/controller/extproc_controller.go`](../../hyper-operator/internal/controller/extproc_controller.go) |
 | Operator route validation and compilation | [`hyper-operator/internal/routes`](../../hyper-operator/internal/routes/routes.go), [HyperRoute webhook](../../hyper-operator/internal/webhook/hyperroute_validation_webhook.go) |
 | Route config and validation | [`internal/config/routing.go`](../../internal/config/routing.go), [`internal/config/parser.go`](../../internal/config/parser.go) |
 | ext_proc handling, request context | [`internal/grpc/handlers.go`](../../internal/grpc/handlers.go), [`internal/grpc/server.go`](../../internal/grpc/server.go), [`internal/engine/context.go`](../../internal/engine/context.go) |

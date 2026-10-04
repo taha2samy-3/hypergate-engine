@@ -184,10 +184,63 @@ routes:
 
 Requests on such routes never reach the engine, so no chain, not even the default chain, applies to them.
 
+## Envoy Gateway
+
+With [Envoy Gateway](https://gateway.envoyproxy.io/), let the operator attach the engine. List the Gateways in the HyperConfig:
+
+```yaml
+apiVersion: hyper.io/v1alpha1
+kind: HyperConfig
+metadata:
+  name: main
+spec:
+  targetNamespace: hyper-system
+  defaultChain: public
+  extProc:
+    gateways:
+      - namespace: edge
+        name: public
+    failureMode: FailClosed     # default
+    messageTimeout: 2500ms      # default
+```
+
+For each listed Gateway the operator creates this policy in the Gateway's namespace, and a `ReferenceGrant` in `hyper-system` that lets it reference the engine Service:
+
+```yaml
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyExtensionPolicy
+metadata:
+  name: hypergate-public
+  namespace: edge
+  labels:
+    app.kubernetes.io/managed-by: hyper-operator
+    hyper.io/hyperconfig: main
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: public
+  extProc:
+    - backendRefs:
+        - kind: Service
+          name: hyper-engine-svc
+          namespace: hyper-system
+          port: 9001
+      messageTimeout: 2500ms
+      failOpen: false
+      processingMode:
+        request:
+          attributes: [source.address, destination.address]
+        response: {}
+        allowModeOverride: true
+```
+
+Nothing is attached to a Gateway that is not listed, and your HTTPRoutes are left alone. Envoy Gateway cannot send static gRPC metadata, so these requests carry no `x-hypergate-traffic` and the engine treats them as north-south, which is correct for a Gateway. Check the result with `kubectl get hyperconfig main -o jsonpath='{.status.conditions}'`.
+
 ## Cilium Gateway API
 
 With Cilium, the filter is added through a `CiliumEnvoyConfig` attached to the gateway's service, as shown in the [Kubernetes quickstart](../getting-started/quickstart-kubernetes.md#8-connect-envoy) and in `k8s/demo/06-extproc-config.yaml`. The same settings apply.
 
 :::note East-west traffic on Cilium
-Applying Hypergate to service-to-service calls (Gateway API GAMMA routes) needs a typed way to attach ext_proc to an `HTTPRoute`. Cilium is adding one, `CiliumEnvoyExtProcFilter`, in [cilium/cilium#46479](https://github.com/cilium/cilium/pull/46479) (draft; proposal [cilium/cilium#45951](https://github.com/cilium/cilium/issues/45951)). Hypergate waits for it rather than relying on `CiliumEnvoyConfig` for GAMMA traffic. The plan and progress are in the [identity-aware routing design](https://github.com/taha2samy-3/hypergate-engine/blob/main/docs/design/identity-aware-routing.md).
+Applying Hypergate to service-to-service calls (Gateway API GAMMA routes) needs a typed way to attach ext_proc to an `HTTPRoute`. Cilium is adding one, `CiliumEnvoyExtProcFilter`, in [cilium/cilium#46479](https://github.com/cilium/cilium/pull/46479) (draft; proposal [cilium/cilium#45951](https://github.com/cilium/cilium/issues/45951)). Hypergate waits for it rather than relying on `CiliumEnvoyConfig` for GAMMA traffic. List namespaces in `HyperConfig.spec.extProc.namespaces` and the operator creates a `CiliumEnvoyExtProcFilter` named `hypergate` there as soon as the CRD is installed; your HTTPRoutes reference it through an `ExtensionRef`. The current draft cannot yet send the caller and destination addresses or the traffic class, so selectors on those do not work on Cilium until it does. The plan and progress are in the [identity-aware routing design](https://github.com/taha2samy-3/hypergate-engine/blob/main/docs/design/identity-aware-routing.md).
 :::
