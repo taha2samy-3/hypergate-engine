@@ -1,0 +1,88 @@
+# Workloads: a ledger backend, a checkout client with its own ServiceAccount and
+# Service, an intruder in the same namespace, and a hostNetwork client whose
+# address is a node (north-south for the engine).
+apiVersion: v1
+kind: Namespace
+metadata: {name: payments}
+---
+apiVersion: v1
+kind: Namespace
+metadata: {name: shop}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: ledger, namespace: payments}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: ledger}}
+  template:
+    metadata: {labels: {app: ledger}}
+    spec:
+      containers:
+        - name: echo
+          image: hashicorp/http-echo:1.0
+          args: ["-text=ledger", "-listen=:8080"]
+          ports: [{containerPort: 8080}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: ledger, namespace: payments}
+spec:
+  selector: {app: ledger}
+  ports: [{name: http, port: 80, targetPort: 8080}]
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: checkout, namespace: shop}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: checkout, namespace: shop}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: checkout}}
+  template:
+    metadata: {labels: {app: checkout}}
+    spec:
+      serviceAccountName: checkout
+      containers:
+        - name: curl
+          image: curlimages/curl:8.11.1
+          command: ["sleep", "infinity"]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: checkout, namespace: shop}
+spec:
+  selector: {app: checkout}
+  ports: [{name: http, port: 80, targetPort: 8080}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: intruder, namespace: shop}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: intruder}}
+  template:
+    metadata: {labels: {app: intruder}}
+    spec:
+      containers:
+        - name: curl
+          image: curlimages/curl:8.11.1
+          command: ["sleep", "infinity"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: outside, namespace: default}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: outside}}
+  template:
+    metadata: {labels: {app: outside}}
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: curl
+          image: curlimages/curl:8.11.1
+          command: ["sleep", "infinity"]

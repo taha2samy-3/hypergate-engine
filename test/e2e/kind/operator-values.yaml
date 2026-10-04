@@ -1,0 +1,21 @@
+# hyper-operator chart values for the kind end-to-end test.
+replicaCount: 2
+image:
+  repository: ghcr.io/taha2samy-3/hyper-operator
+  tag: e2e
+  pullPolicy: IfNotPresent
+engine:
+  image:
+    repository: ghcr.io/taha2samy-3/hyper-engine
+    tag: e2e
+operator:
+  leaderElect: true
+  leaderElection:
+    leaseDuration: 15s
+    renewDeadline: 10s
+    retryPeriod: 2s
+    releaseOnCancel: true
+  identity:
+    enabled: true
+    server:
+      enabled: true

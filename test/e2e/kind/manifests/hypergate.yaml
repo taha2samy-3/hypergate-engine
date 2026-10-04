@@ -1,0 +1,64 @@
+# Hypergate policy: checkout (by Service or ServiceAccount) gets its own chain,
+# other pods get the east-west default (deny), node/outside callers get public.
+# Each allowing chain marks the response so the test can see which one ran.
+apiVersion: hyper.io/v1alpha1
+kind: HeaderModifierFilter
+metadata: {name: mark-checkout}
+spec:
+  downstream:
+    add: {x-hypergate-chain: checkout-to-ledger}
+---
+apiVersion: hyper.io/v1alpha1
+kind: HeaderModifierFilter
+metadata: {name: mark-public}
+spec:
+  downstream:
+    add: {x-hypergate-chain: public}
+---
+apiVersion: hyper.io/v1alpha1
+kind: DenyFilter
+metadata: {name: deny-unlisted}
+spec:
+  statusCode: 403
+  body: denied by hypergate
+---
+apiVersion: hyper.io/v1alpha1
+kind: HyperChain
+metadata: {name: checkout-to-ledger}
+spec:
+  filters: [{kind: HeaderModifierFilter, name: mark-checkout}]
+---
+apiVersion: hyper.io/v1alpha1
+kind: HyperChain
+metadata: {name: public}
+spec:
+  filters: [{kind: HeaderModifierFilter, name: mark-public}]
+---
+apiVersion: hyper.io/v1alpha1
+kind: HyperChain
+metadata: {name: deny-unlisted}
+spec:
+  filters: [{kind: DenyFilter, name: deny-unlisted}]
+---
+apiVersion: hyper.io/v1alpha1
+kind: HyperRoute
+metadata: {name: checkout-to-ledger}
+spec:
+  priority: 100
+  targetPolicy: checkout-to-ledger
+  matches:
+    - traffic: EastWest
+      sources: ["service:shop/checkout", "sa:shop/checkout"]
+---
+apiVersion: hyper.io/v1alpha1
+kind: HyperConfig
+metadata: {name: main}
+spec:
+  targetNamespace: hyper-system
+  defaultChains:
+    northSouth: public
+    eastWest: deny-unlisted
+  unknownSource: Deny
+  extProc:
+    gateways:
+      - {namespace: edge, name: public}
