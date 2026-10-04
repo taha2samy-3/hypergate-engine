@@ -1,5 +1,5 @@
 ---
-sidebar_position: 5
+sidebar_position: 6
 title: Client IP
 description: How the engine resolves the client address from Envoy's peer and trusted X-Forwarded-For hops.
 ---

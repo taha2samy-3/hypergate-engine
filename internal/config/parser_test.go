@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/taha2samy/hypergate/internal/config"
+	"github.com/taha2samy/hypergate/internal/filters"
 )
 
 // The integration-test configs must stay valid under the parser's validation rules.
@@ -161,5 +162,54 @@ func TestParseBytes_RejectsInvalidRoutingConfig(t *testing.T) {
 				t.Fatalf("want error containing %q, got %v", tt.errPart, err)
 			}
 		})
+	}
+}
+
+// docsCodeBlock returns the YAML code block with the given title from a docs page.
+func docsCodeBlock(t *testing.T, page, title string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(page)
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := "```yaml title=\"" + title + "\"\n"
+	_, rest, ok := strings.Cut(string(data), start)
+	if !ok {
+		t.Fatalf("%s: no code block titled %q", page, title)
+	}
+	block, _, ok := strings.Cut(rest, "\n```")
+	if !ok {
+		t.Fatalf("%s: unterminated code block %q", page, title)
+	}
+	return []byte(block)
+}
+
+// The engine example on the filter chains page must stay a valid configuration.
+func TestDocsFilterChainExampleParses(t *testing.T) {
+	cfg, err := config.ParseBytes(docsCodeBlock(t, "../../website/docs/concepts/filter-chains.md", "config.yaml"))
+	if err != nil {
+		t.Fatalf("docs example does not parse: %v", err)
+	}
+	var types []string
+	for _, f := range cfg.Chains["web-api"] {
+		types = append(types, f.Type)
+	}
+	want := "cors,correlation_id,jwt_auth,redis_metadata_enricher,embedded_rate_limiter,header_modifier"
+	if got := strings.Join(types, ","); got != want {
+		t.Fatalf("web-api chain = %s, want %s", got, want)
+	}
+	if cfg.Router.DefaultChain != "public" || len(cfg.Router.Routes) != 2 {
+		t.Fatalf("router = %+v", cfg.Router)
+	}
+	// Filters that need neither Redis nor the network are built for real.
+	for name, chain := range cfg.Chains {
+		for _, f := range chain {
+			switch f.Type {
+			case "cors", "correlation_id", "header_modifier", "deny":
+				if _, err := filters.CreateFilter(f.Type, f.Options, nil); err != nil {
+					t.Errorf("chain %s: %s options rejected: %v", name, f.Type, err)
+				}
+			}
+		}
 	}
 }

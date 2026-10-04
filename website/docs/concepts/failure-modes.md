@@ -1,5 +1,5 @@
 ---
-sidebar_position: 6
+sidebar_position: 7
 title: Failure modes
 description: What happens when the engine, Redis, a sidecar, an identity provider or the configuration fails, and which failures can be configured to fail open.
 ---

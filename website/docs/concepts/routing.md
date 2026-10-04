@@ -1,5 +1,5 @@
 ---
-sidebar_position: 3
+sidebar_position: 4
 title: Routing
 description: How a request is matched to a filter chain, the default chain, and what fails closed.
 ---

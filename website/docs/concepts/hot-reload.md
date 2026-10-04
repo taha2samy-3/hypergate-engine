@@ -1,5 +1,5 @@
 ---
-sidebar_position: 4
+sidebar_position: 5
 title: Hot reload
 description: How a new configuration is detected, compiled, published atomically and how old resources are retired.
 ---
