@@ -119,7 +119,7 @@ To use workload selectors, also let the leader stream the map to engines:
 
 Engines authenticate with a projected ServiceAccount token (audience `hypergate-identity`); the operator checks it with the TokenReview API and accepts only the engine ServiceAccount of a namespace that runs an engine. On a leader change, the new leader publishes its address within one retry period of winning the Lease, and engines reconnect and receive only what changed.
 
-With the server enabled, the operator configures every engine automatically: the `identity` block in the engine configuration, a projected ServiceAccount token (audience `hypergate-identity`) and the CA certificate in a ConfigMap `hyper-identity-ca` in the engine namespace (re-copied every 10 minutes). The chart issues the server certificate from a 10-year CA, so renewing the server certificate does not change what engines trust. HyperRoutes with workload selectors are accepted only while the server is enabled.
+With the server enabled, the operator configures every engine automatically: the `identity` block in the engine configuration, a projected ServiceAccount token (audience `hypergate-identity`, readable by every container of the engine pod, including filter sidecars) and the CA certificate in a ConfigMap `hyper-identity-ca` in the engine namespace (re-copied every 10 minutes). The chart issues the server certificate from a 10-year CA, so renewing the server certificate does not change what engines trust. HyperRoutes with workload selectors are accepted only while the server is enabled.
 
 ```bash
 kubectl -n <operator-namespace> get endpointslice hyper-operator-identity -o wide   # the leader's pod IP

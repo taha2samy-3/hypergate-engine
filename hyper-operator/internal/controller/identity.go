@@ -69,6 +69,9 @@ func identityVolumes(s IdentitySettings) ([]corev1.Volume, []corev1.VolumeMount)
 	volumes := []corev1.Volume{{
 		Name: identityTokenVolume,
 		VolumeSource: corev1.VolumeSource{Projected: &corev1.ProjectedVolumeSource{
+			// Readable by the engine's user even when sidecars with other users share
+			// the pod (kubelet then cannot hand the file to a single owner).
+			DefaultMode: ptr.To[int32](0o444),
 			Sources: []corev1.VolumeProjection{{ServiceAccountToken: &corev1.ServiceAccountTokenProjection{
 				Audience:          identityTokenAudience,
 				ExpirationSeconds: ptr.To[int64](identityTokenExpirySec),
