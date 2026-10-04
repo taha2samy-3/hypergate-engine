@@ -96,6 +96,20 @@ kubectl -n <operator-namespace> get lease hyper-operator.hyper.io -o jsonpath='{
 
 Each replica also exports `hypergate_operator_is_leader` (1 on the leader, 0 on standbys) on its metrics port (`operator.metricsPort`, default 8080), and logs `This replica is now the leader` / `This replica stopped leading`.
 
+### Workload identity cache
+
+The operator can keep a map from IP address to workload (pod, namespace, service account, SPIFFE ID, Services, Cilium security identity) on **every** replica, so a new leader has it ready immediately. It is the foundation for routing by caller identity, and nothing uses it yet, so it is off by default.
+
+| Helm value | Flag | Default | Meaning |
+| --- | --- | --- | --- |
+| `operator.identity.enabled` | `--identity-cache` | `false` | Build the map. The chart then grants read access to pods, nodes, endpointslices and ciliumendpoints. |
+| `operator.identity.trustDomain` | `--identity-trust-domain` | `cluster.local` | SPIFFE IDs are `spiffe://<trustDomain>/ns/<namespace>/sa/<serviceaccount>`. |
+| `operator.identity.labelKeys` | `--identity-label-keys` | `app`, `version` and the `app.kubernetes.io/*` keys | Pod labels kept in the map; others are dropped when objects are received, which keeps memory low. |
+
+With Cilium installed, the operator also reads each pod's security identity from its `CiliumEndpoint`. It detects the CRD at start-up and every five minutes after.
+
+Metrics on each replica: `hypergate_identity_cache_synced` (1 once the initial state is indexed) and `hypergate_identity_cache_entries{kind="pod_ip"|"node_ip"|"service"}`. The design is in [workload identity distribution](https://github.com/taha2samy-3/hypergate-engine/blob/main/docs/design/identity-distribution.md).
+
 ## Upgrading
 
 1. **CRDs.** Helm does not upgrade CRDs. Apply the CRDs of the target version first:

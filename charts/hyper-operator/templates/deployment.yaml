@@ -45,6 +45,13 @@ spec:
             - --leader-elect-release-on-cancel={{ .releaseOnCancel }}
             {{- end }}
             {{- end }}
+            {{- with .Values.operator.identity }}
+            {{- if .enabled }}
+            - --identity-cache
+            - --identity-trust-domain={{ .trustDomain }}
+            - --identity-label-keys={{ join "," .labelKeys }}
+            {{- end }}
+            {{- end }}
           env:
             - name: ENABLE_WEBHOOKS
               value: {{ .Values.operator.enableWebhooks | quote }}

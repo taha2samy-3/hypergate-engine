@@ -44,6 +44,22 @@ operator:
     releaseOnCancel: true
   # -- Port of the Prometheus metrics endpoint (includes hypergate_operator_is_leader)
   metricsPort: 8080
+  # Workload identity map (IP → pod, service account, SPIFFE ID, services, Cilium
+  # identity), kept warm on every replica. Grants read access to pods, nodes,
+  # services, endpointslices and ciliumendpoints.
+  identity:
+    # -- Build the identity cache
+    enabled: false
+    # -- Trust domain of the SPIFFE IDs (spiffe://<trustDomain>/ns/<ns>/sa/<sa>)
+    trustDomain: cluster.local
+    # -- Pod label keys kept in the map
+    labelKeys:
+      - app
+      - version
+      - app.kubernetes.io/name
+      - app.kubernetes.io/instance
+      - app.kubernetes.io/component
+      - app.kubernetes.io/version
   # -- Enable the validating webhook server
   enableWebhooks: true
   # -- Webhook server port

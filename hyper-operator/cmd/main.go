@@ -16,6 +16,7 @@ import (
 
 	hyperv1alpha1 "github.com/taha2samy/hypergate/hyper-operator/api/v1alpha1"
 	"github.com/taha2samy/hypergate/hyper-operator/internal/controller"
+	"github.com/taha2samy/hypergate/hyper-operator/internal/identity"
 	"github.com/taha2samy/hypergate/hyper-operator/internal/leader"
 	"github.com/taha2samy/hypergate/hyper-operator/internal/webhook"
 )
@@ -35,9 +36,11 @@ func main() {
 	var metricsAddr string
 	var probeAddr string
 	election := leader.DefaultElectionConfig()
+	var identityCfg identity.Config
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	election.BindFlags(flag.CommandLine)
+	identityCfg.BindFlags(flag.CommandLine)
 	opts := zap.Options{
 		Development: true,
 	}
@@ -74,6 +77,18 @@ func main() {
 	if err := mgr.Add(leader.NewLeadershipReporter()); err != nil {
 		setupLog.Error(err, "unable to add leadership reporter")
 		os.Exit(1)
+	}
+
+	if identityCfg.Enabled {
+		identityCache, err := identity.NewCacheForConfig(mgr.GetConfig(), identityCfg.Options())
+		if err == nil {
+			err = mgr.Add(identityCache.Runnable())
+		}
+		if err != nil {
+			setupLog.Error(err, "unable to set up the identity cache")
+			os.Exit(1)
+		}
+		setupLog.Info("Identity cache enabled on every replica", "trustDomain", identityCfg.TrustDomain)
 	}
 
 	if err = (&controller.HyperRedisReconciler{

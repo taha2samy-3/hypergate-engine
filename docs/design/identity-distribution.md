@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Status | Accepted. Phase 1 done, Phase 2 next |
+| Status | Accepted. Phases 1 and 2 done, Phase 3 next |
 | Owner | hyper-operator |
 | Scope | hyper-operator (new internal runnables), hypergate engine (identity client) |
 
@@ -70,6 +70,8 @@ Text version:
 Only the Lease holder writes the EndpointSlice, so writes are fenced by leadership. The controller-runtime manager stops when leadership is lost, which closes the old leader's streams. Engines then reconnect through the Service to the new leader.
 
 ## 4. Data model
+
+![Identity cache internals: trimmed informers feed an index of pods, service membership, cluster IPs, node addresses and Cilium identities; lookups by IP](./images/identity-cache.svg)
 
 One resource per pod IP and one per service:
 
@@ -147,8 +149,8 @@ During failover engines keep serving from their last snapshot. Workloads created
 
 ## 8. RBAC changes (operator)
 
-- `pods`, `services`, `discovery.k8s.io/endpointslices`: get, list, watch (all replicas).
-- `cilium.io/ciliumendpoints`, `cilium.io/ciliumidentities`: get, list, watch (only used when the CRDs exist).
+- `pods`, `nodes`, `services`, `discovery.k8s.io/endpointslices`: get, list, watch (all replicas). Nodes resolve hostNetwork traffic.
+- `cilium.io/ciliumendpoints`: get, list, watch (only used when the CRD exists). `CiliumIdentity` objects are not needed: a CiliumEndpoint's `status.identity` already carries the numeric identity and its labels.
 - `discovery.k8s.io/endpointslices`: create, update, patch, delete in the operator namespace (leader writes the routing slice).
 - `authentication.k8s.io/tokenreviews`: create.
 - `coordination.k8s.io/leases`: already granted.
@@ -181,7 +183,8 @@ Possible future use: the operator generates CiliumNetworkPolicies from Hypergate
 | Phase | Status | Notes |
 | --- | --- | --- |
 | 1 | **Done** | `hyper-operator/internal/leader`: `ElectionConfig` (flags `--leader-elect-lease-duration`, `--leader-elect-renew-deadline`, `--leader-elect-retry-period`, `--leader-elect-release-on-cancel`, `--leader-elect-lease-name`, `--leader-elect-namespace`, validated `retry < renew < lease`), `LeaderOnly` / `AllReplicas` runnable helpers, `hypergate_operator_is_leader` metric with transition logs. Chart values `operator.leaderElection.*`, metrics port exposed. Tests include a two-replica election through real controller-runtime managers sharing a Lease (fake clientset): the standby never runs leader-only work, warm-standby work runs everywhere, and a graceful stop hands over in well under the lease duration. |
-| 2–6 | Not started | |
+| 2 | **Done** | [`hyper-operator/internal/identity`](../../hyper-operator/internal/identity): [`Index`](../../hyper-operator/internal/identity/index.go) (pods by UID with the claimants of each IP, newest pod wins during IP reuse and a late delete only drops its own claim; finished pods release their IPs; hostNetwork pods resolve to their node; one entry per IP for dual-stack; Service membership reference-counted across EndpointSlices; services by cluster IP; Cilium identity joined by pod name) and [`Cache`](../../hyper-operator/internal/identity/cache.go) (client-go informers with transforms that keep only the indexed fields, CiliumEndpoint CRD detection at start and every 5 minutes, all-replica runnable). Flags `--identity-cache` (default off until Phase 3 consumes it), `--identity-trust-domain`, `--identity-label-keys`; chart values `operator.identity.*` with conditional read-only RBAC; metrics `hypergate_identity_cache_synced` and `hypergate_identity_cache_entries{kind}`. Tests: index edge cases and informer-driven tests with fake clientset and dynamic client (IP reuse, late Cilium CRD). |
+| 3–6 | Not started | |
 
 ## 11. Upstream dependencies and references
 
@@ -202,9 +205,10 @@ This design itself depends only on released components. The **consumer** of the 
 
 | Area | Where |
 | --- | --- |
+| Identity index and informer cache (Phase 2) | [`hyper-operator/internal/identity/index.go`](../../hyper-operator/internal/identity/index.go), [`cache.go`](../../hyper-operator/internal/identity/cache.go), [`flags.go`](../../hyper-operator/internal/identity/flags.go) |
 | Leader election config and runnable helpers (Phase 1) | [`hyper-operator/internal/leader/election.go`](../../hyper-operator/internal/leader/election.go), [`runnable.go`](../../hyper-operator/internal/leader/runnable.go), [tests](../../hyper-operator/internal/leader/election_test.go) |
 | Operator entry point (flags, manager) | [`hyper-operator/cmd/main.go`](../../hyper-operator/cmd/main.go) |
-| Helm values (`operator.leaderElection.*`, `operator.metricsPort`) | [`charts/hyper-operator/values.yaml`](../../charts/hyper-operator/values.yaml), [`templates/deployment.yaml`](../../charts/hyper-operator/templates/deployment.yaml) |
+| Helm values (`operator.leaderElection.*`, `operator.metricsPort`, `operator.identity.*`) | [`charts/hyper-operator/values.yaml`](../../charts/hyper-operator/values.yaml), [`templates/deployment.yaml`](../../charts/hyper-operator/templates/deployment.yaml) |
 | Static manifests | [`hyper-operator/deploy/deployment.yaml`](../../hyper-operator/deploy/deployment.yaml), [`rbac.yaml`](../../hyper-operator/deploy/rbac.yaml) |
 | Engine client IP resolution (consumer side) | [`internal/clientip/clientip.go`](../../internal/clientip/clientip.go) |
 | Engine request context (gains identity fields in Phase 4) | [`internal/engine/context.go`](../../internal/engine/context.go) |
