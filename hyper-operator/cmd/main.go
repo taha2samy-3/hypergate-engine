@@ -113,6 +113,10 @@ func main() {
 			setupLog.Error(err, "unable to create webhooks", "webhook", "HyperChainValidation")
 			os.Exit(1)
 		}
+		if err = webhook.SetupHyperRouteWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhooks", "webhook", "HyperRouteValidation")
+			os.Exit(1)
+		}
 	}
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

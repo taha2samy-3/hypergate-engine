@@ -89,6 +89,17 @@ spec:
                   description: "Deprecated and ignored; filters name their Redis service directly."
                 defaultChain:
                   type: string
+                  description: "HyperChain for requests that match no HyperRoute and have no defaultChains entry for their traffic class."
+                defaultChains:
+                  type: object
+                  description: "HyperChain for unmatched requests, by traffic class."
+                  properties:
+                    northSouth:
+                      type: string
+                      description: "Unmatched requests that entered through a gateway."
+                    eastWest:
+                      type: string
+                      description: "Unmatched calls between workloads."
                 poolPrewarmSize:
                   type: integer
                   default: 5000

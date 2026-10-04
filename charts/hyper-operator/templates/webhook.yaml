@@ -25,6 +25,21 @@ webhooks:
     admissionReviewVersions: ["v1"]
     sideEffects: None
 
+  - name: vhyperroute.kb.io
+    clientConfig:
+      service:
+        name: {{ include "hyper-operator.fullname" . }}
+        namespace: {{ .Release.Namespace }}
+        path: /validate-hyper-io-v1alpha1-hyperroute
+    failurePolicy: Fail
+    rules:
+      - apiGroups: ["hyper.io"]
+        apiVersions: ["v1alpha1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["hyperroutes"]
+    admissionReviewVersions: ["v1"]
+    sideEffects: None
+
 {{- range $filter := list "correlationidfilter" "denyfilter" "headermodifierfilter" "ratelimitfilter" "redismetadataenricherfilter" "apikeyfilter" "externalauthfilter" "firewallfilter" "jwtauthfilter" "corsfilter" }}
   - name: v{{ $filter | trunc 6 }}.kb.io
     clientConfig:

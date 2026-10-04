@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"sort"
 
 	"gopkg.in/yaml.v3"
@@ -18,9 +17,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"strings"
-
 	hyperv1alpha1 "github.com/taha2samy/hypergate/hyper-operator/api/v1alpha1"
+	"github.com/taha2samy/hypergate/hyper-operator/internal/routes"
 	"github.com/taha2samy/hypergate/internal/config"
 	mylogger "github.com/taha2samy/hypergate/internal/logger"
 )
@@ -34,6 +32,7 @@ type HyperChainMasterCompilerReconciler struct {
 // +kubebuilder:rbac:groups=hyper.io,resources=hyperconfigs,verbs=get;list;watch
 // +kubebuilder:rbac:groups=hyper.io,resources=hyperredis,verbs=get;list;watch
 // +kubebuilder:rbac:groups=hyper.io,resources=hyperroutes,verbs=get;list;watch
+// +kubebuilder:rbac:groups=hyper.io,resources=hyperroutes/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=hyper.io,resources=hyperchains,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=hyper.io,resources=hyperchains/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=hyper.io,resources=ratelimitfilters,verbs=get;list;watch;update;patch
@@ -152,9 +151,9 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 	}
 
 	// Sort routes by priority descending
-	routes := routeList.Items
-	sort.Slice(routes, func(i, j int) bool {
-		return routes[i].Spec.Priority > routes[j].Spec.Priority
+	sortedRoutes := routeList.Items
+	sort.Slice(sortedRoutes, func(i, j int) bool {
+		return sortedRoutes[i].Spec.Priority > sortedRoutes[j].Spec.Priority
 	})
 
 	// Cluster-wide policy shared by every engine deployment.
@@ -412,16 +411,20 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 	}
 
 	// Map HyperRoute list
-	for _, hr := range routes {
+	for i := range sortedRoutes {
+		hr := &sortedRoutes[i]
 		// The engine rejects a whole config containing an invalid route, which would
 		// freeze every later update; drop the broken route and report it instead.
-		if hr.Spec.TargetPolicy == "" {
-			reqLogger.Error(nil, "HyperRoute has no targetPolicy, skipping", "route", hr.Name)
+		matchConfigs, err := routes.Compile(&hr.Spec)
+		if err != nil {
+			reqLogger.Error(err, "HyperRoute is invalid, skipping", "route", hr.Name)
+			if err := r.setRouteStatus(ctx, hr, hyperv1alpha1.HyperRouteStateInvalid, err.Error()); err != nil {
+				return ctrl.Result{}, err
+			}
 			continue
 		}
-		if err := validateRouteRegexes(&hr); err != nil {
-			reqLogger.Error(err, "HyperRoute has an invalid regex, skipping", "route", hr.Name)
-			continue
+		if err := r.setRouteStatus(ctx, hr, hyperv1alpha1.HyperRouteStateReady, "Route compiled"); err != nil {
+			return ctrl.Result{}, err
 		}
 
 		// A route to a chain that does not exist fails closed as well.
@@ -430,22 +433,6 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 			chainConfigs[hr.Spec.TargetPolicy] = degradedChain()
 		}
 
-		var matchConfigs []config.MatchConfig
-		for _, m := range hr.Spec.Matches {
-			var hmConfigs map[string]config.HeaderMatchConfig
-			if m.Headers != nil {
-				hmConfigs = make(map[string]config.HeaderMatchConfig)
-				for k, v := range m.Headers {
-					hmConfigs[strings.ToLower(k)] = config.HeaderMatchConfig{Exact: v}
-				}
-			}
-
-			matchConfigs = append(matchConfigs, config.MatchConfig{
-				PathPrefix:       m.PathPrefix,
-				PathRegexPattern: m.PathRegexPattern,
-				Headers:          hmConfigs,
-			})
-		}
 		routeConfigs = append(routeConfigs, config.RouteConfig{
 			Name:        hr.Name,
 			TargetChain: hr.Spec.TargetPolicy,
@@ -455,15 +442,19 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 
 	for targetNS, hc := range activeConfigs {
 		chains := chainConfigs
-		if dc := hc.Spec.DefaultChain; dc != "" {
-			if _, ok := chainConfigs[dc]; !ok {
-				reqLogger.Info("HyperConfig defaultChain does not exist, unmatched requests will be rejected", "hyperconfig", hc.Name, "chain", dc)
-				chains = make(map[string]config.Chain, len(chainConfigs)+1)
+		for name, field := range routes.ReferencedChains(&hc.Spec) {
+			if _, ok := chainConfigs[name]; ok {
+				continue
+			}
+			reqLogger.Info("HyperConfig references a HyperChain that does not exist, unmatched requests will be rejected",
+				"hyperconfig", hc.Name, "field", field, "chain", name)
+			if len(chains) == len(chainConfigs) {
+				chains = make(map[string]config.Chain, len(chainConfigs)+3)
 				for k, v := range chainConfigs {
 					chains[k] = v
 				}
-				chains[dc] = degradedChain()
 			}
+			chains[name] = degradedChain()
 		}
 
 		engineConfig := config.Config{
@@ -485,8 +476,9 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 			Redis:  redisConfigs,
 			Chains: chains,
 			Router: config.RouterConfig{
-				Routes:       routeConfigs,
-				DefaultChain: hc.Spec.DefaultChain,
+				Routes:        routeConfigs,
+				DefaultChains: routes.DefaultChains(&hc.Spec),
+				DefaultChain:  hc.Spec.DefaultChain,
 			},
 		}
 		if engineConfig.Router.Routes == nil {
@@ -612,14 +604,18 @@ func (r *HyperChainMasterCompilerReconciler) SetupWithManager(mgr ctrl.Manager) 
 		Complete(r)
 }
 
-func validateRouteRegexes(hr *hyperv1alpha1.HyperRoute) error {
-	for i, m := range hr.Spec.Matches {
-		if m.PathRegexPattern == "" {
-			continue
+// setRouteStatus records whether a HyperRoute was compiled, writing only on change.
+func (r *HyperChainMasterCompilerReconciler) setRouteStatus(ctx context.Context, hr *hyperv1alpha1.HyperRoute, state, message string) error {
+	if hr.Status.State == state && hr.Status.Message == message {
+		return nil
+	}
+	hr.Status.State = state
+	hr.Status.Message = message
+	if err := r.Status().Update(ctx, hr); err != nil {
+		if errors.IsNotFound(err) {
+			return nil
 		}
-		if _, err := regexp.Compile(m.PathRegexPattern); err != nil {
-			return fmt.Errorf("matches[%d].pathRegexPattern: %w", i, err)
-		}
+		return fmt.Errorf("update HyperRoute %s status: %w", hr.Name, err)
 	}
 	return nil
 }

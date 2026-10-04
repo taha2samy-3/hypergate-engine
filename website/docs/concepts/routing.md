@@ -134,6 +134,10 @@ Because the engine validates chain references and publishes routes and chains to
 
 ### With the operator
 
+![Operator routing: the developer writes HTTPRoutes, HyperRoutes, HyperChains and HyperConfigs; the operator validates and compiles them into the engine ConfigMap and status, and never writes HTTPRoutes](/img/diagrams/operator-routing.svg)
+
+HyperRoutes carry the same fields as engine routes (`traffic`, `sources`, `destinations`, `pathPrefix`, `pathRegexPattern`, `headers`), and `HyperConfig.spec.defaultChains` maps to `router.default_chains`. Gateway API `HTTPRoute`s stay under the developer's control: the operator never creates or edits them.
+
 The operator adds its own fail-closed rules when it compiles CRDs:
 
 | Situation | What the operator compiles |
@@ -141,6 +145,6 @@ The operator adds its own fail-closed rules when it compiles CRDs:
 | A HyperChain references a filter that does not exist, or a filter cannot be translated | The chain keeps its name but becomes a single `deny` filter returning `503 Service Unavailable`. The HyperChain's `status.state` is `Degraded` and `status.message` says why. |
 | A HyperRoute's `targetPolicy` names a HyperChain that does not exist | A `503` deny chain under that name is added, so matching requests are rejected. |
 | `HyperConfig.spec.defaultChain` names a HyperChain that does not exist | A `503` deny chain under that name is added for that namespace. |
-| A HyperRoute has an empty `targetPolicy` or an invalid `pathRegexPattern` | The route is skipped and an error is logged by the operator. Its requests fall through to later routes or the default chain. |
+| A HyperRoute has an empty `targetPolicy`, an invalid `pathRegexPattern`, `traffic` or selector | The route is skipped, its `status.state` is `Invalid` with the reason in `status.message`, and the operator logs an error. Its requests fall through to later routes or the default chain. With webhooks enabled such a HyperRoute is rejected at admission. |
 
-Skipped routes are the one case where a mistake widens access rather than narrowing it, because the traffic falls through to other routes. Watch the operator logs for `HyperRoute has an invalid regex, skipping` and `HyperRoute has no targetPolicy, skipping`.
+Skipped routes are the one case where a mistake widens access rather than narrowing it, because the traffic falls through to other routes. Check `kubectl get hyperroutes` (the `State` column) or watch the operator logs for `HyperRoute is invalid, skipping`.

@@ -279,3 +279,77 @@ func TestCompiler_CorsFilterCompilesToWorkingEngineFilter(t *testing.T) {
 		t.Fatalf("options not compiled with engine keys: %v", fc.Options)
 	}
 }
+
+func compiledEngineConfig(t *testing.T, c client.Client) *config.Config {
+	t.Helper()
+	var cm corev1.ConfigMap
+	if err := c.Get(context.Background(), client.ObjectKey{Namespace: "hyper-system", Name: engineConfigMapName}, &cm); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.ParseBytes([]byte(cm.Data["config.yaml"]))
+	if err != nil {
+		t.Fatalf("compiled config does not parse: %v", err)
+	}
+	return cfg
+}
+
+func TestCompiler_TrafficSelectorsAndDefaultChains(t *testing.T) {
+	scheme := testScheme(t)
+	hc := hyperConfig("main", "hyper-system", time.Now())
+	hc.Spec.DefaultChain = "public"
+	hc.Spec.DefaultChains = &hyperv1alpha1.DefaultChains{NorthSouth: "public", EastWest: "missing-internal"}
+	public := &hyperv1alpha1.HyperChain{ObjectMeta: metav1.ObjectMeta{Name: "public"}}
+	good := &hyperv1alpha1.HyperRoute{
+		ObjectMeta: metav1.ObjectMeta{Name: "partner"},
+		Spec: hyperv1alpha1.HyperRouteSpec{
+			Priority:     10,
+			TargetPolicy: "public",
+			Matches: []hyperv1alpha1.MatchRule{{
+				Traffic:      hyperv1alpha1.TrafficNorthSouth,
+				Sources:      []string{"cidr:203.0.113.0/24"},
+				Destinations: []string{"host:api.example.com"},
+			}},
+		},
+	}
+	bad := &hyperv1alpha1.HyperRoute{
+		ObjectMeta: metav1.ObjectMeta{Name: "broken"},
+		Spec: hyperv1alpha1.HyperRouteSpec{
+			Priority:     20,
+			TargetPolicy: "public",
+			Matches:      []hyperv1alpha1.MatchRule{{Sources: []string{"host:api.example.com"}}},
+		},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).
+		WithObjects(&hc, public, good, bad).
+		WithStatusSubresource(&hyperv1alpha1.HyperChain{}, &hyperv1alpha1.HyperRoute{}).
+		Build()
+	r := &HyperChainMasterCompilerReconciler{Client: c, Scheme: scheme}
+	if _, err := r.Reconcile(context.Background(), ctrl.Request{}); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := compiledEngineConfig(t, c)
+	if len(cfg.Router.Routes) != 1 || cfg.Router.Routes[0].Name != "partner" {
+		t.Fatalf("only the valid route must be compiled, got %+v", cfg.Router.Routes)
+	}
+	m := cfg.Router.Routes[0].Matches[0]
+	if m.Traffic != "north_south" || m.CompiledSources.String() != "cidr:203.0.113.0/24" || m.CompiledDestinations.String() != "host:api.example.com" {
+		t.Fatalf("match not compiled: %+v", m)
+	}
+	if cfg.Router.DefaultChains.NorthSouth != "public" || cfg.Router.DefaultChains.EastWest != "missing-internal" {
+		t.Fatalf("default chains not compiled: %+v", cfg.Router.DefaultChains)
+	}
+	if chain := cfg.Chains["missing-internal"]; len(chain) != 1 || chain[0].Type != "deny" {
+		t.Fatalf("missing default chain must fail closed, got %+v", chain)
+	}
+
+	for name, want := range map[string]string{"partner": hyperv1alpha1.HyperRouteStateReady, "broken": hyperv1alpha1.HyperRouteStateInvalid} {
+		var hr hyperv1alpha1.HyperRoute
+		if err := c.Get(context.Background(), client.ObjectKey{Name: name}, &hr); err != nil {
+			t.Fatal(err)
+		}
+		if hr.Status.State != want {
+			t.Errorf("%s: state %q, want %q (message %q)", name, hr.Status.State, want, hr.Status.Message)
+		}
+	}
+}

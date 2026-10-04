@@ -20,6 +20,21 @@ webhooks:
     admissionReviewVersions: ["v1"]
     sideEffects: None
 
+  - name: vhyperroute.kb.io
+    clientConfig:
+      service:
+        name: hyper-operator
+        namespace: hyper-system
+        path: /validate-hyper-io-v1alpha1-hyperroute
+    failurePolicy: Fail
+    rules:
+      - apiGroups: ["hyper.io"]
+        apiVersions: ["v1alpha1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["hyperroutes"]
+    admissionReviewVersions: ["v1"]
+    sideEffects: None
+
   - name: vcorridf.kb.io
     clientConfig:
       service:

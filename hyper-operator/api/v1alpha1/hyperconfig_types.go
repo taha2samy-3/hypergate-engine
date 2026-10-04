@@ -55,8 +55,14 @@ type HyperConfigSpec struct {
 	// +optional
 	RedisServiceRef string `json:"redisServiceRef,omitempty"`
 
+	// DefaultChain runs for requests that match no HyperRoute and have no
+	// defaultChains entry for their traffic class.
 	// +optional
 	DefaultChain string `json:"defaultChain,omitempty"`
+
+	// DefaultChains picks the chain for unmatched requests by traffic class.
+	// +optional
+	DefaultChains *DefaultChains `json:"defaultChains,omitempty"`
 
 	// PoolPrewarmSize specifies the number of RequestContext objects to pre-allocate at boot.
 	// +optional
@@ -72,6 +78,17 @@ type HyperConfigSpec struct {
 	// +optional
 	// +kubebuilder:default=65536
 	PreallocBodyBufferBytes int32 `json:"preallocBodyBufferBytes,omitempty" yaml:"prealloc_body_buffer_bytes,omitempty"`
+}
+
+// DefaultChains holds the fallback HyperChain per traffic class.
+// +kubebuilder:object:generate=true
+type DefaultChains struct {
+	// NorthSouth runs for unmatched requests that entered through a gateway.
+	// +optional
+	NorthSouth string `json:"northSouth,omitempty"`
+	// EastWest runs for unmatched calls between workloads.
+	// +optional
+	EastWest string `json:"eastWest,omitempty"`
 }
 
 // +kubebuilder:object:generate=true

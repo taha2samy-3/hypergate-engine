@@ -27,6 +27,8 @@ func TestParse(t *testing.T) {
 		{raw: "service:payments/ledger", side: Destination, want: "service:payments/ledger"},
 		{raw: "namespace:shop", side: Destination, want: "namespace:shop"},
 		{raw: "sa:shop/checkout", side: Source, want: "sa:shop/checkout"},
+		{raw: "sa:shop/checkout.v2", side: Source, want: "sa:shop/checkout.v2"},
+		{raw: "service:shop/checkout.v2", side: Source, errPart: "not a valid Kubernetes name"},
 		{raw: "spiffe://cluster.local/ns/shop/sa/checkout", side: Source, want: "spiffe://cluster.local/ns/shop/sa/checkout"},
 		{raw: "labels:shop/app=checkout,tier=web", side: Source, want: "labels:shop/app=checkout,tier=web"},
 		{raw: "labels:app=checkout", side: Source, want: "labels:app=checkout"},

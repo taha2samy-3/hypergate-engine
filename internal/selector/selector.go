@@ -133,8 +133,10 @@ func Parse(raw string, side Side) (Selector, error) {
 		err = sel.parseCIDR(value)
 	case KindHost:
 		err = sel.parseHost(value)
-	case KindService, KindSA:
-		err = validateNamespacedName(value)
+	case KindService:
+		err = validateNamespacedName(value, validateDNSLabel)
+	case KindSA:
+		err = validateNamespacedName(value, validateDNSSubdomain)
 	case KindNamespace:
 		err = validateDNSLabel(value)
 	case KindSPIFFE:
@@ -233,7 +235,21 @@ func validateDNSLabel(v string) error {
 
 func isLowerAlnum(c byte) bool { return c >= 'a' && c <= 'z' || c >= '0' && c <= '9' }
 
-func validateNamespacedName(v string) error {
+// validateDNSSubdomain checks a name that may contain dots (RFC 1123 subdomain),
+// such as a ServiceAccount name.
+func validateDNSSubdomain(v string) error {
+	if len(v) == 0 || len(v) > 253 {
+		return fmt.Errorf("%q must be 1-253 characters", v)
+	}
+	for _, label := range strings.Split(v, ".") {
+		if err := validateDNSLabel(label); err != nil {
+			return fmt.Errorf("%q is not a valid Kubernetes name: %w", v, err)
+		}
+	}
+	return nil
+}
+
+func validateNamespacedName(v string, validateName func(string) error) error {
 	ns, name, ok := strings.Cut(v, "/")
 	if !ok {
 		return fmt.Errorf("%q must be <namespace>/<name>", v)
@@ -241,7 +257,7 @@ func validateNamespacedName(v string) error {
 	if err := validateDNSLabel(ns); err != nil {
 		return err
 	}
-	return validateDNSLabel(name)
+	return validateName(name)
 }
 
 func validateSPIFFE(v string) error {
@@ -256,7 +272,7 @@ func validateSPIFFE(v string) error {
 	if err := validateDNSLabel(parts[2]); err != nil {
 		return err
 	}
-	return validateDNSLabel(parts[4])
+	return validateDNSSubdomain(parts[4])
 }
 
 func validateLabels(v string) error {

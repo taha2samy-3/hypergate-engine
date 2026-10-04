@@ -10,7 +10,7 @@ All kinds belong to the API group `hyper.io`, version `v1alpha1`, and are **clus
 
 | Kind | Plural | Short names | Compiles to |
 | --- | --- | --- | --- |
-| [HyperConfig](#hyperconfig) | `hyperconfigs` | `hcfg` | `server`, `telemetry`, `router.default_chain`; the engine DaemonSet |
+| [HyperConfig](#hyperconfig) | `hyperconfigs` | `hcfg` | `server`, `telemetry`, `router.default_chain`, `router.default_chains`; the engine DaemonSet |
 | [HyperRedis](#hyperredis) | `hyperredis` | `hr` | an entry under `redis` |
 | [HyperChain](#hyperchain) | `hyperchains` | `hc` | an entry under `chains` |
 | [HyperRoute](#hyperroute) | `hyperroutes` | `hrt` | an entry in `router.routes` |
@@ -61,7 +61,9 @@ spec:
 | `engineResources` | `ResourceRequirements` (`requests`, `limits`) | requests `cpu: 100m`, `memory: 128Mi`; limits `memory: 512Mi` | | Engine container resources. When set, replaces the defaults entirely. |
 | `trustedProxyHops` | integer, minimum `0` | `0` | `server.client_ip.trusted_proxy_hops` | Trusted proxies in front of Envoy. See [Client IP](../concepts/client-ip.md). |
 | `redisServiceRef` | string | empty | | Deprecated and ignored; each Redis-backed filter names its HyperRedis in its own spec. |
-| `defaultChain` | string | empty | `router.default_chain` | HyperChain for unmatched requests. If it names a missing HyperChain, a `503` deny chain is compiled under that name. |
+| `defaultChain` | string | empty | `router.default_chain` | HyperChain for unmatched requests without a `defaultChains` entry for their traffic class. If it names a missing HyperChain, a `503` deny chain is compiled under that name. |
+| `defaultChains.northSouth` | string | empty | `router.default_chains.north_south` | HyperChain for unmatched north-south requests. A missing HyperChain compiles to a `503` deny chain. |
+| `defaultChains.eastWest` | string | empty | `router.default_chains.east_west` | HyperChain for unmatched east-west requests. A missing HyperChain compiles to a `503` deny chain. |
 | `poolPrewarmSize` | integer | `5000` | `server.pool_prewarm_size` | Request contexts allocated at start-up. |
 | `initialHeaderCapacity` | integer | `64` | `server.initial_header_capacity` | Initial header map capacity per context. |
 | `preallocBodyBufferBytes` | integer | `65536` | `server.prealloc_body_buffer_bytes` | Body buffer per context. |
@@ -148,7 +150,7 @@ spec:
 Older CRD manifests listed only the first five kinds, and Helm never upgrades CRDs. If the API server rejects a chain with `Unsupported value`, re-apply `charts/hyper-operator/crds/`.
 :::
 
-With webhooks enabled, creating or updating a HyperChain fails if a referenced filter does not exist, and deleting a HyperChain fails while a HyperConfig uses it as `defaultChain`.
+With webhooks enabled, creating or updating a HyperChain fails if a referenced filter does not exist, and deleting a HyperChain fails while a HyperConfig uses it as `defaultChain` or in `defaultChains`.
 
 ### status
 
@@ -176,6 +178,18 @@ spec:
       headers:
         x-tenant: "*"
     - pathRegexPattern: "^/v2/"
+---
+apiVersion: hyper.io/v1alpha1
+kind: HyperRoute
+metadata:
+  name: partner-api
+spec:
+  priority: 200
+  targetPolicy: partner
+  matches:
+    - traffic: NorthSouth
+      sources: ["cidr:203.0.113.0/24"]
+      destinations: ["host:api.example.com"]
 ```
 
 ### spec
@@ -184,12 +198,26 @@ spec:
 | --- | --- | --- | --- | --- |
 | `priority` | integer, **required** | | route order | Higher values are evaluated first. Equal priorities have no guaranteed order. |
 | `targetPolicy` | string, **required** | | `target_chain` | HyperChain name. An empty value skips the route; a missing HyperChain compiles to a `503` deny chain. |
-| `matches` | list, **required** | | `matches` | Alternatives (OR). |
+| `matches` | list, **required**, at least one entry | | `matches` | Alternatives (OR). |
+| `matches[].traffic` | enum `NorthSouth`, `EastWest`, `Any` | `Any` | `traffic` | Restricts the entry to one [traffic class](../concepts/routing.md#traffic-class). |
+| `matches[].sources` | list of strings, at most 64 | empty | `sources` | Caller [selectors](./engine-configuration.md#selectors) (`ip:`, `cidr:`, `any`). Any entry may match. |
+| `matches[].destinations` | list of strings, at most 64 | empty | `destinations` | Target selectors (`ip:`, `cidr:`, `host:`, `any`). Any entry may match. |
 | `matches[].pathPrefix` | string | empty | `path_prefix` | Prefix of the raw path (including the query string). |
 | `matches[].pathRegexPattern` | string | empty | `path_regex_pattern` | RE2 expression. An invalid expression skips the whole route. |
 | `matches[].headers` | map of string to string | empty | `headers.<name>.exact` | Exact values; `"*"` means present. Names are lower-cased by the compiler. |
 
-The route's `metadata.name` becomes the engine route `name`. `status` is an empty object. Printer columns: `Priority`, `Target Policy`.
+The route's `metadata.name` becomes the engine route `name`. Printer columns: `Priority`, `Target Policy`, `State`.
+
+The schema checks each selector's shape. With webhooks enabled, creating or updating a HyperRoute also fails when a selector is used on the wrong side (for example `host:` in `sources`), uses a workload prefix (`service:`, `namespace:`, `sa:`, `spiffe:`, `labels:`, `external`; reserved until the engine receives workload identity), or when `targetPolicy` is empty or a regex is invalid. A missing target HyperChain is only a warning.
+
+A HyperRoute does not create or change any Gateway API `HTTPRoute`. HTTPRoutes are written by the application developer; the operator only reads them.
+
+### status
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `state` | string | `Ready` when the route is compiled into the engine configuration, `Invalid` when the compiler skipped it. |
+| `message` | string | Every problem found, for example `matches[0]: sources: selector "host:api.example.com": host: cannot be used as a source`. |
 
 ## RateLimitFilter
 

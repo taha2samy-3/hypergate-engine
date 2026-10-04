@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 640" role="img" aria-labelledby="t d">
+  <title id="t">Operator routing: who owns what</title>
+  <desc id="d">The developer owns HTTPRoutes, HyperRoutes, HyperChains and HyperConfigs. The operator validates HyperRoutes at admission, compiles HyperRoutes, HyperChains and HyperConfigs into the engine ConfigMap and HyperRoute status, and in phase R3 generates the Envoy filter objects and ReferenceGrant. It only reads HTTPRoutes and never creates, edits or deletes them.</desc>
+  <defs>
+    <style>
+      text { font-family: Inter, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #E2E8F0; }
+      .h { font-size: 16px; font-weight: 700; }
+      .b { font-size: 14px; }
+      .s { font-size: 12.5px; fill: #94A3B8; }
+      .cap { font-size: 12.5px; fill: #94A3B8; letter-spacing: 0.08em; }
+      .tag { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; }
+      .box { fill: #1E293B; stroke: #334155; stroke-width: 1.5; }
+      .dev { fill: #1E293B; stroke: #22D3EE; stroke-width: 2; }
+      .acc { fill: #1E293B; stroke: #6366F1; stroke-width: 2; }
+      .ok { fill: #0B2A22; stroke: #10B981; stroke-width: 2; }
+      .warn { fill: #2D1F05; stroke: #F59E0B; stroke-width: 2; stroke-dasharray: 6 4; }
+      .bad { fill: #3B0D1A; stroke: #F43F5E; stroke-width: 2; }
+      .ln { stroke: #94A3B8; stroke-width: 1.8; fill: none; }
+      .lnw { stroke: #F59E0B; stroke-width: 1.8; fill: none; stroke-dasharray: 6 5; }
+    </style>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#94A3B8"/></marker>
+    <marker id="aw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#F59E0B"/></marker>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="640" rx="18" fill="#0F172A"/>
+  <rect x="0.75" y="0.75" width="1198.5" height="638.5" rx="18" fill="none" stroke="#1E293B" stroke-width="1.5"/>
+
+  <text x="30" y="56" class="cap">THE DEVELOPER WRITES</text>
+  <text x="420" y="56" class="cap">HYPER-OPERATOR</text>
+  <text x="870" y="56" class="cap">THE OPERATOR WRITES</text>
+
+  <!-- developer column -->
+  <rect x="30" y="76" width="300" height="104" rx="12" class="dev"/>
+  <text x="48" y="104" class="h">HTTPRoute</text>
+  <text x="48" y="128" class="s">GAMMA (Service parent) or Gateway</text>
+  <text x="48" y="148" class="s">references the Hypergate filter</text>
+  <text x="48" y="168" class="s">through an ExtensionRef</text>
+
+  <rect x="30" y="204" width="300" height="90" rx="12" class="dev"/>
+  <text x="48" y="232" class="h">HyperRoute</text>
+  <text x="48" y="256" class="s">priority · targetPolicy</text>
+  <text x="48" y="276" class="s">traffic · sources · destinations · path</text>
+
+  <rect x="30" y="318" width="300" height="70" rx="12" class="dev"/>
+  <text x="48" y="346" class="h">HyperChain</text>
+  <text x="48" y="370" class="s">ordered filters</text>
+
+  <rect x="30" y="412" width="300" height="90" rx="12" class="dev"/>
+  <text x="48" y="440" class="h">HyperConfig</text>
+  <text x="48" y="464" class="s">defaultChain</text>
+  <text x="48" y="484" class="s">defaultChains.northSouth / eastWest</text>
+
+  <!-- operator column -->
+  <rect x="420" y="76" width="360" height="62" rx="12" class="warn"/>
+  <text x="438" y="102" class="b">HTTPRoute watcher</text>
+  <text x="438" y="124" class="s">read only · validates filter references</text>
+  <rect x="688" y="88" width="76" height="22" rx="11" fill="#451A03"/>
+  <text x="726" y="104" class="tag" text-anchor="middle" fill="#FCD34D">R3</text>
+
+  <rect x="420" y="160" width="360" height="112" rx="12" class="acc"/>
+  <text x="438" y="188" class="h">HyperRoute admission webhook</text>
+  <text x="438" y="212" class="s">rejects: empty targetPolicy, bad traffic,</text>
+  <text x="438" y="232" class="s">bad regex, wrong-side or unknown selector</text>
+  <text x="438" y="252" class="s">warns: target HyperChain does not exist</text>
+
+  <rect x="420" y="296" width="360" height="206" rx="12" class="acc"/>
+  <text x="438" y="324" class="h">Compiler</text>
+  <rect x="664" y="308" width="100" height="22" rx="11" fill="#312E81"/>
+  <text x="714" y="324" class="tag" text-anchor="middle" fill="#C7D2FE">LEADER ONLY</text>
+  <text x="438" y="352" class="s">routes sorted by priority, highest first</text>
+  <text x="438" y="374" class="s">same validation as the webhook</text>
+  <text x="438" y="396" class="s">invalid route → skipped, status Invalid</text>
+  <text x="438" y="418" class="s">missing chain → 503 deny chain</text>
+  <text x="438" y="440" class="s">Any → omitted · NorthSouth → north_south</text>
+  <text x="438" y="462" class="s">EastWest → east_west</text>
+  <text x="438" y="486" class="s">shared code: internal/routes</text>
+
+  <!-- output column -->
+  <rect x="870" y="76" width="300" height="96" rx="12" class="ok"/>
+  <text x="888" y="104" class="h">Engine ConfigMap</text>
+  <text x="888" y="128" class="s">config.yaml: router.routes,</text>
+  <text x="888" y="148" class="s">default_chains, default_chain, chains</text>
+
+  <rect x="870" y="196" width="300" height="62" rx="12" class="box"/>
+  <text x="888" y="222" class="b">Engine DaemonSet</text>
+  <text x="888" y="244" class="s">hot reload, no restart</text>
+  <path d="M1020 172 V 188" class="ln" marker-end="url(#a)"/>
+
+  <rect x="870" y="296" width="300" height="70" rx="12" class="ok"/>
+  <text x="888" y="324" class="h">HyperRoute status</text>
+  <text x="888" y="348" class="s">Ready / Invalid with the reason</text>
+
+  <rect x="870" y="398" width="300" height="104" rx="12" class="warn"/>
+  <text x="888" y="426" class="b">Filter objects · ReferenceGrant</text>
+  <text x="888" y="448" class="s">EnvoyExtensionPolicy (Envoy Gateway)</text>
+  <text x="888" y="468" class="s">CiliumEnvoyExtProcFilter after</text>
+  <text x="888" y="488" class="s">cilium/cilium#46479</text>
+  <rect x="1086" y="410" width="68" height="22" rx="11" fill="#451A03"/>
+  <text x="1120" y="426" class="tag" text-anchor="middle" fill="#FCD34D">R3</text>
+
+  <!-- arrows -->
+  <path d="M330 107 H 412" class="lnw" marker-end="url(#aw)"/>
+  <text x="352" y="98" class="s" fill="#FCD34D">read</text>
+  <path d="M330 232 C 370 232, 380 216, 412 216" class="ln" marker-end="url(#a)"/>
+  <text x="344" y="210" class="s">admission</text>
+  <path d="M330 268 C 375 268, 380 340, 412 340" class="ln" marker-end="url(#a)"/>
+  <path d="M330 353 C 370 353, 380 385, 412 385" class="ln" marker-end="url(#a)"/>
+  <path d="M330 457 C 370 457, 380 430, 412 430" class="ln" marker-end="url(#a)"/>
+
+  <path d="M780 330 H 820 V 124 H 862" class="ln" marker-end="url(#a)"/>
+  <path d="M780 380 H 836 V 331 H 862" class="ln" marker-end="url(#a)"/>
+  <path d="M780 450 H 862" class="lnw" marker-end="url(#aw)"/>
+
+  <!-- boundary -->
+  <rect x="30" y="534" width="1140" height="76" rx="12" class="bad"/>
+  <text x="50" y="564" class="h" fill="#FECDD3">Boundary: the operator never creates, edits or deletes HTTPRoutes.</text>
+  <text x="50" y="590" class="s" fill="#FDA4AF">They belong to the developer. The operator reads them and reports problems in HyperRoute / HyperConfig status and as Events.</text>
+</svg>

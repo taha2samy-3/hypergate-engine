@@ -10,6 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	hyperv1alpha1 "github.com/taha2samy/hypergate/hyper-operator/api/v1alpha1"
+	"github.com/taha2samy/hypergate/hyper-operator/internal/routes"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -45,8 +46,8 @@ func (v *HyperChainValidator) ValidateDelete(ctx context.Context, obj *hyperv1al
 	}
 
 	for _, hc := range configList.Items {
-		if hc.Spec.DefaultChain == obj.Name {
-			return nil, fmt.Errorf("cannot delete HyperChain '%s' because it is referenced as the defaultChain in HyperConfig '%s'", obj.Name, hc.Name)
+		if field, ok := routes.ReferencedChains(&hc.Spec)[obj.Name]; ok {
+			return nil, fmt.Errorf("cannot delete HyperChain '%s' because it is referenced as %s in HyperConfig '%s'", obj.Name, field, hc.Name)
 		}
 	}
 
