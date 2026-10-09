@@ -284,3 +284,37 @@ func TestParseBytes_ShutdownDefaultsAndValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestParseBytes_ChainSettingsAndAudit(t *testing.T) {
+	cfg, err := config.ParseBytes([]byte(`
+version: v1
+chains:
+  web:
+    - {name: JwtAuthFilter/users, type: jwt_auth, audit: true, options: {}}
+chain_settings:
+  web: {timeout: 300ms, max_concurrency: 50}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cs := cfg.ChainSettings["web"]
+	if cs.TimeoutDuration.Milliseconds() != 300 || cs.MaxConcurrency != 50 || cs.OnTimeout != "deny" || cs.OnOverload != "deny" {
+		t.Fatalf("settings = %+v", cs)
+	}
+	if f := cfg.Chains["web"][0]; !f.Audit || f.Name != "JwtAuthFilter/users" {
+		t.Fatalf("filter = %+v", f)
+	}
+
+	for doc, want := range map[string]string{
+		"chain_settings:\n  missing: {timeout: 1s}\n":     "no chain with that name",
+		"chain_settings:\n  web: {timeout: soon}\n":       "invalid duration",
+		"chain_settings:\n  web: {timeout: 0s}\n":         "invalid duration",
+		"chain_settings:\n  web: {max_concurrency: -1}\n": "max_concurrency",
+		"chain_settings:\n  web: {on_overload: maybe}\n":  "on_overload",
+	} {
+		_, err := config.ParseBytes([]byte("version: v1\nchains:\n  web: []\n" + doc))
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: want %q, got %v", doc, want, err)
+		}
+	}
+}
