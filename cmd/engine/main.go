@@ -23,6 +23,7 @@ import (
 	"github.com/taha2samy/hypergate/internal/identity"
 	mylogger "github.com/taha2samy/hypergate/internal/logger"
 	"github.com/taha2samy/hypergate/internal/memory"
+	"github.com/taha2samy/hypergate/internal/metrics"
 	"github.com/taha2samy/hypergate/internal/policy"
 	"github.com/taha2samy/hypergate/internal/redis"
 	"github.com/taha2samy/hypergate/internal/router"
@@ -108,8 +109,13 @@ func main() {
 	// /readyz stays 503 until the policy is loaded and gRPC is serving.
 	// Workload identity: the map is streamed from the operator. It is read at
 	// start-up only; changing the identity block needs a restart.
+	engineMetrics := metrics.New()
+	activity := &mygrpc.Activity{}
+	engineMetrics.GaugeFunc("hypergate_streams_active", "Open ext_proc streams (one per in-flight request).",
+		func() float64 { return float64(activity.Active()) })
+	extraHandlers := map[string]http.Handler{"/metrics": engineMetrics.Handler()}
+
 	var identityIndex *identity.Index
-	debugHandlers := map[string]http.Handler{}
 	if idCfg := initialConfig.Identity; idCfg.Enabled {
 		identityIndex = identity.NewIndex()
 		client := identity.NewClient(identity.Options{
@@ -121,7 +127,8 @@ func main() {
 			NodeID:     os.Getenv("NODE_NAME"),
 		}, identityIndex)
 		go client.Run(ctx)
-		debugHandlers["/debug/identity"] = identity.DebugHandler(client)
+		extraHandlers["/debug/identity"] = identity.DebugHandler(client)
+		registerIdentityMetrics(engineMetrics, client)
 		mylogger.Info("Workload identity enabled", zap.String("address", idCfg.Address))
 	}
 
@@ -130,7 +137,7 @@ func main() {
 		// With identity enabled, requests are only accepted once the first full
 		// identity map has arrived, so callers are never misclassified at start-up.
 		return serving.Load() && policyMgr.Ready() && (identityIndex == nil || identityIndex.Synced())
-	}, debugHandlers)
+	}, extraHandlers)
 	var pprofSrv *http.Server
 	if initialConfig.Server.PprofAddress != "" {
 		pprofSrv = startPprofServer(initialConfig.Server.PprofAddress)
@@ -139,6 +146,7 @@ func main() {
 	if err := policyMgr.Apply(initialConfig); err != nil {
 		mylogger.Fatal("Failed to compile policy on boot", zap.Error(err))
 	}
+	engineMetrics.Reload(true)
 
 	// Hot reload: the new policy is only published once every chain compiled; on
 	// failure the previous policy keeps serving.
@@ -155,9 +163,11 @@ func main() {
 		if err := policyMgr.Apply(newConfig); err != nil {
 			return err
 		}
+		engineMetrics.Reload(true)
 		mylogger.Info("Policy reloaded successfully")
 		return nil
 	}, func(err error) {
+		engineMetrics.Reload(false)
 		mylogger.Error("Config reload rejected, keeping previous policy", zap.Error(err))
 	})
 
@@ -174,8 +184,7 @@ func main() {
 		zap.Int("initial_header_capacity", initialConfig.Server.InitialHeaderCapacity),
 	)
 
-	activity := &mygrpc.Activity{}
-	serverOpts := []mygrpc.Option{mygrpc.WithActivity(activity)}
+	serverOpts := []mygrpc.Option{mygrpc.WithActivity(activity), mygrpc.WithMetrics(engineMetrics)}
 	if identityIndex != nil {
 		serverOpts = append(serverOpts, mygrpc.WithIdentity(identityIndex))
 	}
@@ -246,4 +255,31 @@ func main() {
 	}
 
 	mylogger.Info("gRPC server stopped gracefully")
+}
+
+// registerIdentityMetrics exposes the identity stream's health.
+func registerIdentityMetrics(m *metrics.Engine, c *identity.Client) {
+	boolGauge := func(b bool) float64 {
+		if b {
+			return 1
+		}
+		return 0
+	}
+	m.GaugeFunc("hypergate_identity_connected", "1 while the identity stream to the operator is open.",
+		func() float64 { return boolGauge(c.Connected()) })
+	m.GaugeFunc("hypergate_identity_synced", "1 once the first complete identity map has arrived.",
+		func() float64 { return boolGauge(c.Index().Synced()) })
+	m.GaugeFunc("hypergate_identity_last_update_timestamp_seconds", "Unix time of the last identity update.",
+		func() float64 {
+			if t := c.Index().Status().LastUpdate; !t.IsZero() {
+				return float64(t.UnixNano()) / 1e9
+			}
+			return 0
+		})
+	m.GaugeFunc("hypergate_identity_workloads", "IP addresses in the identity map.",
+		func() float64 { return float64(c.Index().Status().Workloads) })
+	m.GaugeFunc("hypergate_identity_services", "Services in the identity map.",
+		func() float64 { return float64(c.Index().Status().Services) })
+	m.CounterFunc("hypergate_identity_reconnects_total", "Times the identity stream ended and was retried.",
+		func() float64 { return float64(c.Reconnects()) })
 }
