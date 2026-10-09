@@ -25,6 +25,7 @@ import (
 	"github.com/taha2samy/hypergate/internal/identity"
 	mylogger "github.com/taha2samy/hypergate/internal/logger"
 	"github.com/taha2samy/hypergate/internal/memory"
+	"github.com/taha2samy/hypergate/internal/metrics"
 	"github.com/taha2samy/hypergate/internal/router"
 )
 
@@ -37,11 +38,18 @@ type Server struct {
 	identity *identity.Index
 	// activity records stream starts for graceful shutdown (may be nil).
 	activity *Activity
+	// metrics records request outcomes and timings (may be nil).
+	metrics *metrics.Engine
 	extprocv3.UnimplementedExternalProcessorServer
 }
 
 // Option configures the ext_proc server.
 type Option func(*Server)
+
+// WithMetrics makes the server record Prometheus metrics in m.
+func WithMetrics(m *metrics.Engine) Option {
+	return func(s *Server) { s.metrics = m }
+}
 
 // WithIdentity makes the server resolve callers and destinations in the
 // workload identity map.
@@ -171,6 +179,7 @@ func (s *Server) Process(stream extprocv3.ExternalProcessor_ProcessServer) error
 	reqCtx.Ctx = stream.Context()
 	reqCtx.Traffic = trafficFromContext(stream.Context())
 	defer func() {
+		s.recordOutcome(st, reqCtx)
 		mylogger.Debug("ext_proc stream closing, releasing context", zap.Duration("duration", time.Since(startTime)))
 		s.pool.Release(reqCtx)
 	}()
@@ -189,21 +198,32 @@ func (s *Server) Process(stream extprocv3.ExternalProcessor_ProcessServer) error
 			return err
 		}
 
+		msgStart := time.Now()
+		var phase string
 		switch msg := req.Request.(type) {
 		case *extprocv3.ProcessingRequest_RequestHeaders:
+			phase = "request_headers"
 			err = s.handleRequestHeaders(stream, st, reqCtx, req, msg.RequestHeaders)
 		case *extprocv3.ProcessingRequest_RequestBody:
+			phase = "request_body"
 			err = s.handleRequestBody(stream, st, reqCtx, msg.RequestBody)
 		case *extprocv3.ProcessingRequest_RequestTrailers:
+			phase = "request_trailers"
 			err = s.handleRequestTrailers(stream, st, reqCtx, msg.RequestTrailers)
 		case *extprocv3.ProcessingRequest_ResponseHeaders:
+			phase = "response_headers"
 			err = s.handleResponseHeaders(stream, st, reqCtx, msg.ResponseHeaders)
 		case *extprocv3.ProcessingRequest_ResponseBody:
+			phase = "response_body"
 			err = s.handleResponseBody(stream, st, reqCtx, msg.ResponseBody)
 		case *extprocv3.ProcessingRequest_ResponseTrailers:
+			phase = "response_trailers"
 			err = s.handleResponseTrailers(stream, st, reqCtx, msg.ResponseTrailers)
 		default:
 			err = status.Errorf(codes.InvalidArgument, "unsupported ext_proc message %T", req.Request)
+		}
+		if phase != "" {
+			s.metrics.Observe(phase, st.name, time.Since(msgStart))
 		}
 
 		if err != nil {
@@ -214,4 +234,31 @@ func (s *Server) Process(stream extprocv3.ExternalProcessor_ProcessServer) error
 			return err
 		}
 	}
+}
+
+// recordOutcome counts the finished request. Denials and failures also record
+// which filter (or the engine itself) decided.
+func (s *Server) recordOutcome(st *streamState, reqCtx *engine.RequestContext) {
+	if s.metrics == nil || !st.resolved {
+		return
+	}
+	outcome := metrics.OutcomeAllowed
+	if reqCtx.Blocked {
+		status := reqCtx.ResponseStatus
+		if status == 0 {
+			status = 403 // what immediateResponse sends for a block without a status
+		}
+		switch {
+		case reqCtx.FilterFailed:
+			outcome = metrics.OutcomeError
+		case status >= 400:
+			outcome = metrics.OutcomeDenied
+		default:
+			outcome = metrics.OutcomeAnswered
+		}
+		if outcome != metrics.OutcomeAnswered {
+			s.metrics.Deny(st.name, st.snap.FilterName(st.name, reqCtx.BlockedBy), status)
+		}
+	}
+	s.metrics.Request(reqCtx.MatchedRoute, st.name, outcome)
 }

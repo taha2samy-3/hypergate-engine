@@ -110,6 +110,7 @@ func (s *Server) resolve(st *streamState, reqCtx *engine.RequestContext) {
 	s.resolveIdentity(reqCtx)
 	if s.identity != nil && reqCtx.Traffic == selector.TrafficEastWest && reqCtx.SourceWorkload == nil &&
 		st.snap.Config.Router.UnknownSource != config.UnknownSourceDefault {
+		s.metrics.UnknownSource()
 		mylogger.Warn("East-west request from a caller that is not in the identity map, rejecting",
 			zap.String("client_ip", reqCtx.ClientIP), zap.String("path", reqCtx.Path))
 		reqCtx.Block(http.StatusServiceUnavailable, "Service Unavailable")

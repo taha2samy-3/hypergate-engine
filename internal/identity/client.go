@@ -54,10 +54,14 @@ type Options struct {
 // reconnects with jittered backoff and keeps serving the last state while
 // disconnected.
 type Client struct {
-	opts      Options
-	index     *Index
-	connected atomic.Bool
+	opts       Options
+	index      *Index
+	connected  atomic.Bool
+	reconnects atomic.Uint64
 }
+
+// Reconnects returns how many times the stream ended and was retried.
+func (c *Client) Reconnects() uint64 { return c.reconnects.Load() }
 
 // NewClient returns a client that fills index.
 func NewClient(opts Options, index *Index) *Client {
@@ -86,6 +90,7 @@ func (c *Client) Run(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
+		c.reconnects.Add(1)
 		if time.Since(start) > 30*time.Second {
 			backoff = 500 * time.Millisecond // the stream was healthy for a while
 		}
