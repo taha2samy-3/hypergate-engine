@@ -8,14 +8,15 @@ description: Health endpoints, profiling, logging, securing the reload endpoint,
 
 ## Health endpoints
 
-The engine serves two HTTP endpoints on `server.health_address` (default `:9003`):
+The engine serves these HTTP endpoints on `server.health_address` (default `:9003`):
 
 | Path | `200` when | Otherwise |
 | --- | --- | --- |
 | `/healthz` | The process is running. Served from the start, also while the initial policy is still being compiled. | |
-| `/readyz` | A policy has been loaded successfully **and** the gRPC listener is serving. | `503 not ready` |
+| `/readyz` | A policy has been loaded successfully **and** the gRPC listener is serving (and, with identity enabled, the first identity map has arrived). | `503 not ready` |
+| `/metrics` | Always: Prometheus metrics, see [Metrics](#metrics). | |
 
-`/readyz` stays `200` when a later reload is rejected, because the previous policy is still serving. On `SIGTERM` or `SIGINT` the engine marks itself not ready, stops accepting new streams, waits for in-flight streams to finish (`GracefulStop`), closes filters and Redis clients, and exits.
+`/readyz` stays `200` when a later reload is rejected, because the previous policy is still serving. On `SIGTERM` or `SIGINT` the engine follows its [shutdown sequence](./engine-configuration.md#servershutdown): not ready, keep serving until Envoy stops opening streams, drain, then close filters and Redis clients and exit.
 
 The operator configures the engine container with:
 
@@ -25,6 +26,45 @@ The operator configures the engine container with:
 | Liveness | `/healthz` on port 9003 | after 10 s, every 10 s, 3 failures |
 
 Redis health checks (`active_conn_health_check`) only log state changes; they do not affect `/readyz`. At start-up, however, the engine does not become ready until every configured Redis service has answered `PING` (see `startup_max_elapsed_time`). The health server starts before that wait, so the liveness probe keeps passing and the pod is not restarted while Redis comes up.
+
+## Metrics
+
+`/metrics` on the health port serves Prometheus metrics. Labels only take names from the configuration (route, chain and filter names) or small fixed sets, never paths, addresses or user identities, so cardinality stays bounded.
+
+| Metric | Type | Labels | Meaning |
+| --- | --- | --- | --- |
+| `hypergate_requests_total` | counter | `route`, `chain`, `outcome` | Finished requests. `outcome` is `allowed` (continued upstream), `denied` (status ≥ 400), `answered` (answered by the engine but not a denial, such as a CORS preflight) or `error` (a filter failed). `route="default"` when the default chain was used, `chain="none"` when no chain ran. |
+| `hypergate_denies_total` | counter | `chain`, `filter`, `status` | Denials and failures, with the filter that decided: the operator's `Kind/name` (for example `JwtAuthFilter/users`), the engine config's `name`, or `<position>:<type>`; `engine` when the engine itself refused (no policy, missing chain, unknown east-west caller). |
+| `hypergate_message_duration_seconds` | histogram | `phase`, `chain` | Time the engine spent on one ext_proc message, which is what Envoy waits for. `phase` is `request_headers`, `request_body`, `response_headers`, … |
+| `hypergate_streams_active` | gauge | | Open ext_proc streams (in-flight requests). |
+| `hypergate_unknown_source_total` | counter | | East-west requests whose caller was not in the identity map. |
+| `hypergate_policy_reloads_total` | counter | `result` | Policy reloads: `success` or `rejected`. |
+| `hypergate_policy_last_reload_success_timestamp_seconds` | gauge | | When the current policy was applied. |
+| `hypergate_identity_connected`, `hypergate_identity_synced` | gauge | | Identity stream open; first complete map received (identity enabled only). |
+| `hypergate_identity_last_update_timestamp_seconds` | gauge | | Last identity update. |
+| `hypergate_identity_workloads`, `hypergate_identity_services` | gauge | | Entries in the identity map. |
+| `hypergate_identity_reconnects_total` | counter | | Times the identity stream was re-established. |
+
+The Go runtime and process metrics (`go_*`, `process_*`) are included. Recording costs about 0.2 µs and no allocations per request.
+
+**Scraping.** Engine pods carry `prometheus.io/scrape: "true"`, `prometheus.io/port: "9003"` and `prometheus.io/path: /metrics`. With the Prometheus Operator, set `engineMetrics.podMonitor.enabled: true` in the hyper-operator chart to create a `PodMonitor`.
+
+Useful queries:
+
+```promql
+# Share of denied requests per chain over 5 minutes
+sum by (chain) (rate(hypergate_requests_total{outcome="denied"}[5m]))
+  / sum by (chain) (rate(hypergate_requests_total[5m]))
+
+# Which filters deny the most
+topk(5, sum by (chain, filter, status) (rate(hypergate_denies_total[5m])))
+
+# p99 time Envoy waits for the engine on request headers
+histogram_quantile(0.99, sum by (le) (rate(hypergate_message_duration_seconds_bucket{phase="request_headers"}[5m])))
+
+# Engines whose identity map is stale (more than 5 minutes without updates)
+time() - hypergate_identity_last_update_timestamp_seconds > 300
+```
 
 ## Profiling
 

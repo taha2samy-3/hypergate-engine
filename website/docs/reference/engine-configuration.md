@@ -107,7 +107,7 @@ Unknown keys are ignored.
 | `pool_prewarm_size` | int | `256` (when `<= 0`) | No | Number of request contexts (about 24 KiB each) allocated at start-up, so the first requests do not allocate. Under traffic the pool refills itself; a large value only costs memory. |
 | `initial_header_capacity` | int | `64` (when `<= 0`) | No | Initial capacity of each context's header maps. |
 | `prealloc_body_buffer_bytes` | int | | No | **Deprecated and ignored.** Bodies are no longer copied into a per-context buffer; a warning is logged when it is set. |
-| `health_address` | string | `:9003` | No | Address of the HTTP server for `/healthz` and `/readyz`. |
+| `health_address` | string | `:9003` | No | Address of the HTTP server for `/healthz`, `/readyz` and `/metrics` ([Metrics](./operations.md#metrics)). |
 | `pprof_address` | string | empty (disabled) | No | When set, serves `/debug/pprof/` on this address. Bind it to `127.0.0.1` and never expose it publicly. |
 | `client_ip` | object | | | See [server.client_ip](#serverclient_ip). |
 | `shutdown` | object | | No | See [server.shutdown](#servershutdown). |
@@ -204,6 +204,7 @@ A map from chain name to an ordered list of filters. Each filter is:
 
 | Key | Type | Description |
 | --- | --- | --- |
+| `name` | string | Optional label for the filter in [metrics](./operations.md#metrics) (`hypergate_denies_total{filter=...}`). Does not affect which filter instances are shared. The operator sets `<Kind>/<name>`. |
 | `type` | string | Filter type, one of the values below. An unknown type rejects the configuration. |
 | `options` | map | Filter-specific options, documented on the filter's page. |
 

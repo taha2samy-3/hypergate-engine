@@ -160,6 +160,8 @@ The request path is not measurably faster (the 16 KiB copy was cheap); the gain 
 
 **Test:** unit tests for each counter on the ext_proc test harness; the kind e2e scrapes `/metrics` and checks the deny counter of the denied caller.
 
+**Done.** Metrics as listed (the identity entries are exposed as `hypergate_identity_workloads` and `hypergate_identity_services`, plus `hypergate_identity_synced`; durations as `hypergate_message_duration_seconds`; reloads timestamp as `hypergate_policy_last_reload_success_timestamp_seconds`). Measured cost: `BenchmarkProcess_Headers` ≈1.05–1.18 µs without metrics, ≈1.25–1.32 µs with metrics (8 parallel goroutines, no extra allocations); recording alone ≈128 ns. Filter labels come from the optional engine `FilterConfig.name` (the operator sets `Kind/name`), else `<position>:<type>`. Engine pods are annotated for scraping and the chart has an optional `PodMonitor`.
+
 ## 5. Audit (dry-run) mode and chain limits
 
 ### Audit mode
