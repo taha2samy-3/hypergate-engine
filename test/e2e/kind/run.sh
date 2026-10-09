@@ -214,6 +214,29 @@ log "Leader crash (process killed without SIGTERM, Lease must expire)"
 measure_crash 45
 check_routing "after failovers"
 
+log "Engine rolling restart under load (graceful shutdown + surge)"
+outside=$(pod_of default outside)
+kubectl -n default exec "$outside" -- sh -c 'rm -f /tmp/codes /tmp/stop' || true
+kubectl -n default exec "$outside" -- sh -c "end=\$(( \$(date +%s) + 300 )); \
+  while [ \$(date +%s) -lt \$end ] && [ ! -f /tmp/stop ]; do \
+    curl -s -o /dev/null --max-time 5 -w '%{http_code}\n' $GATEWAY_URL >> /tmp/codes; sleep 0.05; done" &
+load_pid=$!
+sleep 5
+kubectl -n "$ENGINE_NS" rollout restart ds/hyper-engine >/dev/null
+kubectl -n "$ENGINE_NS" rollout status ds/hyper-engine --timeout=300s >/dev/null || fail "engine rollout did not finish"
+sleep 10
+kubectl -n default exec "$outside" -- touch /tmp/stop
+wait "$load_pid" || true
+codes=$(kubectl -n default exec "$outside" -- cat /tmp/codes)
+total=$(grep -c . <<<"$codes" || true)
+bad=$(grep -vc '^200$' <<<"$codes" || true)
+(( total > 100 )) || fail "rolling restart: only $total requests were sent"
+if (( bad > 0 )); then
+  echo "Non-200 responses during the rollout:"; grep -v '^200$' <<<"$codes" | sort | uniq -c
+  fail "rolling restart: $bad of $total requests failed"
+fi
+record "Engine rolling restart under load" "0 errors" "$total requests through the gateway during the rollout"
+
 log "Scale: $SCALE_PODS pods"
 before=$(engine_get /debug/identity | jq -r .workloads)
 kubectl create deployment scale --image=registry.k8s.io/pause:3.10 --replicas="$SCALE_PODS" -n default >/dev/null
