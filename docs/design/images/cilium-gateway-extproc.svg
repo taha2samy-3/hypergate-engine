@@ -1,0 +1,226 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 1070" role="img" aria-labelledby="t d">
+  <title id="t">Hypergate on the Cilium API Gateway (north-south)</title>
+  <desc id="d">Set-up in four steps: the cluster admin enables Cilium's Gateway API support; the platform team installs the hyper-operator, which runs the engine on every node; the gateway is wired to the engine with an ext_proc filter (a CiliumEnvoyConfig plus a ReferenceGrant); developers write the Gateway and an HTTPRoute. At runtime a request reaches the gateway Service and Cilium's per-node Envoy, whose ext_proc filter asks the Hypergate engine pod on the same node over gRPC. The engine picks a chain with the first matching route by priority and runs the chain's filters in order: CORS, JWT, external auth (oauth2-proxy sidecar), firewall (WAF sidecar) and rate limit. Sidecar filters call their sidecar container over a Unix socket in a volume shared inside the pod, with no network hop. Any filter can deny, and Envoy then answers the client directly; otherwise the request continues to the app. Speed comes from PreferSameNode and pre-allocated request contexts, and a request is never split across streams or policies.</desc>
+  <defs>
+    <style>
+      text { font-family: Inter, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #E2E8F0; }
+      .title { font-size: 24px; font-weight: 700; }
+      .sub { font-size: 14px; fill: #94A3B8; }
+      .h { font-size: 16px; font-weight: 700; }
+      .b { font-size: 14px; }
+      .bb { font-size: 14px; font-weight: 700; }
+      .s { font-size: 13px; fill: #CBD5E1; }
+      .m { font-size: 12.5px; fill: #94A3B8; }
+      .tag { font-size: 11.5px; font-weight: 700; letter-spacing: 0.04em; }
+      .cap { font-size: 12.5px; fill: #94A3B8; letter-spacing: 0.08em; }
+      .who { font-size: 11.5px; font-weight: 700; letter-spacing: 0.05em; }
+      .num { font-size: 14px; font-weight: 800; fill: #0F172A; }
+      .mono { font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Consolas, monospace; font-size: 11px; fill: #FCD34D; }
+      .c1 { fill: #102A33; stroke: #22D3EE; stroke-width: 2; }
+      .c2 { fill: #1B1D3A; stroke: #818CF8; stroke-width: 2; }
+      .c3 { fill: #2D2108; stroke: #F59E0B; stroke-width: 2; }
+      .c4 { fill: #0B2A22; stroke: #34D399; stroke-width: 2; }
+      .box { fill: #1E293B; stroke: #334155; stroke-width: 1.5; }
+      .inner { fill: #0F172A; stroke: #334155; stroke-width: 1.2; }
+      .ctr { fill: #0F172A; stroke: #818CF8; stroke-width: 1.2; }
+      .side { fill: #2D2108; stroke: #F59E0B; stroke-width: 1.5; }
+      .sock { fill: #1F1A0B; stroke: #F59E0B; stroke-width: 1.2; stroke-dasharray: 4 3; }
+      .bad { fill: #3B0D1A; stroke: #F43F5E; stroke-width: 2; }
+      .ln { stroke: #94A3B8; stroke-width: 2; fill: none; }
+      .lna { stroke: #F59E0B; stroke-width: 2; fill: none; }
+      .lnr { stroke: #F43F5E; stroke-width: 2; fill: none; }
+      .lng { stroke: #34D399; stroke-width: 2; fill: none; }
+    </style>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#94A3B8"/></marker>
+    <marker id="aa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#F59E0B"/></marker>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#F43F5E"/></marker>
+    <marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#34D399"/></marker>
+  </defs>
+
+  <rect x="0" y="0" width="1400" height="1070" rx="18" fill="#0F172A"/>
+  <rect x="0.75" y="0.75" width="1398.5" height="1068.5" rx="18" fill="none" stroke="#1E293B" stroke-width="1.5"/>
+
+  <text x="30" y="46" class="title">Hypergate on the Cilium API Gateway</text>
+  <text x="30" y="72" class="sub">North-south traffic only (internet → gateway → apps). What has to be switched on, by whom, and how a request flows. East-west (GAMMA) is not covered here.</text>
+
+  <text x="30" y="104" class="cap">SET-UP: FOUR STEPS</text>
+  <text x="575" y="104" class="cap">AT RUNTIME: ONE REQUEST</text>
+
+  <!-- ===== Step 1 ===== -->
+  <rect x="30" y="116" width="520" height="146" rx="12" class="c1"/>
+  <circle cx="58" cy="144" r="14" fill="#22D3EE"/><text x="58" y="149" class="num" text-anchor="middle">1</text>
+  <text x="82" y="150" class="h">Enable Cilium's gateway</text>
+  <text x="532" y="150" class="who" text-anchor="end" fill="#67E8F9">CLUSTER ADMIN · ONCE</text>
+  <text x="50" y="180" class="s">• Install the Gateway API CRDs</text>
+  <text x="50" y="202" class="s">• Cilium Helm: kubeProxyReplacement=true, gatewayAPI.enabled=true</text>
+  <text x="50" y="224" class="s">• Give cilium-operator RBAC on Gateway API resources</text>
+  <text x="50" y="248" class="m">Result: Cilium runs an Envoy proxy on every node for gateways</text>
+
+  <!-- ===== Step 2 ===== -->
+  <rect x="30" y="276" width="520" height="168" rx="12" class="c2"/>
+  <circle cx="58" cy="304" r="14" fill="#818CF8"/><text x="58" y="309" class="num" text-anchor="middle">2</text>
+  <text x="82" y="310" class="h">Install Hypergate</text>
+  <text x="532" y="310" class="who" text-anchor="end" fill="#A5B4FC">PLATFORM TEAM · ONCE</text>
+  <text x="50" y="340" class="s">• helm install hyper-operator (with cert-manager)</text>
+  <text x="50" y="362" class="s">• HyperConfig → engine pod on every node + hyper-engine-svc:9001</text>
+  <text x="50" y="384" class="s">• Policy: HyperRoute picks a HyperChain = a series of filters</text>
+  <text x="50" y="406" class="s">• Sidecar filters (external auth, firewall) add containers to the pod</text>
+  <text x="50" y="430" class="m">Result: the decision engine runs next to each gateway Envoy</text>
+
+  <!-- ===== Step 3 ===== -->
+  <rect x="30" y="458" width="520" height="146" rx="12" class="c3"/>
+  <circle cx="58" cy="486" r="14" fill="#F59E0B"/><text x="58" y="491" class="num" text-anchor="middle">3</text>
+  <text x="82" y="492" class="h">Attach ext_proc to the gateway</text>
+  <text x="532" y="492" class="who" text-anchor="end" fill="#FCD34D">PLATFORM · PER GATEWAY</text>
+  <text x="50" y="522" class="s">• CiliumEnvoyConfig: ext_proc filter → hyper-engine-svc:9001</text>
+  <text x="66" y="544" class="m">fail closed · allow_mode_override · sends source.address</text>
+  <text x="50" y="568" class="s">• ReferenceGrant in hyper-system: lets it reach the engine</text>
+  <text x="50" y="592" class="m">Result: every request through the gateway is checked first</text>
+
+  <!-- ===== Step 4 ===== -->
+  <rect x="30" y="618" width="520" height="80" rx="12" class="c4"/>
+  <circle cx="58" cy="646" r="14" fill="#34D399"/><text x="58" y="651" class="num" text-anchor="middle">4</text>
+  <text x="82" y="652" class="h">Route the app</text>
+  <text x="532" y="652" class="who" text-anchor="end" fill="#6EE7B7">APP DEVELOPER · PER APP</text>
+  <text x="50" y="680" class="s">• Gateway (class cilium) + HTTPRoute with an ExtensionRef to the filter</text>
+
+  <!-- ===== Runtime: client, gateway, Envoy ===== -->
+  <rect x="610" y="116" width="220" height="56" rx="12" class="box"/>
+  <text x="720" y="150" class="b" text-anchor="middle">Client (internet)</text>
+
+  <rect x="610" y="210" width="220" height="70" rx="12" class="c4"/>
+  <circle cx="822" cy="218" r="13" fill="#34D399"/><text x="822" y="223" class="num" text-anchor="middle">4</text>
+  <text x="720" y="240" class="h" text-anchor="middle">Gateway Service</text>
+  <text x="720" y="262" class="m" text-anchor="middle">load-balancer IP or NodePort</text>
+  <path d="M720 172 V 202" class="ln" marker-end="url(#a)"/>
+
+  <rect x="575" y="318" width="290" height="214" rx="12" class="c1"/>
+  <circle cx="857" cy="326" r="13" fill="#22D3EE"/><text x="857" y="331" class="num" text-anchor="middle">1</text>
+  <text x="595" y="346" class="h">Cilium Envoy (on the node)</text>
+  <text x="595" y="368" class="m">HTTP filters, in order:</text>
+  <rect x="595" y="380" width="250" height="46" rx="9" class="c3"/>
+  <circle cx="822" cy="403" r="12" fill="#F59E0B"/><text x="822" y="408" class="num" text-anchor="middle" style="font-size:12px">3</text>
+  <text x="611" y="402" class="b">① ext_proc</text>
+  <text x="611" y="418" class="m">ask Hypergate, wait for the answer</text>
+  <rect x="595" y="436" width="250" height="46" rx="9" class="inner"/>
+  <text x="611" y="458" class="b">② router</text>
+  <text x="611" y="474" class="m">forward to the app (HTTPRoute)</text>
+  <text x="595" y="512" class="m">Engine unreachable → request fails</text>
+  <path d="M720 280 V 310" class="ln" marker-end="url(#a)"/>
+
+  <path d="M865 396 H 922" class="lna" marker-end="url(#aa)"/>
+  <text x="896" y="388" class="m" text-anchor="middle" fill="#FCD34D">gRPC</text>
+  <path d="M922 416 H 873" class="lna" marker-end="url(#aa)"/>
+  <text x="896" y="434" class="m" text-anchor="middle" fill="#FCD34D">answer</text>
+
+  <rect x="610" y="600" width="220" height="70" rx="12" class="box"/>
+  <text x="720" y="630" class="h" text-anchor="middle">App Service → pods</text>
+  <text x="720" y="652" class="m" text-anchor="middle">only allowed requests</text>
+  <path d="M720 532 V 592" class="lng" marker-end="url(#ag)"/>
+  <text x="730" y="566" class="m" fill="#6EE7B7">allowed</text>
+
+  <rect x="575" y="700" width="290" height="100" rx="12" class="bad"/>
+  <text x="595" y="728" class="h" fill="#FECDD3">Denied</text>
+  <text x="595" y="752" class="s" fill="#FDA4AF">A filter said no: Envoy answers the</text>
+  <text x="595" y="772" class="s" fill="#FDA4AF">client (401 / 403 / 429 …) itself</text>
+  <text x="595" y="790" class="m" fill="#FDA4AF">the app is never called</text>
+  <path d="M930 750 H 873" class="lnr" marker-end="url(#ar)"/>
+  <text x="897" y="742" class="m" text-anchor="middle" fill="#FDA4AF">deny</text>
+
+  <!-- ===== Runtime: engine pod ===== -->
+  <rect x="930" y="318" width="440" height="472" rx="12" class="c2"/>
+  <circle cx="1362" cy="326" r="13" fill="#818CF8"/><text x="1362" y="331" class="num" text-anchor="middle">2</text>
+  <text x="950" y="344" class="h">Engine pod · same node</text>
+
+  <!-- engine container -->
+  <rect x="946" y="356" width="268" height="422" rx="10" class="ctr"/>
+  <text x="960" y="380" class="bb">hyper-engine</text>
+  <text x="1200" y="380" class="tag" text-anchor="end" fill="#A5B4FC">CONTAINER</text>
+
+  <text x="960" y="406" class="bb">① Routing: which chain?</text>
+  <text x="960" y="424" class="m">by priority, the first match wins</text>
+  <text x="962" y="444" class="m">prio</text><text x="1004" y="444" class="m">request</text><text x="1118" y="444" class="m">chain</text>
+  <rect x="958" y="450" width="244" height="22" rx="5" class="inner"/>
+  <text x="964" y="466" class="s">200</text><text x="1004" y="466" class="s">/admin/*</text><text x="1118" y="466" class="s">admin</text>
+  <rect x="958" y="476" width="244" height="22" rx="5" fill="#26285A" stroke="#818CF8" stroke-width="1.4"/>
+  <text x="964" y="492" class="s">100</text><text x="1004" y="492" class="s">/api/*</text><text x="1118" y="492" class="s" font-weight="700">web-api ✓</text>
+  <rect x="958" y="502" width="244" height="22" rx="5" class="inner"/>
+  <text x="964" y="518" class="s">—</text><text x="1004" y="518" class="s">no match</text><text x="1118" y="518" class="s">public</text>
+
+  <text x="960" y="548" class="bb">② Chain web-api, in order</text>
+  <rect x="958" y="558" width="244" height="30" rx="7" class="inner"/>
+  <text x="970" y="578" class="s">1  CORS</text><text x="1192" y="578" class="m" text-anchor="end">built-in</text>
+  <path d="M1080 588 V 596" class="ln" marker-end="url(#a)"/>
+  <rect x="958" y="598" width="244" height="30" rx="7" class="inner"/>
+  <text x="970" y="618" class="s">2  JWT</text><text x="1192" y="618" class="m" text-anchor="end">built-in</text>
+  <path d="M1080 628 V 636" class="ln" marker-end="url(#a)"/>
+  <rect x="958" y="638" width="244" height="30" rx="7" class="side"/>
+  <text x="970" y="658" class="s">3  External auth</text><text x="1192" y="658" class="tag" text-anchor="end" fill="#FCD34D">SIDECAR</text>
+  <path d="M1080 668 V 676" class="ln" marker-end="url(#a)"/>
+  <rect x="958" y="678" width="244" height="30" rx="7" class="side"/>
+  <text x="970" y="698" class="s">4  Firewall (body)</text><text x="1192" y="698" class="tag" text-anchor="end" fill="#FCD34D">SIDECAR</text>
+  <path d="M1080 708 V 716" class="ln" marker-end="url(#a)"/>
+  <rect x="958" y="718" width="244" height="30" rx="7" class="inner"/>
+  <text x="970" y="738" class="s">5  Rate limit</text><text x="1192" y="738" class="m" text-anchor="end">built-in</text>
+  <text x="960" y="768" class="m">③ all passed: continue · any no: deny</text>
+
+  <!-- sidecar containers and their Unix sockets -->
+  <text x="1230" y="380" class="bb">Sidecars</text>
+  <text x="1230" y="400" class="m">extra containers in</text>
+  <text x="1230" y="416" class="m">the same pod, for</text>
+  <text x="1230" y="432" class="m">work the engine does</text>
+  <text x="1230" y="448" class="m">not do itself</text>
+  <text x="1230" y="474" class="m">The chain calls one,</text>
+  <text x="1230" y="490" class="m">waits for its answer,</text>
+  <text x="1230" y="506" class="m">then runs the next</text>
+  <text x="1230" y="522" class="m">filter</text>
+
+  <!-- shared socket directory -->
+  <rect x="1222" y="548" width="140" height="74" rx="8" class="sock"/>
+  <text x="1232" y="566" class="tag" fill="#FCD34D">UNIX SOCKETS</text>
+  <text x="1232" y="582" class="mono">/var/run/hypergate/</text>
+  <text x="1232" y="598" class="m">shared volume,</text>
+  <text x="1232" y="614" class="m">no network, no TLS</text>
+
+  <rect x="1222" y="634" width="140" height="38" rx="8" class="side"/>
+  <text x="1232" y="650" class="s">oauth2-proxy</text>
+  <text x="1232" y="665" class="mono">ext-auth-sso.sock</text>
+  <rect x="1222" y="676" width="140" height="38" rx="8" class="side"/>
+  <text x="1232" y="692" class="s">WAF</text>
+  <text x="1232" y="707" class="mono">fw-waf.sock</text>
+  <path d="M1204 653 H 1216" class="lna" marker-start="url(#aa)" marker-end="url(#aa)"/>
+  <path d="M1204 695 H 1216" class="lna" marker-start="url(#aa)" marker-end="url(#aa)"/>
+  <text x="1232" y="740" class="m">engine ⇄ sidecar over</text>
+  <text x="1232" y="756" class="m">its Unix socket only</text>
+
+  <!-- ===== Bottom panels ===== -->
+  <text x="30" y="840" class="cap">HOW IT STAYS FAST, CONSISTENT AND EXTENSIBLE</text>
+
+  <rect x="30" y="854" width="430" height="196" rx="12" class="c1"/>
+  <text x="50" y="882" class="h">Fast path</text>
+  <text x="50" y="908" class="s">• PreferSameNode: Envoy calls the engine on its own</text>
+  <text x="66" y="928" class="s">node, no cross-node hop (falls back if none is ready)</text>
+  <text x="50" y="952" class="s">• Pre-allocation: 5,000 request contexts, header maps</text>
+  <text x="66" y="972" class="s">and 64 KiB body buffers are created at start-up and</text>
+  <text x="66" y="992" class="s">reused, so traffic does not allocate per request</text>
+  <text x="50" y="1016" class="s">• Sidecars are reached by Unix socket, not network</text>
+
+  <rect x="485" y="854" width="430" height="196" rx="12" class="c2"/>
+  <text x="505" y="882" class="h">One request is never split</text>
+  <text x="505" y="908" class="s">• Headers, body and response of a request travel on</text>
+  <text x="521" y="928" class="s">one gRPC stream to the same engine</text>
+  <text x="505" y="952" class="s">• The request keeps the policy it started with: a live</text>
+  <text x="521" y="972" class="s">update never mixes two policies in one request</text>
+  <text x="505" y="996" class="s">• The body is fetched only when a filter needs it,</text>
+  <text x="521" y="1016" class="s">and then whole (buffered), not in pieces</text>
+
+  <rect x="940" y="854" width="430" height="196" rx="12" class="c3"/>
+  <text x="960" y="882" class="h">Sidecars: when and what they cost</text>
+  <text x="960" y="908" class="s">• A sidecar filter is one step of a chain (steps 3–4</text>
+  <text x="976" y="928" class="s">above); built-in steps run inside the engine</text>
+  <text x="960" y="952" class="s">• Cost: one copy on every node (CPU and memory), and</text>
+  <text x="976" y="972" class="s">body inspection buffers the request (adds latency)</text>
+  <text x="960" y="996" class="s">• Put them only in the chains that need them; other</text>
+  <text x="976" y="1016" class="s">routes never call them</text>
+  <text x="960" y="1038" class="m">A sidecar that is down fails its requests closed (500)</text>
+</svg>
