@@ -77,7 +77,7 @@ initialConfig:
     server:
       address: "0.0.0.0:9001"
       max_concurrent_streams: 10000
-      pool_prewarm_size: 5000
+      pool_prewarm_size: 256
       initial_header_capacity: 64
     router:
       default_chain: "public"

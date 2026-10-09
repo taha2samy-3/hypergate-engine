@@ -119,7 +119,15 @@ Verified against the Kubernetes docs source, KEP-3015 and the Envoy Gateway sour
 - **Set the Go memory limit from the container limit.** Go 1.25 made `GOMAXPROCS` container-aware but not the memory limit, and Go 1.26 did not change that ([golang/go#75164](https://github.com/golang/go/issues/75164) is still open), so without help the GC ignores the 512 MiB limit until the kernel OOM-kills. Use [`KimMachineGun/automemlimit`](https://github.com/KimMachineGun/automemlimit) (cgroup v1, v2 and hybrid; also used by GitLab Runner) with a 0.9 ratio, unless `GOMEMLIMIT` is already set. Setting `GOMEMLIMIT` from the Downward API was rejected: it uses the full limit with no headroom.
 - If a bounded warm pool is still wanted later: a **sharded** free list (one small channel per P) avoids most of the contention; not proposed now.
 
-**Test:** benchmark the full `Process` path before/after (allocations, ns/op, p99 under parallel load); RSS of the engine 1 minute after start in kind.
+**Done.** `sync.Pool` kept; per-context body buffer removed (bodies are referenced, and released contexts drop them); `pool_prewarm_size` default 256 in the engine and the CRD; `prealloc_body_buffer_bytes` / `preallocBodyBufferBytes` accepted but ignored (warning logged); `automemlimit` sets Go's memory limit to 90 % of the cgroup limit at start-up.
+
+| Measured after the change | Before | After |
+| --- | --- | --- |
+| Memory for the default pre-warm | 429 MiB (5,000 × 88 KiB) | **5.9 MiB** (256 × 24 KiB) |
+| `BenchmarkProcess_Headers` (parallel, 8 CPUs) | ≈1.05 µs, 979 B, 13 allocs | ≈1.05 µs, 974 B, 13 allocs |
+| `BenchmarkProcess_Body16K` | ≈1.1–1.5 µs, 1225 B, 16 allocs | ≈1.0–1.6 µs, 1219 B, 16 allocs |
+
+The request path is not measurably faster (the 16 KiB copy was cheap); the gain is memory, and the start-up OOM risk is gone. Existing HyperConfigs keep the value they were created with (5,000 → about 120 MiB now); lower `poolPrewarmSize` on them.
 
 ## 4. Prometheus metrics
 

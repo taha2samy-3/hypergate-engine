@@ -59,7 +59,7 @@ Readiness is unaffected by reloads: `/readyz` reports ready after the first succ
 
 Everything under `chains`, `router` and `redis` takes effect on reload, as does `server.client_ip.trusted_proxy_hops`, which is read from the snapshot for each new stream.
 
-The following are read once at start-up and need a restart to change: `server.address`, `server.max_concurrent_streams`, `server.tls`, `server.health_address`, `server.pprof_address`, `server.pool_prewarm_size`, `server.initial_header_capacity`, `server.prealloc_body_buffer_bytes` and `telemetry.logging`.
+The following are read once at start-up and need a restart to change: `server.address`, `server.max_concurrent_streams`, `server.tls`, `server.health_address`, `server.pprof_address`, `server.pool_prewarm_size`, `server.initial_header_capacity`, `server.shutdown` and `telemetry.logging`.
 
 ## Things that can make a reload slow or fail
 

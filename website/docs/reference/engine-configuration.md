@@ -16,9 +16,8 @@ version: v1                              # required, must be "v1"
 server:
   address: "0.0.0.0:9001"                # ext_proc gRPC listener
   max_concurrent_streams: 10000
-  pool_prewarm_size: 5000
+  pool_prewarm_size: 256
   initial_header_capacity: 64
-  prealloc_body_buffer_bytes: 65536
   health_address: ":9003"                # /healthz and /readyz
   pprof_address: ""                      # empty = pprof disabled
   client_ip:
@@ -105,9 +104,9 @@ Unknown keys are ignored.
 | --- | --- | --- | --- | --- |
 | `address` | string | `:9001` | No | Listen address of the ext_proc gRPC server. The operator compiles `0.0.0.0:9001` by default. |
 | `max_concurrent_streams` | uint32 | `10000` (when `0`) | No | Maximum concurrent gRPC streams per connection from Envoy. Each HTTP request is one stream. |
-| `pool_prewarm_size` | int | `5000` (when `<= 0`) | No | Number of request contexts allocated at start-up. |
+| `pool_prewarm_size` | int | `256` (when `<= 0`) | No | Number of request contexts (about 24 KiB each) allocated at start-up, so the first requests do not allocate. Under traffic the pool refills itself; a large value only costs memory. |
 | `initial_header_capacity` | int | `64` (when `<= 0`) | No | Initial capacity of each context's header maps. |
-| `prealloc_body_buffer_bytes` | int | `65536` (when `<= 0`) | No | Size of the body buffer pre-allocated per request context. Bodies larger than the buffer are used without copying. |
+| `prealloc_body_buffer_bytes` | int | | No | **Deprecated and ignored.** Bodies are no longer copied into a per-context buffer; a warning is logged when it is set. |
 | `health_address` | string | `:9003` | No | Address of the HTTP server for `/healthz` and `/readyz`. |
 | `pprof_address` | string | empty (disabled) | No | When set, serves `/debug/pprof/` on this address. Bind it to `127.0.0.1` and never expose it publicly. |
 | `client_ip` | object | | | See [server.client_ip](#serverclient_ip). |

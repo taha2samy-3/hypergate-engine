@@ -69,9 +69,9 @@ spec:
 | `extProc.namespaces` | list of strings, at most 256 | empty | | Namespaces that get a `CiliumEnvoyExtProcFilter` named `hypergate`. Inactive until Cilium ships that CRD. |
 | `extProc.failureMode` | enum `FailClosed`, `FailOpen` | `FailClosed` | | What Envoy does when the engine cannot be reached. |
 | `extProc.messageTimeout` | Gateway API duration | `2500ms` | | Envoy's deadline for each ext_proc message. |
-| `poolPrewarmSize` | integer | `5000` | `server.pool_prewarm_size` | Request contexts allocated at start-up. |
+| `poolPrewarmSize` | integer | `256` | `server.pool_prewarm_size` | Request contexts (about 24 KiB each) allocated at start-up. |
 | `initialHeaderCapacity` | integer | `64` | `server.initial_header_capacity` | Initial header map capacity per context. |
-| `preallocBodyBufferBytes` | integer | `65536` | `server.prealloc_body_buffer_bytes` | Body buffer per context. |
+| `preallocBodyBufferBytes` | integer | | | **Deprecated and ignored.** |
 
 The compiler always sets `server.health_address: ":9003"` so that the probes match.
 

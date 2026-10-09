@@ -200,9 +200,9 @@
   <text x="50" y="882" class="h">Fast path</text>
   <text x="50" y="908" class="s">• PreferSameNode: the node's service proxy picks the</text>
   <text x="66" y="928" class="s">local engine when Envoy calls the Service ClusterIP</text>
-  <text x="50" y="952" class="s">• Pre-allocation: 5,000 request contexts, header maps</text>
-  <text x="66" y="972" class="s">and 64 KiB body buffers are created at start-up and</text>
-  <text x="66" y="992" class="s">reused, so traffic does not allocate per request</text>
+  <text x="50" y="952" class="s">• Pooled request contexts (24 KiB each) are reused,</text>
+  <text x="66" y="972" class="s">bodies are not copied, and Go's memory limit follows</text>
+  <text x="66" y="992" class="s">the container limit, so no OOM spike at start-up</text>
   <text x="50" y="1016" class="s">• Sidecars are reached by Unix socket, not network</text>
 
   <rect x="485" y="854" width="430" height="196" rx="12" class="c2"/>
