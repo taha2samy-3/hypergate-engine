@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -163,6 +164,12 @@ func (r *HyperConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			ds.Spec.Selector = &metav1.LabelSelector{MatchLabels: labels}
 		}
 		ds.Spec.Template.Labels = labels
+		// The engine serves Prometheus metrics on its health port.
+		ds.Spec.Template.Annotations = map[string]string{
+			"prometheus.io/scrape": "true",
+			"prometheus.io/port":   strconv.Itoa(engineHealthPort),
+			"prometheus.io/path":   "/metrics",
+		}
 		ds.Spec.Template.Spec.ServiceAccountName = saName
 		ds.Spec.Template.Spec.SecurityContext = &corev1.PodSecurityContext{
 			SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},

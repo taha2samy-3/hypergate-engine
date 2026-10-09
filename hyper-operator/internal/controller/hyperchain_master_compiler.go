@@ -384,6 +384,8 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 			}
 
 			chain = append(chain, config.FilterConfig{
+				// Labels the filter in the engine's metrics, e.g. JwtAuthFilter/users.
+				Name:    filterRef.Kind + "/" + filterRef.Name,
 				Type:    filterType,
 				Options: opts,
 			})
