@@ -1,6 +1,9 @@
 package config
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/taha2samy/hypergate/internal/logger"
 )
 
@@ -46,4 +49,61 @@ type ServerConfig struct {
 	// e.g. "127.0.0.1:6060". Disabled by default; never expose it publicly.
 	PprofAddress string         `yaml:"pprof_address"`
 	ClientIP     ClientIPConfig `yaml:"client_ip"`
+	// Shutdown controls how the engine stops on SIGTERM. Read at start-up only.
+	Shutdown ShutdownConfig `yaml:"shutdown"`
+}
+
+// ShutdownConfig controls the stop sequence: after SIGTERM the engine reports not
+// ready but keeps accepting ext_proc streams until none has arrived for
+// QuietPeriod (waiting at least MinDelay and at most MaxDelay), so Envoy has
+// time to stop sending; then it drains open streams for up to DrainTimeout and
+// closes the rest.
+type ShutdownConfig struct {
+	QuietPeriod  string `yaml:"quiet_period"`
+	MinDelay     string `yaml:"min_delay"`
+	MaxDelay     string `yaml:"max_delay"`
+	DrainTimeout string `yaml:"drain_timeout"`
+
+	QuietPeriodDuration  time.Duration `yaml:"-"`
+	MinDelayDuration     time.Duration `yaml:"-"`
+	MaxDelayDuration     time.Duration `yaml:"-"`
+	DrainTimeoutDuration time.Duration `yaml:"-"`
+}
+
+// Default shutdown timings. The operator sets terminationGracePeriodSeconds to
+// cover MaxDelay + DrainTimeout.
+const (
+	DefaultShutdownQuietPeriod  = 2 * time.Second
+	DefaultShutdownMinDelay     = 3 * time.Second
+	DefaultShutdownMaxDelay     = 15 * time.Second
+	DefaultShutdownDrainTimeout = 20 * time.Second
+)
+
+// applyDefaults parses the durations, using the defaults for empty values.
+func (c *ShutdownConfig) applyDefaults() error {
+	for _, f := range []struct {
+		name string
+		raw  string
+		def  time.Duration
+		out  *time.Duration
+	}{
+		{"quiet_period", c.QuietPeriod, DefaultShutdownQuietPeriod, &c.QuietPeriodDuration},
+		{"min_delay", c.MinDelay, DefaultShutdownMinDelay, &c.MinDelayDuration},
+		{"max_delay", c.MaxDelay, DefaultShutdownMaxDelay, &c.MaxDelayDuration},
+		{"drain_timeout", c.DrainTimeout, DefaultShutdownDrainTimeout, &c.DrainTimeoutDuration},
+	} {
+		if f.raw == "" {
+			*f.out = f.def
+			continue
+		}
+		d, err := time.ParseDuration(f.raw)
+		if err != nil || d < 0 {
+			return fmt.Errorf("server.shutdown.%s: invalid duration %q", f.name, f.raw)
+		}
+		*f.out = d
+	}
+	if c.MinDelayDuration > c.MaxDelayDuration {
+		return fmt.Errorf("server.shutdown.min_delay (%s) must not exceed max_delay (%s)", c.MinDelayDuration, c.MaxDelayDuration)
+	}
+	return nil
 }

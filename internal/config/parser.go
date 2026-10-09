@@ -148,6 +148,9 @@ func ParseBytes(data []byte) (*Config, error) {
 	if cfg.Server.HealthAddress == "" {
 		cfg.Server.HealthAddress = ":9003"
 	}
+	if err := cfg.Server.Shutdown.applyDefaults(); err != nil {
+		return nil, err
+	}
 	if cfg.Server.ClientIP.TrustedProxyHops < 0 {
 		return nil, fmt.Errorf("server.client_ip.trusted_proxy_hops must be >= 0, got %d", cfg.Server.ClientIP.TrustedProxyHops)
 	}

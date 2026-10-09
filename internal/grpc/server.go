@@ -35,6 +35,8 @@ type Server struct {
 	executor *engine.ChainExecutor
 	// identity is the workload identity map, nil when identity is disabled.
 	identity *identity.Index
+	// activity records stream starts for graceful shutdown (may be nil).
+	activity *Activity
 	extprocv3.UnimplementedExternalProcessorServer
 }
 
@@ -156,6 +158,11 @@ func buildTLSCredentials(cfg *config.TLSConfig) (credentials.TransportCredential
 func (s *Server) Process(stream extprocv3.ExternalProcessor_ProcessServer) error {
 	mylogger.Debug("ext_proc bidirectional stream opened")
 	startTime := time.Now()
+
+	if s.activity != nil {
+		s.activity.streamStarted()
+		defer s.activity.streamEnded()
+	}
 
 	st := &streamState{snap: s.registry.Acquire()}
 	defer st.snap.Release()
