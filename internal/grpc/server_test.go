@@ -80,7 +80,7 @@ func newTestServer(cfg *config.Config, chains map[string]engine.Chain) *Server {
 	registry := engine.NewChainRegistry()
 	registry.Swap(engine.NewSnapshot(cfg, chains), nil)
 	return &Server{
-		pool:     memory.NewContextPool(16, 1024),
+		pool:     memory.NewContextPool(16),
 		router:   router.NewEngineRouter(),
 		registry: registry,
 		executor: engine.NewChainExecutor(),

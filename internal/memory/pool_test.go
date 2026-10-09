@@ -6,32 +6,34 @@ import (
 	"github.com/taha2samy/hypergate/internal/memory"
 )
 
-func TestContextPool_PreallocBodyBuffer(t *testing.T) {
-	defaultPool := memory.NewContextPool(64, 0) // Should default to 65536
-	ctx1 := defaultPool.Acquire()
-	if cap(ctx1.RawBodyBuffer) != 65536 {
-		t.Errorf("Expected RawBodyBuffer capacity to be 65536, got %d", cap(ctx1.RawBodyBuffer))
-	}
-	ctx1.RawBodyBuffer = append(ctx1.RawBodyBuffer, []byte("hello")...)
-	if len(ctx1.RawBodyBuffer) != 5 {
-		t.Errorf("Expected RawBodyBuffer length to be 5, got %d", len(ctx1.RawBodyBuffer))
-	}
+func TestContextPool_ReleaseDropsBodiesAndKeepsMaps(t *testing.T) {
+	pool := memory.NewContextPool(64)
+	ctx := pool.Acquire()
+	body := make([]byte, 1<<20)
+	ctx.RequestBody = body
+	ctx.ResponseBodyBytes = body
+	ctx.Headers["x"] = "1"
+	pool.Release(ctx)
 
-	defaultPool.Release(ctx1)
+	again := pool.Acquire()
+	if again.RequestBody != nil || again.ResponseBodyBytes != nil {
+		t.Fatal("a released context must not keep the previous request's body alive")
+	}
+	if len(again.Headers) != 0 || again.Headers == nil {
+		t.Fatalf("headers must be cleared but kept allocated, got %v", again.Headers)
+	}
+	pool.Release(again)
+}
 
-	ctx2 := defaultPool.Acquire()
-	if len(ctx2.RawBodyBuffer) != 0 {
-		t.Errorf("Expected RawBodyBuffer length to be reset to 0, got %d", len(ctx2.RawBodyBuffer))
+func TestContextPool_NoAllocationsOnceWarm(t *testing.T) {
+	pool := memory.NewContextPool(64)
+	pool.Prewarm(8)
+	allocs := testing.AllocsPerRun(1000, func() {
+		ctx := pool.Acquire()
+		ctx.Headers[":path"] = "/"
+		pool.Release(ctx)
+	})
+	if allocs != 0 {
+		t.Fatalf("Acquire/Release allocated %.1f times per run", allocs)
 	}
-	if cap(ctx2.RawBodyBuffer) != 65536 {
-		t.Errorf("Expected RawBodyBuffer capacity to remain 65536 after reset, got %d", cap(ctx2.RawBodyBuffer))
-	}
-	defaultPool.Release(ctx2)
-
-	customPool := memory.NewContextPool(32, 1024)
-	ctxCustom := customPool.Acquire()
-	if cap(ctxCustom.RawBodyBuffer) != 1024 {
-		t.Errorf("Expected custom RawBodyBuffer capacity to be 1024, got %d", cap(ctxCustom.RawBodyBuffer))
-	}
-	customPool.Release(ctxCustom)
 }
