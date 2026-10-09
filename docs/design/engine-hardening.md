@@ -28,6 +28,32 @@ Five items, in the order proposed for implementation: CI (1), graceful shutdown 
 - Cost: about 8–10 minutes per PR that touches Go, charts or tests.
 - Fix the crash check as described above.
 
+**Done (CI part):** `e2e-kind.yaml` now runs on `pull_request`, `merge_group`, `push` and manual runs, with a `changes` job deciding whether the expensive jobs run and an always-reporting `kind-e2e-result` job. The crash check kills the leader's container with SIGKILL from the node (`crictl stop --timeout 0`) and fails if the takeover is faster than 5 s (that would mean the Lease was released, so not a crash).
+
+**Not enabled automatically:** `main` receives direct pushes from you and from the staging workflow (`03-deploy-test-staging.yaml` runs `git push origin main`). Classic branch protection with a required check would reject those pushes. Use a repository ruleset that applies to pull requests and lets admins and GitHub Actions bypass:
+
+```bash
+gh api -X POST repos/taha2samy-3/hypergate-engine/rulesets --input - <<'JSON'
+{
+  "name": "main: kind e2e required",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": { "ref_name": { "include": ["refs/heads/main"], "exclude": [] } },
+  "bypass_actors": [
+    { "actor_type": "RepositoryRole", "actor_id": 5, "bypass_mode": "always" },
+    { "actor_type": "Integration", "actor_id": 15368, "bypass_mode": "always" }
+  ],
+  "rules": [
+    { "type": "required_status_checks",
+      "parameters": { "strict_required_status_checks_policy": false,
+        "required_status_checks": [ { "context": "kind-e2e-result" } ] } }
+  ]
+}
+JSON
+```
+
+(`RepositoryRole` 5 is the admin role; integration 15368 is GitHub Actions.)
+
 ## 3. Graceful shutdown (no 5xx during engine rollouts)
 
 **Findings** (second research round, from source code and upstream issues)

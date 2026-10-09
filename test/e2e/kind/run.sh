@@ -132,6 +132,30 @@ measure_failover() {
   wait_until "engines reconnected after $label" 60 engine_synced
 }
 
+# measure_crash <budget seconds>: kills the leader's container with SIGKILL from
+# the node (no SIGTERM, so the Lease is not released) and measures the takeover.
+measure_crash() {
+  local budget=$1 holder pod node cid start elapsed secs
+  holder=$(kubectl -n "$OP_NS" get lease "$LEASE" -o jsonpath='{.spec.holderIdentity}')
+  pod=${holder%%_*}
+  node=$(kubectl -n "$OP_NS" get pod "$pod" -o jsonpath='{.spec.nodeName}')
+  cid=$(docker exec "$node" crictl ps -q --label "io.kubernetes.pod.name=$pod" --label io.kubernetes.container.name=manager)
+  [[ -n $cid ]] || fail "crash: leader container of $pod not found on $node"
+  start=$(now_ms)
+  docker exec "$node" crictl stop --timeout 0 "$cid" >/dev/null
+  local deadline=$(( $(date +%s) + budget + 60 ))
+  until [[ $(kubectl -n "$OP_NS" get lease "$LEASE" -o jsonpath='{.spec.holderIdentity}') != "$holder" ]] && slice_points_at_leader; do
+    (( $(date +%s) < deadline )) || fail "crash: no new leader took over"
+    sleep 0.5
+  done
+  elapsed=$(( $(now_ms) - start ))
+  secs=$(awk "BEGIN{printf \"%.1f\", $elapsed/1000}")
+  (( elapsed >= 5000 )) || fail "crash: takeover in ${secs}s is too fast for an expired Lease; the kill was not a crash"
+  (( elapsed <= budget * 1000 )) || fail "crash: takeover took ${secs}s (budget ${budget}s)"
+  record "Failover: crash (SIGKILL)" "${secs}s" "new leader $(leader_pod), Lease expiry, budget ${budget}s"
+  wait_until "engines reconnected after the crash" 90 engine_synced
+}
+
 # ---------------------------------------------------------------------------
 
 log "Operator leadership and the identity Service"
@@ -186,8 +210,8 @@ wait_until "engine learns the new checkout pod" 60 engine_knows "$(pod_ip shop "
 record "New pod propagation" "$(( $(now_ms) - start )) ms" "after it was Ready, via the new leader"
 wait_until "new checkout pod routed to its chain" 60 expect_call shop "$newest" "200 checkout-to-ledger"
 
-log "Leader crash (pod force-deleted, Lease expires)"
-measure_failover "crash" 45
+log "Leader crash (process killed without SIGTERM, Lease must expire)"
+measure_crash 45
 check_routing "after failovers"
 
 log "Scale: $SCALE_PODS pods"

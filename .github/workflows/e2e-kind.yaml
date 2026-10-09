@@ -5,35 +5,21 @@ name: Kind E2E (identity)
 # engine identity sync, routing by caller identity through Envoy Gateway, leader
 # failover timings, and scale. See test/e2e/kind/.
 
+# Runs on every PR, merge-queue run and push to main, so it can be a required
+# check: the "changes" job decides whether the expensive jobs run, and
+# "kind-e2e-result" always reports (success when they passed or were skipped).
+# A path filter on the trigger would leave a required check pending forever.
 on:
   pull_request:
     branches: [main]
-    paths:
-      - '**/*.go'
-      - 'go.mod'
-      - 'go.sum'
-      - 'Dockerfile'
-      - 'hyper-operator/**'
-      - 'charts/hyper-operator/**'
-      - 'proto/**'
-      - 'test/e2e/kind/**'
-      - '.github/workflows/e2e-kind.yaml'
+  merge_group:
+    types: [checks_requested]
   push:
     branches: [main]
-    paths:
-      - '**/*.go'
-      - 'go.mod'
-      - 'go.sum'
-      - 'Dockerfile'
-      - 'hyper-operator/**'
-      - 'charts/hyper-operator/**'
-      - 'proto/**'
-      - 'test/e2e/kind/**'
-      - '.github/workflows/e2e-kind.yaml'
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.merge_group.head_ref || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -48,8 +34,41 @@ env:
   OPERATOR_IMAGE: ghcr.io/taha2samy-3/hyper-operator:e2e
 
 jobs:
+  changes:
+    name: Detect relevant changes
+    runs-on: ubuntu-latest
+    outputs:
+      relevant: ${{ steps.decide.outputs.relevant }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        if: github.event_name == 'pull_request' || github.event_name == 'push'
+        with:
+          filters: |
+            relevant:
+              - '**/*.go'
+              - 'go.mod'
+              - 'go.sum'
+              - 'Dockerfile'
+              - 'hyper-operator/**'
+              - 'charts/hyper-operator/**'
+              - 'proto/**'
+              - 'test/e2e/kind/**'
+              - '.github/workflows/e2e-kind.yaml'
+      - id: decide
+        # Merge-queue and manual runs always test.
+        run: |
+          if [[ "${{ github.event_name }}" == "merge_group" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "relevant=${{ steps.filter.outputs.relevant }}" >> "$GITHUB_OUTPUT"
+          fi
+
   scale-simulated:
     name: Identity scale (10k simulated pods)
+    needs: changes
+    if: needs.changes.outputs.relevant == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -67,6 +86,8 @@ jobs:
 
   kind-e2e:
     name: Identity and routing on kind
+    needs: changes
+    if: needs.changes.outputs.relevant == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -143,3 +164,17 @@ jobs:
           name: kind-logs
           path: ./kind-logs
           retention-days: 7
+
+  # The single check to mark as required in branch protection or a ruleset.
+  kind-e2e-result:
+    name: kind-e2e-result
+    needs: [changes, scale-simulated, kind-e2e]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Summarise
+        run: |
+          echo "changes=${{ needs.changes.result }} scale=${{ needs.scale-simulated.result }} kind=${{ needs.kind-e2e.result }}"
+          for r in "${{ needs.changes.result }}" "${{ needs.scale-simulated.result }}" "${{ needs.kind-e2e.result }}"; do
+            if [[ "$r" == "failure" || "$r" == "cancelled" ]]; then exit 1; fi
+          done
