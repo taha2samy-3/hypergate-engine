@@ -221,6 +221,16 @@ func ParseBytes(data []byte) (*Config, error) {
 		}
 	}
 
+	for name, cs := range cfg.ChainSettings {
+		if _, ok := cfg.Chains[name]; !ok {
+			return nil, fmt.Errorf("chain_settings.%s: no chain with that name", name)
+		}
+		if err := cs.validate(name); err != nil {
+			return nil, err
+		}
+		cfg.ChainSettings[name] = cs
+	}
+
 	if err := validateChainReferences(&cfg); err != nil {
 		return nil, err
 	}

@@ -19,6 +19,9 @@ type Config struct {
 	// Each key becomes the service name used for O(1) lookup in the redis.Manager.
 	Redis map[string]RedisServiceConfig `yaml:"redis"`
 
+	// ChainSettings bound each chain's work (timeout, concurrency), by chain name.
+	ChainSettings map[string]ChainSettings `yaml:"chain_settings,omitempty"`
+
 	// Identity connects the engine to the operator's workload identity stream.
 	Identity IdentityConfig `yaml:"identity,omitempty"`
 }
