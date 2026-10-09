@@ -28,6 +28,7 @@ func NewContextPool(initialHeaderCap int) *ContextPool {
 		pool: &sync.Pool{
 			New: func() interface{} {
 				return &engine.RequestContext{
+					BlockedBy:               -1,
 					Headers:                 make(map[string]string, initialHeaderCap),
 					ResponseHeaders:         make(map[string]string, initialHeaderCap),
 					HeadersToAdd:            make([]engine.Header, 0, sliceCap),

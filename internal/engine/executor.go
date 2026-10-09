@@ -52,6 +52,8 @@ func (e *ChainExecutor) Execute(ctx *RequestContext, chain Chain, phase Phase) e
 			mylogger.Error("Filter execution failed with internal error", zap.String("error", err.Error()), zap.Int("filter_index", i))
 
 			// Block the request gracefully due to internal server error
+			ctx.BlockedBy = i
+			ctx.FilterFailed = true
 			ctx.Blocked = true
 			ctx.ResponseStatus = 500
 			ctx.ResponseBody = "Internal Server Error"
@@ -61,6 +63,7 @@ func (e *ChainExecutor) Execute(ctx *RequestContext, chain Chain, phase Phase) e
 
 		// Fast-Fail after filter execution
 		if ctx.Blocked {
+			ctx.BlockedBy = i
 			mylogger.Info("Request blocked by filter chain",
 				zap.Int32("status_code", int32(ctx.ResponseStatus)),
 				zap.String("response_body", ctx.ResponseBody),

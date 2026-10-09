@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"strconv"
 	"sync"
 	"sync/atomic"
 
@@ -18,6 +19,9 @@ import (
 type Snapshot struct {
 	Config *config.Config
 	Chains map[string]Chain
+	// FilterNames labels each chain position for metrics: the configured name,
+	// or "<index>:<type>".
+	FilterNames map[string][]string
 
 	refs      atomic.Int64
 	retired   atomic.Bool
@@ -30,7 +34,33 @@ func NewSnapshot(cfg *config.Config, chains map[string]Chain) *Snapshot {
 	if chains == nil {
 		chains = make(map[string]Chain)
 	}
-	return &Snapshot{Config: cfg, Chains: chains}
+	names := map[string][]string{}
+	if cfg != nil {
+		for chain, filters := range cfg.Chains {
+			labels := make([]string, len(filters))
+			for i, f := range filters {
+				if f.Name != "" {
+					labels[i] = f.Name
+				} else {
+					labels[i] = strconv.Itoa(i) + ":" + f.Type
+				}
+			}
+			names[chain] = labels
+		}
+	}
+	return &Snapshot{Config: cfg, Chains: chains, FilterNames: names}
+}
+
+// FilterName returns the metrics label of the filter at index in chain, or
+// "engine" when the engine itself made the decision (index < 0).
+func (s *Snapshot) FilterName(chain string, index int) string {
+	if index < 0 {
+		return "engine"
+	}
+	if names := s.FilterNames[chain]; index < len(names) {
+		return names[index]
+	}
+	return strconv.Itoa(index)
 }
 
 // Release drops a reference taken with ChainRegistry.Acquire.

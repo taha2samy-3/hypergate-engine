@@ -35,6 +35,7 @@ func (r *EngineRouter) RouteWith(rc *config.RouterConfig, ctx *engine.RequestCon
 		route := &rc.Routes[i]
 		for j := 0; j < len(route.Matches); j++ {
 			if matches(&route.Matches[j], ctx) {
+				ctx.MatchedRoute = route.Name
 				mylogger.Debug("Request matched route rule",
 					zap.String("rule_name", route.Name),
 					zap.String("target_chain", route.TargetChain),

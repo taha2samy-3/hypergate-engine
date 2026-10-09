@@ -62,6 +62,14 @@ type RequestContext struct {
 	HeadersToRemove          []string
 	ResponseHeadersToRemove  []string
 	Blocked                  bool
+	// BlockedBy is the index in the chain of the filter that blocked or failed
+	// the request, or -1 when the engine itself (or nothing) blocked it.
+	BlockedBy int
+	// FilterFailed is true when a filter returned an internal error.
+	FilterFailed bool
+	// MatchedRoute is the name of the route that selected the chain ("" when the
+	// default chain was used).
+	MatchedRoute string
 	ResponseStatus           int32
 	ResponseBody             string
 	UpstreamShadow           map[string]string
@@ -107,6 +115,9 @@ func (ctx *RequestContext) Reset() {
 	clear(ctx.UpstreamShadow)
 	clear(ctx.DownstreamShadow)
 	ctx.Blocked = false
+	ctx.BlockedBy = -1
+	ctx.FilterFailed = false
+	ctx.MatchedRoute = ""
 	ctx.ResponseStatus = 0
 	ctx.ResponseBody = ""
 	ctx.SetHeaderOptions = ctx.SetHeaderOptions[:0]
