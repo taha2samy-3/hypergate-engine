@@ -56,12 +56,12 @@ type RequestContext struct {
 	Headers map[string]string
 	// ResponseHeaders holds the upstream response headers (and response trailers).
 	// It is only populated once the ResponseHeaders phase has been reached.
-	ResponseHeaders          map[string]string
-	HeadersToAdd             []Header
-	ResponseHeadersToAdd     []Header
-	HeadersToRemove          []string
-	ResponseHeadersToRemove  []string
-	Blocked                  bool
+	ResponseHeaders         map[string]string
+	HeadersToAdd            []Header
+	ResponseHeadersToAdd    []Header
+	HeadersToRemove         []string
+	ResponseHeadersToRemove []string
+	Blocked                 bool
 	// BlockedBy is the index in the chain of the filter that blocked or failed
 	// the request, or -1 when the engine itself (or nothing) blocked it.
 	BlockedBy int
@@ -69,7 +69,7 @@ type RequestContext struct {
 	FilterFailed bool
 	// MatchedRoute is the name of the route that selected the chain ("" when the
 	// default chain was used).
-	MatchedRoute string
+	MatchedRoute             string
 	ResponseStatus           int32
 	ResponseBody             string
 	UpstreamShadow           map[string]string
