@@ -160,7 +160,8 @@ func main() {
 		zap.Int("initial_header_capacity", initialConfig.Server.InitialHeaderCapacity),
 	)
 
-	var serverOpts []mygrpc.Option
+	activity := &mygrpc.Activity{}
+	serverOpts := []mygrpc.Option{mygrpc.WithActivity(activity)}
 	if identityIndex != nil {
 		serverOpts = append(serverOpts, mygrpc.WithIdentity(identityIndex))
 	}
@@ -188,14 +189,38 @@ func main() {
 	}()
 	serving.Store(true)
 
-	stop := make(chan os.Signal, 1)
+	stop := make(chan os.Signal, 2)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	sig := <-stop
 
-	mylogger.Info("OS signal caught, initiating graceful shutdown...", zap.String("signal", sig.String()))
+	// Stop sequence: report not ready, keep serving until Envoy has stopped
+	// opening streams (it learns about the terminating endpoint asynchronously),
+	// then drain open streams for a bounded time. A second signal skips the waits.
+	sh := initialConfig.Server.Shutdown
+	mylogger.Info("OS signal caught, shutting down gracefully",
+		zap.String("signal", sig.String()),
+		zap.Duration("quiet_period", sh.QuietPeriodDuration),
+		zap.Duration("max_delay", sh.MaxDelayDuration),
+		zap.Duration("drain_timeout", sh.DrainTimeoutDuration))
 	serving.Store(false)
 
-	grpcServer.GracefulStop()
+	hurry, hurryNow := context.WithCancel(context.Background())
+	go func() {
+		<-stop
+		mylogger.Warn("Second signal, stopping without waiting")
+		hurryNow()
+	}()
+	waited := mygrpc.WaitForQuiet(hurry, activity, sh.QuietPeriodDuration, sh.MinDelayDuration, sh.MaxDelayDuration)
+	mylogger.Info("Stopped accepting new streams", zap.Duration("waited", waited), zap.Int64("open_streams", activity.Active()))
+
+	drain := sh.DrainTimeoutDuration
+	if hurry.Err() != nil {
+		drain = 0
+	}
+	if forced := mygrpc.StopWithin(grpcServer, drain); forced {
+		mylogger.Warn("Drain timeout reached, closed the remaining streams")
+	}
+	hurryNow()
 	cancel()
 	policyMgr.Close()
 

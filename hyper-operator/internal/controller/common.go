@@ -36,6 +36,10 @@ const (
 	engineGRPCPort   = 9001
 	engineHealthPort = 9003
 
+	// engineTerminationGraceSeconds covers the engine's default shutdown
+	// (max_delay 15 s + drain_timeout 20 s) plus margin.
+	engineTerminationGraceSeconds = 40
+
 	udsVolumeName      = "uds-sockets"
 	udsVolumeMountPath = "/var/run/hypergate/"
 

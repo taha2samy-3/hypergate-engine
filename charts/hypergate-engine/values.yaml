@@ -27,6 +27,18 @@ workload:
   # -- kind: DaemonSet (default, recommended for ext_proc node-local routing)
   # or Deployment (for smaller clusters)
   kind: DaemonSet
+  # -- Rolling update: start the new engine before stopping the old one, so
+  # capacity never drops (used as updateStrategy for a DaemonSet, strategy for a
+  # Deployment)
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+# -- Covers the engine's shutdown sequence (server.shutdown: max_delay 15s +
+# drain_timeout 20s by default). Raise it if you raise those.
+terminationGracePeriodSeconds: 40
 
 # ── Service Account ──────────────────────────────────────────────────────────
 serviceAccount:

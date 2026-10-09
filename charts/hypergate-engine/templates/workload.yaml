@@ -18,6 +18,10 @@ spec:
   selector:
     matchLabels:
       {{- include "hypergate-engine.selectorLabels" . | nindent 6 }}
+  {{- with .Values.workload.updateStrategy }}
+  {{ if eq $.Values.workload.kind "DaemonSet" }}updateStrategy{{ else }}strategy{{ end }}:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   template:
     metadata:
       labels:
@@ -32,6 +36,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "hypergate-engine.serviceAccountName" . }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       {{- with .Values.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}

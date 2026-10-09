@@ -167,6 +167,18 @@ func (r *HyperConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		ds.Spec.Template.Spec.SecurityContext = &corev1.PodSecurityContext{
 			SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
 		}
+		// The replacement engine starts on the node before the old one stops, so
+		// capacity never drops during an update (the pod uses no hostPort, so two
+		// can run on a node). The grace period covers the engine's shutdown
+		// sequence: up to 15 s waiting for Envoy to stop sending, 20 s draining.
+		ds.Spec.UpdateStrategy = appsv1.DaemonSetUpdateStrategy{
+			Type: appsv1.RollingUpdateDaemonSetStrategyType,
+			RollingUpdate: &appsv1.RollingUpdateDaemonSet{
+				MaxSurge:       ptr.To(intstr.FromInt32(1)),
+				MaxUnavailable: ptr.To(intstr.FromInt32(0)),
+			},
+		}
+		ds.Spec.Template.Spec.TerminationGracePeriodSeconds = ptr.To[int64](engineTerminationGraceSeconds)
 
 		podSpec := buildEnginePodSpec(&hyperConfig, engineImage, namespace, externalAuthList.Items, firewallList.Items, jwtList.Items, r.Identity)
 		ds.Spec.Template.Spec.Containers = podSpec.Containers
