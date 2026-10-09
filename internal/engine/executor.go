@@ -33,7 +33,7 @@ func (e *ChainExecutor) Execute(ctx *RequestContext, chain Chain, phase Phase) e
 			break
 		}
 
-		filter := chain[i]
+		filter, audited := isAudited(chain[i])
 
 		// Phase gating: only call the filter if it declared support for this phase.
 		// Filters without PhaseAware default to PhaseRequestHeaders only.
@@ -47,6 +47,11 @@ func (e *ChainExecutor) Execute(ctx *RequestContext, chain Chain, phase Phase) e
 		}
 
 		mylogger.Debug("Executing filter in chain", zap.Int("filter_index", i), zap.Uint8("phase", uint8(phase)))
+
+		if audited {
+			e.executeAudited(ctx, filter, i)
+			continue
+		}
 
 		if err := filter.Execute(ctx); err != nil {
 			mylogger.Error("Filter execution failed with internal error", zap.String("error", err.Error()), zap.Int("filter_index", i))
@@ -74,6 +79,34 @@ func (e *ChainExecutor) Execute(ctx *RequestContext, chain Chain, phase Phase) e
 	}
 
 	return nil
+}
+
+// executeAudited runs a filter in audit mode: a denial or an internal error is
+// recorded in ctx.AuditHits, the filter's header changes are rolled back and
+// the chain continues. Answers (such as a CORS preflight) are still sent.
+func (e *ChainExecutor) executeAudited(ctx *RequestContext, filter Filter, index int) {
+	saved := ctx.saveMutations()
+	err := filter.Execute(ctx)
+	switch {
+	case err != nil:
+		mylogger.Info("Audited filter failed; not enforced", zap.Int("filter_index", index), zap.String("error", err.Error()))
+		ctx.AuditHits = append(ctx.AuditHits, AuditHit{Index: index, Status: 500, Failed: true})
+	case ctx.Blocked && !ctx.Answered:
+		status := ctx.ResponseStatus
+		if status == 0 {
+			status = 403
+		}
+		mylogger.Info("Audited filter would deny; not enforced",
+			zap.Int("filter_index", index), zap.Int32("status_code", status), zap.String("path", ctx.Path))
+		ctx.AuditHits = append(ctx.AuditHits, AuditHit{Index: index, Status: status})
+	case ctx.Blocked && ctx.Answered:
+		ctx.BlockedBy = index
+		return
+	default:
+		return
+	}
+	ctx.restoreMutations(saved)
+	ctx.unblock()
 }
 
 // phaseSupported is a tight inner loop check — avoids map allocation.

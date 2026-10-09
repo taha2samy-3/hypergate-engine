@@ -164,7 +164,7 @@ func (f *Filter) Execute(ctx *engine.RequestContext) error {
 		if f.maxAge != "" {
 			ctx.SetHeaderDownstream("access-control-max-age", f.maxAge)
 		}
-		ctx.Block(204, "")
+		ctx.Answer(204, "") // an answer, not a denial: audit mode still sends it
 		return nil
 	}
 

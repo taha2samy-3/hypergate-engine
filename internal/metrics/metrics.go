@@ -31,6 +31,7 @@ type Engine struct {
 
 	requests      *prometheus.CounterVec
 	denies        *prometheus.CounterVec
+	audits        *prometheus.CounterVec
 	duration      *prometheus.HistogramVec
 	unknownSource prometheus.Counter
 	reloads       *prometheus.CounterVec
@@ -61,6 +62,10 @@ func New() *Engine {
 			Name: "hypergate_denies_total",
 			Help: "Requests denied or failed, by chain, deciding filter (\"engine\" for engine decisions) and status.",
 		}, []string{"chain", "filter", "status"}),
+		audits: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "hypergate_audit_denies_total",
+			Help: "Denials and failures of audited filters that were recorded but not enforced, by chain, filter and status.",
+		}, []string{"chain", "filter", "status"}),
 		duration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Name:    "hypergate_message_duration_seconds",
 			Help:    "Time the engine spent on one ext_proc message (what Envoy waits for), by phase and chain.",
@@ -79,7 +84,7 @@ func New() *Engine {
 			Help: "Unix time of the last policy that was applied successfully (including the one loaded at start-up).",
 		}),
 	}
-	reg.MustRegister(m.requests, m.denies, m.duration, m.unknownSource, m.reloads, m.lastReload,
+	reg.MustRegister(m.requests, m.denies, m.audits, m.duration, m.unknownSource, m.reloads, m.lastReload,
 		collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 	return m
 }
@@ -112,6 +117,14 @@ func (m *Engine) Deny(chain, filter string, status int32) {
 		return
 	}
 	m.denies.WithLabelValues(labelOr(chain, "none"), filter, strconv.Itoa(int(status))).Inc()
+}
+
+// Audit counts a denial or failure of an audited filter that was not enforced.
+func (m *Engine) Audit(chain, filter string, status int32) {
+	if m == nil {
+		return
+	}
+	m.audits.WithLabelValues(labelOr(chain, "none"), filter, strconv.Itoa(int(status))).Inc()
 }
 
 // Observe records the time spent on one ext_proc message.

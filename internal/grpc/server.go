@@ -242,6 +242,9 @@ func (s *Server) recordOutcome(st *streamState, reqCtx *engine.RequestContext) {
 	if s.metrics == nil || !st.resolved {
 		return
 	}
+	for _, hit := range reqCtx.AuditHits {
+		s.metrics.Audit(st.name, st.snap.FilterName(st.name, hit.Index), hit.Status)
+	}
 	outcome := metrics.OutcomeAllowed
 	if reqCtx.Blocked {
 		status := reqCtx.ResponseStatus
@@ -251,10 +254,10 @@ func (s *Server) recordOutcome(st *streamState, reqCtx *engine.RequestContext) {
 		switch {
 		case reqCtx.FilterFailed:
 			outcome = metrics.OutcomeError
-		case status >= 400:
-			outcome = metrics.OutcomeDenied
-		default:
+		case reqCtx.Answered || status < 400:
 			outcome = metrics.OutcomeAnswered
+		default:
+			outcome = metrics.OutcomeDenied
 		}
 		if outcome != metrics.OutcomeAnswered {
 			s.metrics.Deny(st.name, st.snap.FilterName(st.name, reqCtx.BlockedBy), status)

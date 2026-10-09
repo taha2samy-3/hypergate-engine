@@ -156,7 +156,12 @@ func (m *Manager) Apply(cfg *config.Config) error {
 				createdFilters = append(createdFilters, f)
 			}
 			nextFilters[key] = f
-			chain = append(chain, f)
+			if fc.Audit {
+				// The instance is shared; only this chain position is audited.
+				chain = append(chain, engine.Audit(f))
+			} else {
+				chain = append(chain, f)
+			}
 		}
 		chains[chainName] = chain
 		mylogger.Info("Compiled filter chain", zap.String("chain_name", chainName), zap.Int("filters_count", len(chain)))
