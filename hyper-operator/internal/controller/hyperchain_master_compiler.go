@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"time"
 
 	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
@@ -162,6 +163,7 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 	// Cluster-wide policy shared by every engine deployment.
 	redisConfigs := make(map[string]config.RedisServiceConfig)
 	chainConfigs := make(map[string]config.Chain)
+	chainLimits := make(map[string]config.ChainSettings)
 	var routeConfigs []config.RouteConfig
 
 	// Map HyperRedis list
@@ -386,9 +388,16 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 			chain = append(chain, config.FilterConfig{
 				// Labels the filter in the engine's metrics, e.g. JwtAuthFilter/users.
 				Name:    filterRef.Kind + "/" + filterRef.Name,
+				Audit:   filterAudited(&chainObj, filterRef),
 				Type:    filterType,
 				Options: opts,
 			})
+		}
+
+		limits, hasLimits, limitErr := chainSettings(&chainObj.Spec)
+		if limitErr != nil && !failed {
+			failed = true
+			failMsg = limitErr.Error()
 		}
 
 		// Update Status
@@ -404,6 +413,9 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 			statusCopy.State = "Ready"
 			statusCopy.Message = "Chain successfully compiled"
 			chainConfigs[chainObj.Name] = chain
+			if hasLimits {
+				chainLimits[chainObj.Name] = limits
+			}
 		}
 
 		if statusCopy.State != chainObj.Status.State || statusCopy.Message != chainObj.Status.Message {
@@ -477,8 +489,9 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 					Level: string(hc.Spec.LogLevel),
 				},
 			},
-			Redis:  redisConfigs,
-			Chains: chains,
+			Redis:         redisConfigs,
+			Chains:        chains,
+			ChainSettings: chainLimits,
 			Router: config.RouterConfig{
 				Routes:        routeConfigs,
 				DefaultChains: routes.DefaultChains(&hc.Spec),
@@ -624,4 +637,39 @@ func (r *HyperChainMasterCompilerReconciler) setRouteStatus(ctx context.Context,
 		return fmt.Errorf("update HyperRoute %s status: %w", hr.Name, err)
 	}
 	return nil
+}
+
+// filterAudited says whether a filter of the chain runs in audit mode: the
+// reference's own setting wins over the chain's mode.
+func filterAudited(chain *hyperv1alpha1.HyperChain, ref hyperv1alpha1.FilterReference) bool {
+	if ref.Audit != nil {
+		return *ref.Audit
+	}
+	return chain.Spec.Mode == hyperv1alpha1.ChainAudit
+}
+
+// chainSettings converts a HyperChain's limits to the engine's chain_settings;
+// ok is false when the chain sets none. An invalid timeout is an error, so the
+// chain is degraded instead of making the engine reject the whole config.
+func chainSettings(spec *hyperv1alpha1.HyperChainSpec) (config.ChainSettings, bool, error) {
+	if spec.Timeout == "" && spec.MaxConcurrency == 0 {
+		return config.ChainSettings{}, false, nil
+	}
+	if spec.Timeout != "" {
+		if d, err := time.ParseDuration(spec.Timeout); err != nil || d <= 0 {
+			return config.ChainSettings{}, false, fmt.Errorf("invalid timeout %q: must be a positive duration such as 300ms", spec.Timeout)
+		}
+	}
+	action := func(a hyperv1alpha1.LimitAction) string {
+		if a == hyperv1alpha1.LimitAllow {
+			return config.LimitActionAllow
+		}
+		return config.LimitActionDeny
+	}
+	return config.ChainSettings{
+		Timeout:        spec.Timeout,
+		MaxConcurrency: int(spec.MaxConcurrency),
+		OnTimeout:      action(spec.OnTimeout),
+		OnOverload:     action(spec.OnOverload),
+	}, true, nil
 }

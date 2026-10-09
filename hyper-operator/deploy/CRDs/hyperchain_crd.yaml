@@ -63,6 +63,30 @@ spec:
                       - CorsFilter
                     name:
                       type: string
+                    audit:
+                      type: boolean
+                      description: "Overrides the chain's mode for this filter: true records its denials without enforcing them, false enforces it even in an Audit chain."
+              mode:
+                type: string
+                enum: ["Enforce", "Audit"]
+                default: Enforce
+                description: "Audit counts and logs denials and failures (hypergate_audit_denies_total) without enforcing them."
+              timeout:
+                type: string
+                pattern: '^([0-9]+(\.[0-9]+)?(ms|s|m))+$'
+                description: "Deadline on the chain's work for each ext_proc message, e.g. 300ms. Keep it below Envoy's message timeout."
+              maxConcurrency:
+                type: integer
+                minimum: 0
+                description: "Requests that may run this chain's filters at the same time on one engine (0 = no limit)."
+              onTimeout:
+                type: string
+                enum: ["Deny", "Allow"]
+                description: "Deny (default, 503) or Allow (continue without the remaining filters)."
+              onOverload:
+                type: string
+                enum: ["Deny", "Allow"]
+                description: "Deny (default, 503 with Retry-After) or Allow (skip the chain)."
           status:
             type: object
             properties:

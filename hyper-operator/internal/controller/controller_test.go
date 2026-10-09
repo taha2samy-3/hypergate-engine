@@ -516,3 +516,51 @@ func TestEngineMetricsWiring(t *testing.T) {
 		t.Fatalf("scrape annotations = %v", a)
 	}
 }
+
+func TestCompiler_AuditModeAndChainLimits(t *testing.T) {
+	scheme := testScheme(t)
+	hc := hyperConfig("main", "hyper-system", time.Now())
+	hc.Spec.DefaultChain = "web"
+	enforce := false
+	deny := &hyperv1alpha1.DenyFilter{ObjectMeta: metav1.ObjectMeta{Name: "block"}, Spec: hyperv1alpha1.DenyFilterSpec{StatusCode: 403}}
+	cors := &hyperv1alpha1.CorsFilter{ObjectMeta: metav1.ObjectMeta{Name: "browser"},
+		Spec: hyperv1alpha1.CorsFilterSpec{AllowOrigins: []string{"https://app.example.com"}}}
+	web := &hyperv1alpha1.HyperChain{
+		ObjectMeta: metav1.ObjectMeta{Name: "web"},
+		Spec: hyperv1alpha1.HyperChainSpec{
+			Mode:           hyperv1alpha1.ChainAudit,
+			Timeout:        "300ms",
+			MaxConcurrency: 50,
+			OnOverload:     hyperv1alpha1.LimitAllow,
+			Filters: []hyperv1alpha1.FilterReference{
+				{Kind: "CorsFilter", Name: "browser", Audit: &enforce}, // enforced inside an Audit chain
+				{Kind: "DenyFilter", Name: "block"},                    // audited (chain mode)
+			},
+		},
+	}
+	bad := &hyperv1alpha1.HyperChain{
+		ObjectMeta: metav1.ObjectMeta{Name: "bad"},
+		Spec:       hyperv1alpha1.HyperChainSpec{Timeout: "0s", Filters: []hyperv1alpha1.FilterReference{{Kind: "DenyFilter", Name: "block"}}},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&hc, deny, cors, web, bad).
+		WithStatusSubresource(&hyperv1alpha1.HyperChain{}).Build()
+	if _, err := (&HyperChainMasterCompilerReconciler{Client: c, Scheme: scheme}).Reconcile(context.Background(), ctrl.Request{}); err != nil {
+		t.Fatal(err)
+	}
+	cfg := compiledEngineConfig(t, c) // parses, so the engine accepts it
+	if f := cfg.Chains["web"]; f[0].Audit || !f[1].Audit {
+		t.Fatalf("audit flags = %v %v, want false true", f[0].Audit, f[1].Audit)
+	}
+	cs := cfg.ChainSettings["web"]
+	if cs.TimeoutDuration.Milliseconds() != 300 || cs.MaxConcurrency != 50 || cs.OnOverload != "allow" || cs.OnTimeout != "deny" {
+		t.Fatalf("chain settings = %+v", cs)
+	}
+	if _, ok := cfg.ChainSettings["bad"]; ok {
+		t.Fatal("an invalid timeout must not reach the engine")
+	}
+	var badObj hyperv1alpha1.HyperChain
+	_ = c.Get(context.Background(), client.ObjectKey{Name: "bad"}, &badObj)
+	if badObj.Status.State != "Degraded" || !strings.Contains(badObj.Status.Message, "timeout") {
+		t.Fatalf("bad chain status = %+v", badObj.Status)
+	}
+}
