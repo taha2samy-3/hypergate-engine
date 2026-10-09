@@ -82,6 +82,22 @@ engine_get() {
 engine_synced() { [[ $(engine_get /debug/identity | jq -r '.synced and .connected') == true ]]; }
 engine_knows() { engine_get "/debug/identity?ip=$1" | jq -e --arg ns "$2" '.namespace == $ns' >/dev/null; }
 
+# engine_metric_sum <series>: sum of one metric series over all engine pods
+# (requests are spread over engines, so no single pod has the whole count).
+engine_metric_sum() {
+  local series=$1 total=0 ip v
+  for ip in $(kubectl -n "$ENGINE_NS" get pod -l app=hyper-engine -o jsonpath='{.items[*].status.podIP}'); do
+    v=$(kubectl -n shop exec deploy/checkout -- curl -s --max-time 5 "http://$ip:9003/metrics" | grep -F "$series " | awk '{print $NF}' | head -1)
+    total=$(awk -v a="$total" -v b="${v:-0}" 'BEGIN{print a+b}')
+  done
+  echo "$total"
+}
+intruder_denial_counted() {
+  local n
+  n=$(engine_metric_sum 'hypergate_denies_total{chain="deny-unlisted",filter="DenyFilter/deny-unlisted",status="403"}')
+  awk -v n="$n" 'BEGIN{exit !(n >= 1)}'
+}
+
 gateway_url() {
   local svc
   svc=$(kubectl -n envoy-gateway-system get svc \
@@ -197,6 +213,8 @@ record "Engine identity lookup" "ok" "$detail"
 
 log "Identity-aware routing through Envoy Gateway"
 check_routing "before failover"
+wait_until "engine metrics count the intruder's denial" 60 intruder_denial_counted
+record "Engine metrics" "ok" "hypergate_denies_total names DenyFilter/deny-unlisted for the denied caller"
 
 log "Graceful leader change (rolling restart, Lease released)"
 measure_failover "graceful stop" 15
