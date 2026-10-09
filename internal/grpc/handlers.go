@@ -2,8 +2,11 @@ package grpc
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"go.uber.org/zap"
 
@@ -135,10 +138,79 @@ func (s *Server) run(st *streamState, reqCtx *engine.RequestContext, phase engin
 	if reqCtx.Blocked || len(st.chain) == 0 {
 		return
 	}
+	limits := st.snap.Config.ChainSettings[st.name]
+
+	// Concurrency is held only while the filters run, not while the upstream
+	// answers, so it bounds the engine's work rather than open requests.
+	if limits.MaxConcurrency > 0 {
+		if !s.limiter.acquire(st.name, limits.MaxConcurrency) {
+			s.metrics.ChainRejection(st.name, "overload")
+			if limits.OnOverload == config.LimitActionAllow {
+				mylogger.Warn("Chain over its concurrency limit, skipping it for this request", zap.String("chain", st.name))
+				return
+			}
+			reqCtx.SetHeaderDownstream("retry-after", "1")
+			reqCtx.Block(http.StatusServiceUnavailable, "Service Unavailable")
+			return
+		}
+		defer s.limiter.release(st.name)
+	}
+
+	if limits.TimeoutDuration > 0 {
+		parent := reqCtx.Ctx
+		ctx, cancel := context.WithTimeout(parent, limits.TimeoutDuration)
+		reqCtx.Ctx = ctx
+		defer func() {
+			cancel()
+			reqCtx.Ctx = parent
+		}()
+		err := s.executor.Execute(reqCtx, st.chain, phase)
+		if err != nil && errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			s.metrics.ChainRejection(st.name, "timeout")
+			if limits.OnTimeout == config.LimitActionAllow {
+				mylogger.Warn("Chain timed out, continuing without the remaining filters", zap.String("chain", st.name))
+				reqCtx.Blocked, reqCtx.FilterFailed, reqCtx.ResponseStatus, reqCtx.ResponseBody = false, false, 0, ""
+				return
+			}
+			mylogger.Error("Chain timed out", zap.String("chain", st.name), zap.Duration("timeout", limits.TimeoutDuration))
+			reqCtx.FilterFailed = false
+			reqCtx.Block(http.StatusServiceUnavailable, "Service Unavailable")
+			return
+		}
+		if err != nil {
+			mylogger.Error("Error executing chain", zap.String("chain", st.name), zap.Uint8("phase", uint8(phase)), zap.Error(err))
+		}
+		return
+	}
+
 	if err := s.executor.Execute(reqCtx, st.chain, phase); err != nil {
 		mylogger.Error("Error executing chain", zap.String("chain", st.name), zap.Uint8("phase", uint8(phase)), zap.Error(err))
 	}
 }
+
+// chainLimiter counts the requests running each chain's filters on this engine.
+type chainLimiter struct {
+	inFlight sync.Map // chain name -> *atomic.Int64
+}
+
+func (l *chainLimiter) counter(chain string) *atomic.Int64 {
+	if c, ok := l.inFlight.Load(chain); ok {
+		return c.(*atomic.Int64)
+	}
+	c, _ := l.inFlight.LoadOrStore(chain, new(atomic.Int64))
+	return c.(*atomic.Int64)
+}
+
+func (l *chainLimiter) acquire(chain string, max int) bool {
+	c := l.counter(chain)
+	if c.Add(1) > int64(max) {
+		c.Add(-1)
+		return false
+	}
+	return true
+}
+
+func (l *chainLimiter) release(chain string) { l.counter(chain).Add(-1) }
 
 // immediateResponse ends the request with the status and body set by the blocking filter.
 func (s *Server) immediateResponse(stream extprocv3.ExternalProcessor_ProcessServer, reqCtx *engine.RequestContext) error {

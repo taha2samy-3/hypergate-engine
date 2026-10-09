@@ -34,6 +34,7 @@ type Engine struct {
 	audits        *prometheus.CounterVec
 	duration      *prometheus.HistogramVec
 	unknownSource prometheus.Counter
+	rejections    *prometheus.CounterVec
 	reloads       *prometheus.CounterVec
 	lastReload    prometheus.Gauge
 
@@ -71,6 +72,10 @@ func New() *Engine {
 			Help:    "Time the engine spent on one ext_proc message (what Envoy waits for), by phase and chain.",
 			Buckets: prometheus.ExponentialBuckets(25e-6, 2.5, 12), // 25µs … ~1.5s
 		}, []string{"phase", "chain"}),
+		rejections: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "hypergate_chain_rejections_total",
+			Help: "Times a chain hit its limits on this engine, by chain and reason (timeout, overload).",
+		}, []string{"chain", "reason"}),
 		unknownSource: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "hypergate_unknown_source_total",
 			Help: "East-west requests whose caller was not in the identity map.",
@@ -84,7 +89,7 @@ func New() *Engine {
 			Help: "Unix time of the last policy that was applied successfully (including the one loaded at start-up).",
 		}),
 	}
-	reg.MustRegister(m.requests, m.denies, m.audits, m.duration, m.unknownSource, m.reloads, m.lastReload,
+	reg.MustRegister(m.requests, m.denies, m.audits, m.duration, m.unknownSource, m.rejections, m.reloads, m.lastReload,
 		collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 	return m
 }
@@ -138,6 +143,13 @@ func (m *Engine) Observe(phase, chain string, d time.Duration) {
 		o, _ = m.durationSeries.LoadOrStore(key, m.duration.WithLabelValues(phase, labelOr(chain, "none")))
 	}
 	o.(prometheus.Observer).Observe(d.Seconds())
+}
+
+// ChainRejection counts a chain that hit its timeout or concurrency limit.
+func (m *Engine) ChainRejection(chain, reason string) {
+	if m != nil {
+		m.rejections.WithLabelValues(chain, reason).Inc()
+	}
 }
 
 // UnknownSource counts an east-west request from a caller missing from the identity map.

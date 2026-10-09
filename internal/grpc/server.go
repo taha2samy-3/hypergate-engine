@@ -40,6 +40,8 @@ type Server struct {
 	activity *Activity
 	// metrics records request outcomes and timings (may be nil).
 	metrics *metrics.Engine
+	// limiter enforces per-chain max_concurrency.
+	limiter chainLimiter
 	extprocv3.UnimplementedExternalProcessorServer
 }
 
