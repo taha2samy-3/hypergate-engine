@@ -460,3 +460,25 @@ func TestHyperConfigReconcile_IdentityVolumesAndCA(t *testing.T) {
 		t.Fatalf("identity mounts missing: %v", mounts)
 	}
 }
+
+func TestHyperConfigReconcile_EngineRolloutSettings(t *testing.T) {
+	scheme := testScheme(t)
+	hc := hyperConfig("main", "hyper-system", time.Now())
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&hc).WithStatusSubresource(&hyperv1alpha1.HyperConfig{}).Build()
+	r := &HyperConfigReconciler{Client: c, Scheme: scheme}
+	if _, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "main"}}); err != nil {
+		t.Fatal(err)
+	}
+	var ds appsv1.DaemonSet
+	if err := c.Get(context.Background(), client.ObjectKey{Namespace: "hyper-system", Name: "hyper-engine"}, &ds); err != nil {
+		t.Fatal(err)
+	}
+	ru := ds.Spec.UpdateStrategy.RollingUpdate
+	if ds.Spec.UpdateStrategy.Type != appsv1.RollingUpdateDaemonSetStrategyType || ru == nil ||
+		ru.MaxSurge.IntValue() != 1 || ru.MaxUnavailable.IntValue() != 0 {
+		t.Fatalf("update strategy = %+v", ds.Spec.UpdateStrategy)
+	}
+	if g := ds.Spec.Template.Spec.TerminationGracePeriodSeconds; g == nil || *g != engineTerminationGraceSeconds {
+		t.Fatalf("terminationGracePeriodSeconds = %v", g)
+	}
+}
