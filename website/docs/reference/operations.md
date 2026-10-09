@@ -149,7 +149,7 @@ Metrics on each replica: `hypergate_identity_cache_synced` (1 once the initial s
 
 3. **Engine.** HyperConfigs without `spec.engineImage` follow the operator's `ENGINE_IMAGE`, which the chart sets to the matching engine release, so the operator rolls the DaemonSet after its own upgrade. HyperConfigs that pin `spec.engineImage` must be updated explicitly.
 
-The DaemonSet uses a rolling update. While the engine pod on a node restarts, its readiness probe removes it from the Service, and Envoy on that node is served by engine pods on other nodes (`PreferSameNode` falls back when there is no ready local endpoint). Keep `failure_mode_allow: false` during upgrades; with enough nodes no request is left without an engine.
+The DaemonSet uses a rolling update with `maxSurge: 1` and `maxUnavailable: 0`: on each node the new engine pod starts and becomes ready before the old one is stopped, so capacity never drops. The old engine then follows its [shutdown sequence](./engine-configuration.md#servershutdown): it keeps serving until Envoy has stopped opening streams to it, drains the open ones, and exits within the 40 s grace period. Keep `failure_mode_allow: false` during upgrades. The kind end-to-end test restarts the engine DaemonSet under constant traffic through Envoy Gateway and requires zero failed requests.
 
 Configuration changes do not need a rollout; they are hot-reloaded. Changing `serverAddress`, `logLevel`, `maxConcurrentStreams` or the pool sizes on a HyperConfig updates the ConfigMap, but these settings are only read at start-up; restart the DaemonSet (`kubectl -n hyper-system rollout restart daemonset/hyper-engine`) to apply them.
 

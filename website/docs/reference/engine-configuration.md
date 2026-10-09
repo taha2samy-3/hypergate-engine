@@ -111,6 +111,7 @@ Unknown keys are ignored.
 | `health_address` | string | `:9003` | No | Address of the HTTP server for `/healthz` and `/readyz`. |
 | `pprof_address` | string | empty (disabled) | No | When set, serves `/debug/pprof/` on this address. Bind it to `127.0.0.1` and never expose it publicly. |
 | `client_ip` | object | | | See [server.client_ip](#serverclient_ip). |
+| `shutdown` | object | | No | See [server.shutdown](#servershutdown). |
 | `tls` | object | | No | See [server.tls](#servertls). |
 
 The gRPC server uses fixed keepalive settings: connections idle for 15 minutes are closed, connections are recycled after 30 minutes (with a 5 minute grace period), the server pings idle connections every 5 minutes, and it rejects client keepalive pings more frequent than every 5 minutes. If you configure gRPC keepalive on Envoy's cluster, keep its interval at 5 minutes or more.
@@ -120,6 +121,25 @@ The gRPC server uses fixed keepalive settings: connections idle for 15 minutes a
 | Key | Type | Default | Reloadable | Description |
 | --- | --- | --- | --- | --- |
 | `trusted_proxy_hops` | int | `0` | Yes | Number of proxies in front of Envoy whose `X-Forwarded-For` entries are trusted. `0` means the client is Envoy's direct peer. Must be `>= 0`. See [Client IP](../concepts/client-ip.md). |
+
+### server.shutdown
+
+How the engine stops on SIGTERM without failing requests. Envoy learns that an engine is going away asynchronously (for example Envoy Gateway marks a terminating endpoint as draining and pushes the change), so the engine keeps serving until Envoy has stopped opening streams to it:
+
+1. `/readyz` turns false.
+2. The engine keeps accepting ext_proc streams until **none has arrived for `quiet_period`**, waiting at least `min_delay` and at most `max_delay`.
+3. It stops accepting and waits up to `drain_timeout` for open streams to finish (one stream lasts as long as its HTTP request), then closes the rest.
+
+A second SIGTERM or SIGINT skips the waits.
+
+| Key | Type | Default | Description |
+| --- | --- | --- | --- |
+| `quiet_period` | duration | `2s` | Time without a new stream after which Envoy is considered to have stopped sending. |
+| `min_delay` | duration | `3s` | Shortest wait, even without traffic. |
+| `max_delay` | duration | `15s` | Longest wait, even if streams keep arriving. |
+| `drain_timeout` | duration | `20s` | How long open streams may take to finish before they are closed. |
+
+Keep the pod's `terminationGracePeriodSeconds` above `max_delay + drain_timeout`. The operator sets 40 s on the engine DaemonSet, together with a rolling update that starts the new engine on a node before stopping the old one (`maxSurge: 1`, `maxUnavailable: 0`).
 
 ### server.tls
 
@@ -290,6 +310,7 @@ A configuration is rejected, at start-up (the engine exits) or on reload (the pr
 
 - `version` is not `v1`,
 - `server.client_ip.trusted_proxy_hops` is negative,
+- a `server.shutdown` duration is invalid or negative, or `min_delay` exceeds `max_delay`,
 - a Redis service has an invalid `type`, `socket_type`, `on_empty_behavior` or duration,
 - a route has no `target_chain`, or a `target_chain`, `default_chain`, `default_chains` entry or `other` names an undefined chain,
 - a match has an invalid `traffic`, or a selector with an unknown prefix, a malformed value, or a prefix not allowed on that side,
