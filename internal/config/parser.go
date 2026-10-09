@@ -140,7 +140,7 @@ func ParseBytes(data []byte) (*Config, error) {
 	}
 
 	if cfg.Server.PoolPrewarmSize <= 0 {
-		cfg.Server.PoolPrewarmSize = 5000
+		cfg.Server.PoolPrewarmSize = DefaultPoolPrewarmSize
 	}
 	if cfg.Server.InitialHeaderCapacity <= 0 {
 		cfg.Server.InitialHeaderCapacity = 64

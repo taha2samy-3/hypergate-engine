@@ -151,7 +151,10 @@ func main() {
 	})
 
 	executor := engine.NewChainExecutor()
-	pool := memory.NewContextPool(initialConfig.Server.InitialHeaderCapacity, initialConfig.Server.PreallocBodyBufferBytes)
+	if initialConfig.Server.PreallocBodyBufferBytes > 0 {
+		mylogger.Warn("server.prealloc_body_buffer_bytes is deprecated and ignored")
+	}
+	pool := memory.NewContextPool(initialConfig.Server.InitialHeaderCapacity)
 	pool.Prewarm(initialConfig.Server.PoolPrewarmSize)
 	routerInst := router.NewEngineRouter()
 

@@ -81,7 +81,6 @@ type RequestContext struct {
 	RequestTrailersModified  bool
 	ResponseTrailersModified bool
 	SetHeaderOptions         []*corev3.HeaderValueOption
-	RawBodyBuffer            []byte
 }
 
 func (ctx *RequestContext) Reset() {
@@ -112,16 +111,10 @@ func (ctx *RequestContext) Reset() {
 	ctx.ResponseBody = ""
 	ctx.SetHeaderOptions = ctx.SetHeaderOptions[:0]
 
-	if ctx.RawBodyBuffer != nil {
-		ctx.RawBodyBuffer = ctx.RawBodyBuffer[:0]
-	}
-
-	if ctx.RequestBody != nil {
-		ctx.RequestBody = ctx.RequestBody[:0]
-	}
-	if ctx.ResponseBodyBytes != nil {
-		ctx.ResponseBodyBytes = ctx.ResponseBodyBytes[:0]
-	}
+	// Bodies reference the gRPC message; drop them so a pooled context does not
+	// keep the last request's body alive.
+	ctx.RequestBody = nil
+	ctx.ResponseBodyBytes = nil
 
 	ctx.RequestTrailersToAdd = ctx.RequestTrailersToAdd[:0]
 	ctx.ResponseTrailersToAdd = ctx.ResponseTrailersToAdd[:0]

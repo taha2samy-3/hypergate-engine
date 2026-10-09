@@ -227,14 +227,8 @@ func (s *Server) handleRequestBody(
 ) error {
 	mylogger.Debug("Received RequestBody phase")
 	reqCtx.RequestBodySeen = true
-	bodyLen := len(msg.Body)
-	if bodyLen <= cap(reqCtx.RawBodyBuffer) {
-		reqCtx.RawBodyBuffer = append(reqCtx.RawBodyBuffer[:0], msg.Body...)
-		reqCtx.RequestBody = reqCtx.RawBodyBuffer
-	} else {
-		// Fallback for bodies larger than the pooled buffer
-		reqCtx.RequestBody = msg.Body
-	}
+	// The codec already allocated the body; filters only read it, so no copy.
+	reqCtx.RequestBody = msg.Body
 
 	s.resolve(st, reqCtx)
 	s.run(st, reqCtx, engine.PhaseRequestBody)
@@ -331,14 +325,7 @@ func (s *Server) handleResponseBody(
 	msg *extprocv3.HttpBody,
 ) error {
 	mylogger.Debug("Received ResponseBody phase")
-	bodyLen := len(msg.Body)
-	if bodyLen <= cap(reqCtx.RawBodyBuffer) {
-		reqCtx.RawBodyBuffer = append(reqCtx.RawBodyBuffer[:0], msg.Body...)
-		reqCtx.ResponseBodyBytes = reqCtx.RawBodyBuffer
-	} else {
-		// Fallback for response bodies larger than the pooled buffer
-		reqCtx.ResponseBodyBytes = msg.Body
-	}
+	reqCtx.ResponseBodyBytes = msg.Body
 
 	s.resolve(st, reqCtx)
 	s.run(st, reqCtx, engine.PhaseResponseBody)

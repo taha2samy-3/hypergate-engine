@@ -19,7 +19,7 @@ func benchServer(b *testing.B) *Server {
 	cfg := &config.Config{Router: config.RouterConfig{DefaultChain: "c"}}
 	registry.Swap(engine.NewSnapshot(cfg, map[string]engine.Chain{"c": {}}), nil)
 	return &Server{
-		pool:     memory.NewContextPool(64, 65536),
+		pool:     memory.NewContextPool(64),
 		router:   router.NewEngineRouter(),
 		registry: registry,
 		executor: engine.NewChainExecutor(),

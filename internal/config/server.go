@@ -37,11 +37,13 @@ type ClientIPConfig struct {
 
 // ServerConfig defines the gRPC server settings.
 type ServerConfig struct {
-	Address                 string    `yaml:"address"`
-	MaxConcurrentStreams    uint32    `yaml:"max_concurrent_streams"`
-	PoolPrewarmSize         int       `yaml:"pool_prewarm_size"`
-	InitialHeaderCapacity   int       `yaml:"initial_header_capacity"`
-	PreallocBodyBufferBytes int       `yaml:"prealloc_body_buffer_bytes"`
+	Address               string `yaml:"address"`
+	MaxConcurrentStreams  uint32 `yaml:"max_concurrent_streams"`
+	PoolPrewarmSize       int    `yaml:"pool_prewarm_size"`
+	InitialHeaderCapacity int    `yaml:"initial_header_capacity"`
+	// PreallocBodyBufferBytes is deprecated and ignored: bodies are no longer
+	// copied into a per-context buffer.
+	PreallocBodyBufferBytes int       `yaml:"prealloc_body_buffer_bytes,omitempty"`
 	TLS                     TLSConfig `yaml:"tls"`
 	// HealthAddress serves /healthz and /readyz for Kubernetes probes. Default ":9003".
 	HealthAddress string `yaml:"health_address"`
@@ -69,6 +71,10 @@ type ShutdownConfig struct {
 	MaxDelayDuration     time.Duration `yaml:"-"`
 	DrainTimeoutDuration time.Duration `yaml:"-"`
 }
+
+// DefaultPoolPrewarmSize is the number of request contexts allocated at start-up
+// (about 24 KiB each).
+const DefaultPoolPrewarmSize = 256
 
 // Default shutdown timings. The operator sets terminationGracePeriodSeconds to
 // cover MaxDelay + DrainTimeout.

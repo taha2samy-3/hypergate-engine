@@ -12,12 +12,12 @@ type ContextPool struct {
 	pool *sync.Pool
 }
 
-func NewContextPool(initialHeaderCap int, preallocBodyBytes int) *ContextPool {
+// NewContextPool returns a pool of request contexts whose header maps and
+// mutation slices are pre-sized. Bodies are not buffered: the gRPC codec has
+// already allocated the body of each message, and the context references it.
+func NewContextPool(initialHeaderCap int) *ContextPool {
 	if initialHeaderCap <= 0 {
 		initialHeaderCap = 64
-	}
-	if preallocBodyBytes <= 0 {
-		preallocBodyBytes = 65536
 	}
 	sliceCap := initialHeaderCap / 2
 	if sliceCap <= 0 {
@@ -37,13 +37,15 @@ func NewContextPool(initialHeaderCap int, preallocBodyBytes int) *ContextPool {
 					UpstreamShadow:          make(map[string]string, initialHeaderCap),
 					DownstreamShadow:        make(map[string]string, initialHeaderCap),
 					SetHeaderOptions:        make([]*corev3.HeaderValueOption, 0, sliceCap),
-					RawBodyBuffer:           make([]byte, 0, preallocBodyBytes),
 				}
 			},
 		},
 	}
 }
 
+// Prewarm allocates count contexts up front so the first burst of requests does
+// not allocate. sync.Pool may drop idle contexts at garbage collection, so keep
+// count small; under traffic the pool stays populated by Release.
 func (cp *ContextPool) Prewarm(count int) {
 	if count <= 0 {
 		return
