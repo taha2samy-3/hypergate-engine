@@ -3,6 +3,7 @@ module github.com/taha2samy/hypergate
 go 1.26.4
 
 require (
+	github.com/KimMachineGun/automemlimit v1.0.0
 	github.com/coocood/freecache v1.2.7
 	github.com/envoyproxy/go-control-plane v0.14.0
 	github.com/envoyproxy/go-control-plane/envoy v1.37.0
@@ -30,7 +31,6 @@ require (
 
 require (
 	cel.dev/expr v0.25.2 // indirect
-	github.com/KimMachineGun/automemlimit v1.0.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cncf/xds/go v0.0.0-20260202195803-dba9d589def2 // indirect

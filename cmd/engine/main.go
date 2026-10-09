@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"net/http"
 	"net/http/pprof"
@@ -13,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/KimMachineGun/automemlimit/memlimit"
 	"go.uber.org/zap"
 
 	"github.com/taha2samy/hypergate/internal/config"
@@ -87,6 +89,15 @@ func main() {
 	}()
 
 	mylogger.Info("Configuration loaded successfully", zap.String("version", initialConfig.Version))
+
+	// Go does not derive its memory limit from the container's, so without this
+	// the GC lets the heap grow until the kernel OOM-kills the engine. Uses 90 %
+	// of the cgroup limit; GOMEMLIMIT or AUTOMEMLIMIT=off take precedence.
+	if limit, err := memlimit.Set(); err != nil {
+		mylogger.Warn("Could not set the Go memory limit from the container limit", zap.Error(err))
+	} else if limit != math.MaxInt64 {
+		mylogger.Info("Go memory limit set from the container limit", zap.Int64("bytes", limit))
+	}
 
 	registry := engine.NewChainRegistry()
 	policyMgr := policy.NewManager(ctx, registry, redis.NewClientConn)
