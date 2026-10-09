@@ -482,3 +482,37 @@ func TestHyperConfigReconcile_EngineRolloutSettings(t *testing.T) {
 		t.Fatalf("terminationGracePeriodSeconds = %v", g)
 	}
 }
+
+func TestEngineMetricsWiring(t *testing.T) {
+	scheme := testScheme(t)
+	hc := hyperConfig("main", "hyper-system", time.Now())
+	hc.Spec.DefaultChain = "web"
+	corsF := &hyperv1alpha1.CorsFilter{
+		ObjectMeta: metav1.ObjectMeta{Name: "browser"},
+		Spec:       hyperv1alpha1.CorsFilterSpec{AllowOrigins: []string{"https://app.example.com"}},
+	}
+	chain := &hyperv1alpha1.HyperChain{
+		ObjectMeta: metav1.ObjectMeta{Name: "web"},
+		Spec:       hyperv1alpha1.HyperChainSpec{Filters: []hyperv1alpha1.FilterReference{{Kind: "CorsFilter", Name: "browser"}}},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&hc, corsF, chain).
+		WithStatusSubresource(&hyperv1alpha1.HyperChain{}, &hyperv1alpha1.HyperConfig{}).Build()
+	if _, err := (&HyperChainMasterCompilerReconciler{Client: c, Scheme: scheme}).Reconcile(context.Background(), ctrl.Request{}); err != nil {
+		t.Fatal(err)
+	}
+	if name := compiledEngineConfig(t, c).Chains["web"][0].Name; name != "CorsFilter/browser" {
+		t.Fatalf("filter name = %q, want CorsFilter/browser", name)
+	}
+
+	if _, err := (&HyperConfigReconciler{Client: c, Scheme: scheme}).Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "main"}}); err != nil {
+		t.Fatal(err)
+	}
+	var ds appsv1.DaemonSet
+	if err := c.Get(context.Background(), client.ObjectKey{Namespace: "hyper-system", Name: "hyper-engine"}, &ds); err != nil {
+		t.Fatal(err)
+	}
+	a := ds.Spec.Template.Annotations
+	if a["prometheus.io/scrape"] != "true" || a["prometheus.io/port"] != "9003" || a["prometheus.io/path"] != "/metrics" {
+		t.Fatalf("scrape annotations = %v", a)
+	}
+}

@@ -77,6 +77,18 @@ operator:
   # -- Webhook TLS Secret name (created by cert-manager or manually)
   webhookCertSecret: "webhook-server-cert"
 
+# ── Engine metrics ──────────────────────────────────────────────────────────
+# Engines serve Prometheus metrics on their health port (9003, /metrics) and carry
+# prometheus.io/* annotations. With the Prometheus Operator, enable a PodMonitor.
+engineMetrics:
+  podMonitor:
+    # -- Create a PodMonitor for engine pods (requires the monitoring.coreos.com CRDs)
+    enabled: false
+    # -- Scrape interval
+    interval: 30s
+    # -- Extra labels, e.g. the release label your Prometheus selects
+    labels: {}
+
 # ── cert-manager integration ──────────────────────────────────────────────────
 certManager:
   # -- Set to true if cert-manager is installed; creates Certificate + Issuer
