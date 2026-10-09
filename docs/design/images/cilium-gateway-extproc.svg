@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 1070" role="img" aria-labelledby="t d">
   <title id="t">Hypergate on the Cilium API Gateway (north-south)</title>
-  <desc id="d">Set-up in four steps: the cluster admin enables Cilium's Gateway API support; the platform team installs the hyper-operator, which runs the engine on every node; the gateway is wired to the engine with an ext_proc filter (a CiliumEnvoyConfig plus a ReferenceGrant); developers write the Gateway and an HTTPRoute. At runtime a request reaches the gateway Service and Cilium's per-node Envoy, whose ext_proc filter asks the Hypergate engine pod on the same node over gRPC. The engine picks a chain with the first matching route by priority and runs the chain's filters in order: CORS, JWT, external auth (oauth2-proxy sidecar), firewall (WAF sidecar) and rate limit. Sidecar filters call their sidecar container over a Unix socket in a volume shared inside the pod, with no network hop. Any filter can deny, and Envoy then answers the client directly; otherwise the request continues to the app. Speed comes from PreferSameNode and pre-allocated request contexts, and a request is never split across streams or policies.</desc>
+  <desc id="d">Set-up in four steps: the cluster admin enables Cilium's Gateway API support; the platform team installs the hyper-operator, which runs the engine on every node; the gateway is wired to the engine with an ext_proc filter (a CiliumEnvoyConfig plus a ReferenceGrant); developers write the Gateway and an HTTPRoute. At runtime a request reaches the gateway Service and Cilium's per-node Envoy, whose ext_proc filter asks a Hypergate engine pod over gRPC. The engine picks a chain with the first matching route by priority and runs the chain's filters in order: CORS, JWT, external auth (oauth2-proxy sidecar), firewall (WAF sidecar) and rate limit. Sidecar filters call their sidecar container over a Unix socket in a volume shared inside the pod, with no network hop. Any filter can deny, and Envoy then answers the client directly; otherwise the request continues to the app. Speed comes from PreferSameNode and pre-allocated request contexts, and a request is never split across streams or policies.</desc>
   <defs>
     <style>
       text { font-family: Inter, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #E2E8F0; }
@@ -130,7 +130,7 @@
   <!-- ===== Runtime: engine pod ===== -->
   <rect x="930" y="318" width="440" height="472" rx="12" class="c2"/>
   <circle cx="1362" cy="326" r="13" fill="#818CF8"/><text x="1362" y="331" class="num" text-anchor="middle">2</text>
-  <text x="950" y="344" class="h">Engine pod · same node</text>
+  <text x="950" y="344" class="h">Engine pod (DaemonSet)</text>
 
   <!-- engine container -->
   <rect x="946" y="356" width="268" height="422" rx="10" class="ctr"/>
@@ -198,8 +198,8 @@
 
   <rect x="30" y="854" width="430" height="196" rx="12" class="c1"/>
   <text x="50" y="882" class="h">Fast path</text>
-  <text x="50" y="908" class="s">• PreferSameNode: Envoy calls the engine on its own</text>
-  <text x="66" y="928" class="s">node, no cross-node hop (falls back if none is ready)</text>
+  <text x="50" y="908" class="s">• PreferSameNode: the node's service proxy picks the</text>
+  <text x="66" y="928" class="s">local engine when Envoy calls the Service ClusterIP</text>
   <text x="50" y="952" class="s">• Pre-allocation: 5,000 request contexts, header maps</text>
   <text x="66" y="972" class="s">and 64 KiB body buffers are created at start-up and</text>
   <text x="66" y="992" class="s">reused, so traffic does not allocate per request</text>

@@ -81,7 +81,7 @@ For each HyperConfig the controller manages, in `spec.targetNamespace` (default 
 | ServiceAccount | `hyper-engine-sa` | Used by the engine pods. |
 | Role and RoleBinding | `hyper-engine-config-reader`, `hyper-engine-config-reader-binding` | `get` and `watch` on the `hyper-engine-config` ConfigMap only. |
 | DaemonSet | `hyper-engine` | One engine pod per node, plus the injected sidecars. |
-| Service | `hyper-engine-svc` | Port `9001` named `grpc`, `appProtocol: kubernetes.io/h2c`, `trafficDistribution: PreferSameNode`. |
+| Service | `hyper-engine-svc` | Port `9001` named `grpc`, `appProtocol: kubernetes.io/h2c`, `trafficDistribution: PreferSameNode` (see [Keeping ext_proc calls on the same node](#keeping-ext_proc-calls-on-the-same-node)). |
 
 Only one HyperConfig can manage a namespace. The oldest one (by creation time, then name) wins; others get `status.state: Conflict` and are not reconciled.
 
@@ -89,6 +89,44 @@ The engine container runs with `CONFIG_PROVIDER=K8S`, readiness (`/readyz`) and 
 
 ## Deployment topology
 
-The engine runs as a DaemonSet so that every node that hosts Envoy has an engine instance. The Service's `PreferSameNode` traffic distribution makes Envoy prefer the engine on its own node, which keeps the ext_proc round trip node-local when possible and falls back to other nodes otherwise.
+The engine runs as a DaemonSet so that every node that hosts Envoy has an engine instance.
+
+### Keeping ext_proc calls on the same node
+
+The engine Service sets `trafficDistribution: PreferSameNode`. Kubernetes implements it with EndpointSlice hints that the **service proxy** (kube-proxy, or a CNI that replaces it) applies when it balances a connection to the Service's **ClusterIP**: it picks an engine on the client's node and falls back to the same zone, then the whole cluster ([Kubernetes docs](https://kubernetes.io/docs/reference/networking/virtual-ips/#traffic-distribution)). It is on by default from Kubernetes **1.34** (beta) and GA in 1.35.
+
+Whether ext_proc calls are node-local therefore depends on how the Envoy in front of the engine connects:
+
+| Envoy setup | Connects to | Node-local? |
+| --- | --- | --- |
+| Static cluster pointing at `hyper-engine-svc` (STRICT_DNS on the Service name) | ClusterIP | Yes, through the service proxy |
+| Envoy Gateway, default (`routingType: Endpoint`) | the engine **pod IPs**, chosen by Envoy | **No**: Envoy Gateway passes zones but not node hints, so calls spread over all engines |
+| Envoy Gateway with `EnvoyProxy.spec.routingType: Service` | ClusterIP | Yes, through the service proxy |
+
+For Envoy Gateway, set Service routing on the `EnvoyProxy` that your GatewayClass or Gateway references, and keep Endpoint routing for application routes with a `BackendTrafficPolicy` (Envoy Gateway 1.8+). The ext_proc backend always follows the `EnvoyProxy` setting; the `BackendTrafficPolicy` only applies to routes:
+
+```yaml
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: hypergate
+  namespace: envoy-gateway-system
+spec:
+  routingType: Service            # ext_proc → hyper-engine-svc ClusterIP → PreferSameNode
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: apps-endpoint-routing
+  namespace: edge                 # the Gateway's namespace
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: public
+  routingType: Endpoint           # application routes keep Envoy's own load balancing
+```
+
+With Service routing, Envoy balances per connection; its long-lived HTTP/2 connection to the engine stays on the local engine, which is the point. Node-local routing needs a service proxy that implements `PreferSameNode`: kube-proxy does; with a kube-proxy replacement, check that it supports it.
 
 Every engine instance is independent: it loads the full policy and keeps its own caches. Shared state (rate-limit counters, API key records, enrichment data) lives in Redis, so limits are enforced across instances.

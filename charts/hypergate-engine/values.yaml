@@ -78,7 +78,9 @@ service:
   port: 9001
   # -- appProtocol tells Envoy this is an h2c (plaintext HTTP/2 / gRPC) service
   appProtocol: "kubernetes.io/h2c"
-  # -- TrafficDistribution: PreferSameNode keeps ext_proc calls node-local (K8s 1.31+)
+  # -- TrafficDistribution: PreferSameNode makes the service proxy pick the engine on the
+  # caller's node (Kubernetes 1.34+). Only applies when Envoy connects through the
+  # ClusterIP, not when it is given the pod IPs (Envoy Gateway's default routingType).
   trafficDistribution: "PreferSameNode"
   annotations: {}
 

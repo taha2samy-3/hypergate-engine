@@ -17,7 +17,7 @@ Do not install both into the same namespace: the operator creates and owns its o
 
 ## Prerequisites
 
-- A Kubernetes cluster. The engine Service created by the operator sets `spec.trafficDistribution: PreferSameNode`, which is honoured from Kubernetes 1.31.
+- A Kubernetes cluster. The engine Service created by the operator sets `spec.trafficDistribution: PreferSameNode`, which Kubernetes applies from **1.34** (on by default; GA in 1.35). On older clusters the field is ignored and calls are spread over all engines. Whether Envoy actually uses it depends on how it connects to the engine; see [Keeping ext_proc calls on the same node](../concepts/architecture.md#keeping-ext_proc-calls-on-the-same-node).
 - Helm 3.8 or later (OCI registry support).
 - [cert-manager](https://cert-manager.io/) if you keep the default webhook settings. The chart creates a self-signed `Issuer` and a `Certificate` for the admission webhook.
 - An Envoy-based gateway where you can add the `envoy.filters.http.ext_proc` HTTP filter. See [Envoy configuration](../reference/envoy-configuration.md).

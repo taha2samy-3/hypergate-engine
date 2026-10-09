@@ -164,7 +164,7 @@ static_resources:
 - **HTTP/2 is required.** In static configuration use `explicit_http_config.http2_protocol_options`. In Kubernetes, the operator's `hyper-engine-svc` sets `appProtocol: kubernetes.io/h2c`, which gateway implementations use to pick HTTP/2 for the backend.
 - **TLS.** When the engine has `server.tls.enabled: true`, add an `UpstreamTlsContext` transport socket to the cluster. The engine requires TLS 1.3, and with `mutual_tls: true` Envoy must present a client certificate signed by `server.tls.ca_file`.
 - **Keepalive.** The engine rejects client keepalive pings more frequent than every 5 minutes. If you set `http2_protocol_options.connection_keepalive` on the cluster, keep `interval` at 5 minutes or more. The engine itself recycles connections after 30 minutes.
-- **Locality.** Run one engine per node (the operator's DaemonSet) and prefer the local endpoint; the operator's Service uses `trafficDistribution: PreferSameNode` for this.
+- **Locality.** Run one engine per node (the operator's DaemonSet). The operator's Service sets `trafficDistribution: PreferSameNode`, which only takes effect when Envoy connects through the Service's ClusterIP (a static cluster on the Service name, or Envoy Gateway with `EnvoyProxy.spec.routingType: Service`); see [Keeping ext_proc calls on the same node](../concepts/architecture.md#keeping-ext_proc-calls-on-the-same-node).
 
 ## Skipping ext_proc on some routes
 
