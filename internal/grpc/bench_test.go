@@ -8,6 +8,7 @@ import (
 	"github.com/taha2samy/hypergate/internal/config"
 	"github.com/taha2samy/hypergate/internal/engine"
 	"github.com/taha2samy/hypergate/internal/memory"
+	"github.com/taha2samy/hypergate/internal/metrics"
 	"github.com/taha2samy/hypergate/internal/router"
 )
 
@@ -53,4 +54,23 @@ func BenchmarkProcess_Body16K(b *testing.B) {
 		&extprocv3.ProcessingRequest{Request: &extprocv3.ProcessingRequest_RequestBody{
 			RequestBody: &extprocv3.HttpBody{Body: make([]byte, 16<<10), EndOfStream: true},
 		}})
+}
+
+// BenchmarkProcess_HeadersWithMetrics is BenchmarkProcess_Headers with metrics on.
+func BenchmarkProcess_HeadersWithMetrics(b *testing.B) {
+	s := benchServer(b)
+	s.metrics = metrics.New()
+	msg := reqHeaders("/api/orders?id=1", true, "user-agent", "bench", "x-request-id", "abc")
+	b.ReportAllocs()
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		stream := &fakeStream{}
+		for pb.Next() {
+			stream.in = append(stream.in[:0], msg)
+			stream.out = stream.out[:0]
+			if err := s.Process(stream); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
 }
