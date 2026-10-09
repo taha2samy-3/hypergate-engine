@@ -275,8 +275,8 @@ func TestParseBytes_ShutdownDefaultsAndValidation(t *testing.T) {
 	}
 
 	for doc, want := range map[string]string{
-		"version: v1\nserver:\n  shutdown:\n    quiet_period: soon\n":             "quiet_period",
-		"version: v1\nserver:\n  shutdown:\n    drain_timeout: -1s\n":             "drain_timeout",
+		"version: v1\nserver:\n  shutdown:\n    quiet_period: soon\n":                "quiet_period",
+		"version: v1\nserver:\n  shutdown:\n    drain_timeout: -1s\n":                "drain_timeout",
 		"version: v1\nserver:\n  shutdown:\n    min_delay: 10s\n    max_delay: 5s\n": "must not exceed",
 	} {
 		if _, err := config.ParseBytes([]byte(doc)); err == nil || !strings.Contains(err.Error(), want) {
