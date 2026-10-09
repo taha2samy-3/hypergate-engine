@@ -67,6 +67,12 @@ type RequestContext struct {
 	BlockedBy int
 	// FilterFailed is true when a filter returned an internal error.
 	FilterFailed bool
+	// Answered is true when the immediate response is an answer, not a denial
+	// (for example a CORS preflight). Audit mode never suppresses answers.
+	Answered bool
+	// AuditHits lists denials and failures of audited filters, which were
+	// recorded but not enforced.
+	AuditHits []AuditHit
 	// MatchedRoute is the name of the route that selected the chain ("" when the
 	// default chain was used).
 	MatchedRoute             string
@@ -117,6 +123,8 @@ func (ctx *RequestContext) Reset() {
 	ctx.Blocked = false
 	ctx.BlockedBy = -1
 	ctx.FilterFailed = false
+	ctx.Answered = false
+	ctx.AuditHits = ctx.AuditHits[:0]
 	ctx.MatchedRoute = ""
 	ctx.ResponseStatus = 0
 	ctx.ResponseBody = ""
@@ -141,6 +149,20 @@ func (ctx *RequestContext) Reset() {
 	ctx.ResponseBodyModified = false
 	ctx.RequestTrailersModified = false
 	ctx.ResponseTrailersModified = false
+}
+
+// AuditHit is a denial or failure of an audited filter that was not enforced.
+type AuditHit struct {
+	Index  int   // position of the filter in the chain
+	Status int32 // the status the filter would have answered with
+	Failed bool  // the filter failed internally (status 500)
+}
+
+// Answer ends the request with an immediate response that is not a denial,
+// such as a CORS preflight. Use Block for denials.
+func (ctx *RequestContext) Answer(status int32, body string) {
+	ctx.Block(status, body)
+	ctx.Answered = true
 }
 
 // Block marks the request as denied. The gRPC layer turns this into an
