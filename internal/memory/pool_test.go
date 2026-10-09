@@ -26,6 +26,9 @@ func TestContextPool_ReleaseDropsBodiesAndKeepsMaps(t *testing.T) {
 }
 
 func TestContextPool_NoAllocationsOnceWarm(t *testing.T) {
+	if raceEnabled {
+		t.Skip("the race detector makes sync.Pool drop objects on purpose")
+	}
 	pool := memory.NewContextPool(64)
 	pool.Prewarm(8)
 	allocs := testing.AllocsPerRun(1000, func() {
