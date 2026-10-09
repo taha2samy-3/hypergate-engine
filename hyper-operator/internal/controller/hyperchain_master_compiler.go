@@ -463,13 +463,12 @@ func (r *HyperChainMasterCompilerReconciler) Reconcile(ctx context.Context, req 
 		engineConfig := config.Config{
 			Version: "v1",
 			Server: config.ServerConfig{
-				Address:                 hc.Spec.ServerAddress,
-				MaxConcurrentStreams:    hc.Spec.MaxConcurrentStreams,
-				PoolPrewarmSize:         int(hc.Spec.PoolPrewarmSize),
-				InitialHeaderCapacity:   int(hc.Spec.InitialHeaderCapacity),
-				PreallocBodyBufferBytes: int(hc.Spec.PreallocBodyBufferBytes),
-				HealthAddress:           fmt.Sprintf(":%d", engineHealthPort),
-				ClientIP:                config.ClientIPConfig{TrustedProxyHops: int(hc.Spec.TrustedProxyHops)},
+				Address:               hc.Spec.ServerAddress,
+				MaxConcurrentStreams:  hc.Spec.MaxConcurrentStreams,
+				PoolPrewarmSize:       int(hc.Spec.PoolPrewarmSize),
+				InitialHeaderCapacity: int(hc.Spec.InitialHeaderCapacity),
+				HealthAddress:         fmt.Sprintf(":%d", engineHealthPort),
+				ClientIP:              config.ClientIPConfig{TrustedProxyHops: int(hc.Spec.TrustedProxyHops)},
 			},
 			Telemetry: config.TelemetryConfig{
 				Logging: mylogger.LoggingConfig{

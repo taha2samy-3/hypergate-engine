@@ -78,9 +78,10 @@ type HyperConfigSpec struct {
 	// +optional
 	ExtProc *ExtProcSpec `json:"extProc,omitempty"`
 
-	// PoolPrewarmSize specifies the number of RequestContext objects to pre-allocate at boot.
+	// PoolPrewarmSize is the number of request contexts (about 24 KiB each) the
+	// engine allocates at start-up.
 	// +optional
-	// +kubebuilder:default=5000
+	// +kubebuilder:default=256
 	PoolPrewarmSize int32 `json:"poolPrewarmSize,omitempty" yaml:"pool_prewarm_size,omitempty"`
 
 	// InitialHeaderCapacity defines the initial map/slice capacity for headers per request.
@@ -88,9 +89,9 @@ type HyperConfigSpec struct {
 	// +kubebuilder:default=64
 	InitialHeaderCapacity int32 `json:"initialHeaderCapacity,omitempty" yaml:"initial_header_capacity,omitempty"`
 
-	// PreallocBodyBufferBytes defines the pre-allocated byte buffer size for HTTP request/response bodies per request.
+	// PreallocBodyBufferBytes is deprecated and ignored: the engine no longer
+	// copies bodies into a per-context buffer.
 	// +optional
-	// +kubebuilder:default=65536
 	PreallocBodyBufferBytes int32 `json:"preallocBodyBufferBytes,omitempty" yaml:"prealloc_body_buffer_bytes,omitempty"`
 }
 

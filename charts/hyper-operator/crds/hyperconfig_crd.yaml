@@ -141,13 +141,14 @@ spec:
                       pattern: '^([0-9]{1,5}(h|m|s|ms)){1,4}$'
                 poolPrewarmSize:
                   type: integer
-                  default: 5000
+                  default: 256
+                  description: "Request contexts (about 24 KiB each) allocated at engine start-up."
                 initialHeaderCapacity:
                   type: integer
                   default: 64
                 preallocBodyBufferBytes:
                   type: integer
-                  default: 65536
+                  description: "Deprecated and ignored."
             status:
               type: object
               properties:
