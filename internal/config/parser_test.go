@@ -254,3 +254,33 @@ func TestParseBytes_IdentityAndWorkloadSelectors(t *testing.T) {
 		})
 	}
 }
+
+func TestParseBytes_ShutdownDefaultsAndValidation(t *testing.T) {
+	cfg, err := config.ParseBytes([]byte("version: v1\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sh := cfg.Server.Shutdown
+	if sh.QuietPeriodDuration != config.DefaultShutdownQuietPeriod || sh.MinDelayDuration != config.DefaultShutdownMinDelay ||
+		sh.MaxDelayDuration != config.DefaultShutdownMaxDelay || sh.DrainTimeoutDuration != config.DefaultShutdownDrainTimeout {
+		t.Fatalf("defaults not applied: %+v", sh)
+	}
+
+	cfg, err = config.ParseBytes([]byte("version: v1\nserver:\n  shutdown:\n    quiet_period: 1s\n    min_delay: 0s\n    max_delay: 5s\n    drain_timeout: 7s\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Server.Shutdown.MaxDelayDuration.Seconds() != 5 || cfg.Server.Shutdown.MinDelayDuration != 0 {
+		t.Fatalf("explicit values not parsed: %+v", cfg.Server.Shutdown)
+	}
+
+	for doc, want := range map[string]string{
+		"version: v1\nserver:\n  shutdown:\n    quiet_period: soon\n":             "quiet_period",
+		"version: v1\nserver:\n  shutdown:\n    drain_timeout: -1s\n":             "drain_timeout",
+		"version: v1\nserver:\n  shutdown:\n    min_delay: 10s\n    max_delay: 5s\n": "must not exceed",
+	} {
+		if _, err := config.ParseBytes([]byte(doc)); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: want error containing %q, got %v", doc, want, err)
+		}
+	}
+}
