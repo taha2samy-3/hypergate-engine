@@ -27,6 +27,8 @@ func TestWaitForQuiet(t *testing.T) {
 
 	t.Run("keeps waiting while streams arrive, then stops after quiet", func(t *testing.T) {
 		a := &Activity{}
+		a.streamStarted()
+		a.streamEnded()
 		stop := make(chan struct{})
 		go func() {
 			deadline := time.Now().Add(600 * time.Millisecond)
@@ -46,6 +48,8 @@ func TestWaitForQuiet(t *testing.T) {
 
 	t.Run("never waits past the maximum", func(t *testing.T) {
 		a := &Activity{}
+		a.streamStarted()
+		a.streamEnded()
 		done := make(chan struct{})
 		defer close(done)
 		go func() {
