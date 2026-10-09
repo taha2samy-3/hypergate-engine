@@ -206,6 +206,7 @@ A map from chain name to an ordered list of filters. Each filter is:
 | --- | --- | --- |
 | `name` | string | Optional label for the filter in [metrics](./operations.md#metrics) (`hypergate_denies_total{filter=...}`). Does not affect which filter instances are shared. The operator sets `<Kind>/<name>`. |
 | `type` | string | Filter type, one of the values below. An unknown type rejects the configuration. |
+| `audit` | bool | Record this filter's denials and failures without enforcing them. See [Audit mode](../concepts/filter-chains.md#audit-mode). |
 | `options` | map | Filter-specific options, documented on the filter's page. |
 
 | `type` | Filter page |
@@ -222,6 +223,24 @@ A map from chain name to an ordered list of filters. Each filter is:
 | `redis_metadata_enricher` | [Redis metadata enricher](/docs/filters/redis-metadata-enricher) |
 
 Filters run in list order. See [Filter chains](../concepts/filter-chains.md) for how chains run, how filters pass data to each other, ordering advice and a complete example. An empty chain (`[]`) is valid and lets requests through. Identical filter definitions (same type, options and Redis service) share one instance, within a configuration and across reloads.
+
+## chain_settings
+
+Limits per chain, keyed by chain name. See [Chain limits](../concepts/filter-chains.md#chain-limits).
+
+| Key | Type | Default | Description |
+| --- | --- | --- | --- |
+| `timeout` | duration | none | Deadline on the chain's work for each ext_proc message. Must be positive. |
+| `max_concurrency` | int | `0` (no limit) | Requests that may run the chain's filters at the same time on this engine. |
+| `on_timeout` | `deny` or `allow` | `deny` | `deny` answers `503`; `allow` continues without the remaining filters. |
+| `on_overload` | `deny` or `allow` | `deny` | `deny` answers `503` with `Retry-After: 1`; `allow` skips the chain. |
+
+```yaml
+chain_settings:
+  web-api:
+    timeout: 300ms
+    max_concurrency: 200
+```
 
 ## router
 
@@ -311,6 +330,7 @@ A configuration is rejected, at start-up (the engine exits) or on reload (the pr
 - `version` is not `v1`,
 - `server.client_ip.trusted_proxy_hops` is negative,
 - a `server.shutdown` duration is invalid or negative, or `min_delay` exceeds `max_delay`,
+- `chain_settings` names an undefined chain, or has a non-positive `timeout`, a negative `max_concurrency` or an `on_timeout` / `on_overload` other than `deny` / `allow`,
 - a Redis service has an invalid `type`, `socket_type`, `on_empty_behavior` or duration,
 - a route has no `target_chain`, or a `target_chain`, `default_chain`, `default_chains` entry or `other` names an undefined chain,
 - a match has an invalid `traffic`, or a selector with an unknown prefix, a malformed value, or a prefix not allowed on that side,

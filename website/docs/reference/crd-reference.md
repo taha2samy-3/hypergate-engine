@@ -151,6 +151,12 @@ spec:
 | `filters` | list, **required** | | Filter references. |
 | `filters[].kind` | enum, **required** | | Filter kind (see below). |
 | `filters[].name` | string, **required** | | `metadata.name` of the filter resource. |
+| `filters[].audit` | bool | chain `mode` | `true` records this filter's denials without enforcing them; `false` enforces it even when the chain is in `Audit` mode. |
+| `mode` | enum `Enforce`, `Audit` | `Enforce` | `Audit` records denials and failures (`hypergate_audit_denies_total`) without enforcing them. See [Audit mode](../concepts/filter-chains.md#audit-mode). |
+| `timeout` | duration (`300ms`, `1.5s`) | none | Deadline on the chain's work per ext_proc message. A non-positive value degrades the chain. See [Chain limits](../concepts/filter-chains.md#chain-limits). |
+| `maxConcurrency` | integer ≥ 0 | `0` | Requests that may run the chain's filters at once on one engine (`0` = no limit). |
+| `onTimeout` | enum `Deny`, `Allow` | `Deny` | What a timeout does. |
+| `onOverload` | enum `Deny`, `Allow` | `Deny` | What exceeding `maxConcurrency` does. |
 
 `kind` is one of the ten filter kinds: `RateLimitFilter`, `HeaderModifierFilter`, `DenyFilter`, `CorrelationIdFilter`, `RedisMetadataEnricherFilter`, `ApiKeyFilter`, `ExternalAuthFilter`, `FirewallFilter`, `JwtAuthFilter`, `CorsFilter`.
 

@@ -348,6 +348,65 @@ kubectl -n hyper-system get configmap hyper-engine-config -o jsonpath='{.data.co
 
 A chain whose filter cannot be compiled becomes `Degraded` and is replaced by a `503` deny chain, so its routes fail closed instead of losing their policy. See [Routing: with the operator](./routing.md#with-the-operator).
 
+## Audit mode
+
+Audit mode tries a policy on live traffic without enforcing it, like Envoy RBAC's shadow rules or Istio's `AUDIT` action. An audited filter runs normally, but when it would deny, or fails internally:
+
+- the decision is counted in `hypergate_audit_denies_total{chain, filter, status}` and logged;
+- the request continues to the next filter, and any header changes the filter made for its denial (such as JWT's `content-type: application/json`) are rolled back;
+- answers that are not denials, such as a CORS preflight `204`, are still sent.
+
+Side effects remain: an audited rate limiter still counts requests (that is how you see what would be limited), and an audited external auth filter still calls its sidecar.
+
+```yaml title="engine configuration"
+chains:
+  web-api:
+    - {type: cors, options: {allow_origins: ["https://app.example.com"]}}
+    - {name: new-jwt, type: jwt_auth, audit: true, options: {jwks_endpoint: "https://example.eu.auth0.com/.well-known/jwks.json"}}
+```
+
+With the operator, set `mode: Audit` on a `HyperChain` to audit all its filters, and use `audit: true` or `audit: false` on a filter reference to override that for one filter:
+
+```yaml title="HyperChain in audit mode"
+apiVersion: hyper.io/v1alpha1
+kind: HyperChain
+metadata:
+  name: web-api
+spec:
+  mode: Audit
+  filters:
+    - {kind: CorsFilter, name: web-app, audit: false}   # keep enforcing CORS
+    - {kind: JwtAuthFilter, name: users}                 # audited
+```
+
+When `hypergate_audit_denies_total` stays at zero for the traffic you expect to pass, switch the chain to `Enforce` (the default).
+
+## Chain limits
+
+All workloads on a node share one engine, so a chain with slow filters (a WAF inspecting bodies, a remote auth call) could slow down the others. Two limits keep each chain in its lane:
+
+| Setting | Effect | When it is hit |
+| --- | --- | --- |
+| `timeout` | A deadline on the chain's work for each ext_proc message. Filters that call Redis or a sidecar stop at the deadline. | `503`, or with `on_timeout: allow` the request continues without the remaining filters |
+| `max_concurrency` | How many requests may run this chain's filters at the same time on one engine. Held only while the filters run, not while the upstream answers. | `503` with `Retry-After: 1`, or with `on_overload: allow` the chain is skipped for that request |
+
+Both are counted in `hypergate_chain_rejections_total{chain, reason}`. Keep `timeout` below Envoy's ext_proc `message_timeout` (2.5 s in the recommended configuration), otherwise Envoy gives up first. A filter that never checks its context (pure CPU work) is not interrupted by the deadline. `allow` trades protection for availability: the request then passes without the rest of the chain, so prefer the default `deny` for security filters.
+
+```yaml title="engine configuration"
+chain_settings:
+  web-api:
+    timeout: 300ms
+    max_concurrency: 200
+```
+
+```yaml title="HyperChain with limits"
+spec:
+  timeout: 300ms
+  maxConcurrency: 200
+  onTimeout: Deny      # default
+  onOverload: Deny     # default
+```
+
 ## See also
 
 - [Request lifecycle](./request-lifecycle.md): phases, mutations and immediate responses.

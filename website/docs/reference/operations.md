@@ -35,6 +35,8 @@ Redis health checks (`active_conn_health_check`) only log state changes; they do
 | --- | --- | --- | --- |
 | `hypergate_requests_total` | counter | `route`, `chain`, `outcome` | Finished requests. `outcome` is `allowed` (continued upstream), `denied` (status ≥ 400), `answered` (answered by the engine but not a denial, such as a CORS preflight) or `error` (a filter failed). `route="default"` when the default chain was used, `chain="none"` when no chain ran. |
 | `hypergate_denies_total` | counter | `chain`, `filter`, `status` | Denials and failures, with the filter that decided: the operator's `Kind/name` (for example `JwtAuthFilter/users`), the engine config's `name`, or `<position>:<type>`; `engine` when the engine itself refused (no policy, missing chain, unknown east-west caller). |
+| `hypergate_audit_denies_total` | counter | `chain`, `filter`, `status` | Denials and failures of [audited](../concepts/filter-chains.md#audit-mode) filters, recorded but not enforced. |
+| `hypergate_chain_rejections_total` | counter | `chain`, `reason` | Requests refused or let through by [chain limits](../concepts/filter-chains.md#chain-limits): `reason` is `timeout` or `overload`. |
 | `hypergate_message_duration_seconds` | histogram | `phase`, `chain` | Time the engine spent on one ext_proc message, which is what Envoy waits for. `phase` is `request_headers`, `request_body`, `response_headers`, … |
 | `hypergate_streams_active` | gauge | | Open ext_proc streams (in-flight requests). |
 | `hypergate_unknown_source_total` | counter | | East-west requests whose caller was not in the identity map. |

@@ -186,6 +186,8 @@ The request path is not measurably faster (the 16 KiB copy was cheap); the gain 
 
 **Test:** a slow test filter proves the deadline and the overload path; the kind e2e runs a slow chain next to a fast one and checks the fast chain's latency stays flat.
 
+**Done.** Audit: engine `FilterConfig.audit`; the executor saves the header and path state before an audited filter and restores it when the filter denies or fails, records an `AuditHit`, and continues; `RequestContext.Answer()` marks non-denial immediate responses (the CORS preflight uses it) and is never suppressed. Operator: `HyperChain.spec.mode` and `filters[].audit`. Metric `hypergate_audit_denies_total`. Limits: engine `chain_settings` (`timeout`, `max_concurrency`, `on_timeout`, `on_overload`), enforced per ext_proc message in the server; operator `HyperChain.spec.timeout|maxConcurrency|onTimeout|onOverload`, with an invalid timeout degrading the chain instead of reaching the engine. Metric `hypergate_chain_rejections_total`. Tests: executor audit semantics (denial, failure, answer, shared instance, phases), timeout and overload through the ext_proc server with both actions, config validation, compiler output. The kind e2e slow-chain-next-to-fast-chain test is not added yet.
+
 ## Decisions needed
 
 1. **Item 2:** keep `sync.Pool` and drop the body buffer (measured: channel pool ≈ 30× slower) instead of a buffered-channel pool. Agree?
